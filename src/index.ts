@@ -1,10 +1,30 @@
-import betterConsole, { Card, cs, link, tsflag } from "ts-better-console";
+import betterConsole, {
+  Card,
+  cs,
+  gradient,
+  link,
+  rgb,
+  s,
+  tsflag,
+} from "ts-better-console";
 
 console.log("");
 betterConsole.log(
-  new Card(" ♡ AlertBox.Org API ", undefined, {
-    border: { symbols: { style: "round" } },
-  }).render(),
+  s(
+    gradient("♡ AlertBox.Org API", [
+      rgb(255, 105, 180),
+      rgb(255, 182, 193),
+    ]).replace(/\n/g, " "),
+    {
+      styles: ["bold"],
+    },
+  ),
+);
+betterConsole.log(
+  gradient("  Made with ♡  by Ponlponl123 Labs", [
+    rgb(255, 155, 230),
+    rgb(255, 232, 253),
+  ]).replace(/\n/g, " "),
 );
 betterConsole.log(
   cs([
@@ -28,8 +48,11 @@ import PrismaORM from "./core/prisma";
 //
 // ==========================
 
-new Card("· Starting the server...", undefined, {
-  border: { symbols: { style: "round" } },
+new Card("· Starting the Elysia Server...", undefined, {
+  border: {
+    style: { color: rgb(139, 92, 246) },
+    symbols: { style: "round" },
+  },
 })
   .render()
   .split("\n")
@@ -44,7 +67,10 @@ export const server = new Server();
 // ==========================
 
 new Card("· Starting the Redis client...", undefined, {
-  border: { symbols: { style: "round" } },
+  border: {
+    style: { color: rgb(216, 44, 32) },
+    symbols: { style: "round" },
+  },
 })
   .render()
   .split("\n")
@@ -59,7 +85,10 @@ export const redis = new RedisClient();
 // ==========================
 
 new Card("· Starting the Prisma ORM...", undefined, {
-  border: { symbols: { style: "round" } },
+  border: {
+    style: { color: rgb(90, 103, 216) },
+    symbols: { style: "round" },
+  },
 })
   .render()
   .split("\n")

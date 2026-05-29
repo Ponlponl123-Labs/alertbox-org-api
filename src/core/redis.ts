@@ -1,5 +1,5 @@
 import Redis, { type SentinelAddress } from "ioredis";
-import betterConsole, { cs, s, tsflag } from "ts-better-console";
+import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import tomlConfig from "../config/toml";
 
 export class RedisClient {
@@ -60,7 +60,7 @@ export class RedisClient {
       tsflag(
         "info",
         true,
-        s("··· Attempting to connect to Redis Database...", {
+        s("··· Attempting to connect to Redis Database", {
           color: "yellow",
         }),
       ),
@@ -118,9 +118,17 @@ export class RedisClient {
         tsflag(
           "info",
           true,
-          s(`⌎ Mapping ${i + 1}: ${nat.nat} -> ${nat.host}:${nat.port}`, {
-            color: "blue",
-          }),
+          s(
+            cs([
+              `⌎ Mapping ${i + 1}:`,
+              link(`${nat.nat}`, `http://${nat.nat}`),
+              `->`,
+              link(`${nat.host}:${nat.port}`, `http://${nat.host}:${nat.port}`),
+            ]),
+            {
+              color: "blue",
+            },
+          ),
         ),
       );
     });
@@ -166,7 +174,13 @@ export class RedisClient {
             "info",
             true,
             s(
-              `⌎ Configured Redis Sentinel ${i + 1}: ${node.host}:${node.port}`,
+              cs([
+                `⌎ Configured Redis Sentinel ${i + 1}:`,
+                link(
+                  `${node.host}:${node.port}`,
+                  `http://${node.host}:${node.port}`,
+                ),
+              ]),
               {
                 color: "blue",
               },

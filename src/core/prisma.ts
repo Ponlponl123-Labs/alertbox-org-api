@@ -35,7 +35,7 @@ class PrismaORM {
         tsflag(
           "info",
           true,
-          s("··· Connecting to the database...", { color: "yellow" }),
+          s("··· Connecting to the database", { color: "yellow" }),
         ),
       );
       await this.client.$connect();
@@ -79,7 +79,7 @@ class PrismaORM {
           content: `Database Connection Details`,
         },
         footer: {
-          content: `Connection Status: ${this.isConnected ? "Connected" : "Disconnected"}`,
+          content: `· Connection Status: ${this.isConnected ? "Connected" : "Disconnected"}`,
           style: {
             color: this.isConnected ? "green" : "red",
           },
