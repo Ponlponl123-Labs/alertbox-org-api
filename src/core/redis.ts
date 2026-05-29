@@ -55,7 +55,7 @@ export class RedisClient {
     this.connect();
   }
 
-  private connect() {
+  private async connect() {
     betterConsole.log(
       tsflag(
         "info",
@@ -65,27 +65,28 @@ export class RedisClient {
         }),
       ),
     );
-    this.redis
-      .connect()
-      .then(() =>
-        betterConsole.log(
-          tsflag(
-            "info",
-            true,
-            s("✓ Redis Database connected successfully!", { color: "green" }),
-          ),
-        ),
-      )
-      .catch((err) =>
-        betterConsole.log(
-          tsflag(
-            "error",
-            true,
-            s("✗ Redis Database connection error:", { color: "red" }),
-            err,
-          ),
+
+    try {
+      await this.redis.connect();
+      await this.redis.ping();
+      betterConsole.log(
+        tsflag(
+          "info",
+          true,
+          s("✓ Redis Database connected successfully!", { color: "green" }),
         ),
       );
+    } catch (err) {
+      betterConsole.log(
+        tsflag(
+          "error",
+          true,
+          s("✗ Redis Database connection error:", { color: "red" }),
+          err,
+        ),
+      );
+      process.exit(1);
+    }
   }
 
   private buildNatMap():

@@ -39,6 +39,10 @@ class PrismaORM {
         ),
       );
       await this.client.$connect();
+
+      // Verify connection with a simple query
+      await this.client.$queryRaw`SELECT 1`;
+
       this.isConnected = true;
       betterConsole.log(
         tsflag(
