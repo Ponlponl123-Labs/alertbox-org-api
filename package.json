@@ -1,0 +1,22 @@
+{
+  "name": "alertbox-org-api",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "NODE_ENV=development bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-libsql": "^7.8.0",
+    "@prisma/adapter-mariadb": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "elysia": "latest",
+    "ioredis": "^5.11.0",
+    "mariadb": "^3.5.2",
+    "ts-better-console": "^0.1.4"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "prisma": "^7.8.0"
+  },
+  "module": "src/index.js"
+}
