@@ -1,5 +1,23 @@
+import betterConsole, { Card, cs, link, tsflag } from "ts-better-console";
+
+console.log("");
+betterConsole.log(
+  new Card(" ♡ AlertBox.Org API ", undefined, {
+    border: { symbols: { style: "round" } },
+  }).render(),
+);
+betterConsole.log(
+  cs([
+    "Github Repository:",
+    link(
+      "github.com/ponlponl123-labs/alertbox-org-api",
+      "https://github.com/ponlponl123/alertbox-org-api",
+    ),
+  ]),
+  "\n",
+);
+
 import "./config/env";
-import betterConsole, { Card, tsflag } from "ts-better-console";
 import RedisClient from "./core/redis";
 import Server from "./core/server";
 import PrismaORM from "./core/prisma";
