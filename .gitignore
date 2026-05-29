@@ -44,3 +44,6 @@ yarn-error.log*
 package-lock.json
 **/*.bun
 /src/generated/prisma
+
+*.exe
+*.js.map

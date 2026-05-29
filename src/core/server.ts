@@ -31,7 +31,7 @@ class Server {
   }
 
   private favicon() {
-    this.app.get("/favicon.ico", file("./favicon.ico"));
+    this.app.get("/favicon.ico", () => Bun.file("./favicon.ico"));
   }
 
   private setupEvents() {

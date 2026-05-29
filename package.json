@@ -3,7 +3,9 @@
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "NODE_ENV=development bun run --watch src/index.ts"
+    "dev": "NODE_ENV=development bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
+    "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
   },
   "dependencies": {
     "@prisma/adapter-libsql": "^7.8.0",
