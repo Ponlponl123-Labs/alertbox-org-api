@@ -1,5 +1,5 @@
 import Elysia, { file } from "elysia";
-import betterConsole, { tsflag } from "ts-better-console";
+import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import router, { availableVersions } from "../routes";
 
 class Server {
@@ -40,14 +40,27 @@ class Server {
         tsflag(
           "info",
           true,
-          `🦊 Elysia is running at ${server?.hostname}:${server?.port}`,
+          s(
+            cs([
+              "🦊 Elysia is running at",
+              link(
+                `${server?.hostname}:${server?.port}`,
+                `http://${server?.hostname}:${server?.port}`,
+              ),
+            ]),
+            {
+              color: "green",
+            },
+          ),
         ),
       );
     });
 
     this.app.on("error", ({ code, error }) => {
       if (code === "NOT_FOUND") return;
-      betterConsole.log(tsflag("error", true, "An error occurred:", error));
+      betterConsole.log(
+        tsflag("error", true, s("An error occurred:", { color: "red" }), error),
+      );
     });
   }
 
@@ -64,7 +77,10 @@ class Server {
           tsflag(
             "warn",
             true,
-            `Port ${this.port} is already in use, rotating to ${this.port + 1}...`,
+            s(
+              `! Port ${this.port} is already in use, rotating to ${this.port + 1}...`,
+              { color: "yellow" },
+            ),
           ),
         );
         this.port++;

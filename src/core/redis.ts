@@ -1,5 +1,5 @@
 import Redis, { type SentinelAddress } from "ioredis";
-import betterConsole, { tsflag } from "ts-better-console";
+import betterConsole, { cs, s, tsflag } from "ts-better-console";
 import tomlConfig from "../config/toml";
 
 export class RedisClient {
@@ -10,14 +10,29 @@ export class RedisClient {
   constructor() {
     if (!tomlConfig.redis?.enabled) {
       betterConsole.log(
-        tsflag("warn", true, "Redis is disabled in the configuration."),
+        tsflag(
+          "warn",
+          true,
+          s(
+            "! Redis is disabled in the configuration. Skipping Redis connection.",
+            { color: "yellow" },
+          ),
+        ),
       );
       this.redis = new Redis({ lazyConnect: true });
       return;
     }
 
-    this.redisSentinels = this.buildSentinels();
+    betterConsole.log(
+      tsflag(
+        "info",
+        true,
+        "· Initializing Redis Client with provided configuration...",
+      ),
+    );
+
     this.natMap = this.buildNatMap();
+    this.redisSentinels = this.buildSentinels();
 
     this.redis = new Redis({
       db: tomlConfig.redis?.db || 0,
@@ -42,18 +57,33 @@ export class RedisClient {
 
   private connect() {
     betterConsole.log(
-      tsflag("info", true, "Attempting to connect to Redis Database..."),
+      tsflag(
+        "info",
+        true,
+        s("··· Attempting to connect to Redis Database...", {
+          color: "yellow",
+        }),
+      ),
     );
     this.redis
       .connect()
       .then(() =>
         betterConsole.log(
-          tsflag("info", true, "Redis Database connected successfully!"),
+          tsflag(
+            "info",
+            true,
+            s("✓ Redis Database connected successfully!", { color: "green" }),
+          ),
         ),
       )
       .catch((err) =>
         betterConsole.log(
-          tsflag("error", true, "Redis Database connection error:", err),
+          tsflag(
+            "error",
+            true,
+            s("✗ Redis Database connection error:", { color: "red" }),
+            err,
+          ),
         ),
       );
   }
@@ -67,7 +97,9 @@ export class RedisClient {
         tsflag(
           "warn",
           true,
-          "No Redis Sentinel NAT mappings found in TOML configuration.",
+          s("○ No Redis Sentinel NAT mappings found in TOML configuration.", {
+            color: "yellow",
+          }),
         ),
       );
       return undefined;
@@ -76,7 +108,9 @@ export class RedisClient {
       tsflag(
         "info",
         true,
-        `Found ${natMapData.length} NAT mappings in TOML configuration.`,
+        s(`▸ Found ${natMapData.length} NAT mappings in TOML configuration.`, {
+          color: "green",
+        }),
       ),
     );
     natMapData.forEach((nat, i) => {
@@ -84,7 +118,9 @@ export class RedisClient {
         tsflag(
           "info",
           true,
-          `  Mapping ${i + 1}: ${nat.nat} -> ${nat.host}:${nat.port}`,
+          s(`⌎ Mapping ${i + 1}: ${nat.nat} -> ${nat.host}:${nat.port}`, {
+            color: "blue",
+          }),
         ),
       );
     });
@@ -102,11 +138,26 @@ export class RedisClient {
         tsflag(
           "warn",
           true,
-          "Redis Sentinel is disabled in the configuration. Using direct Redis connection.",
+          s(
+            "! Redis Sentinel is disabled in the configuration. Using direct Redis connection.",
+            { color: "yellow" },
+          ),
         ),
       );
       return;
     }
+
+    betterConsole.log(
+      tsflag(
+        "info",
+        true,
+        cs([
+          "· Redis Sentinel is",
+          s("enabled", { color: "green", styles: ["bold"] }),
+          "in the configuration. Building configuration...",
+        ]),
+      ),
+    );
 
     const sentinels: Partial<SentinelAddress>[] =
       tomlConfig.redis?.sentinel?.nodes?.map((node, i) => {
@@ -114,7 +165,12 @@ export class RedisClient {
           tsflag(
             "info",
             true,
-            `Configured Redis Sentinel ${i + 1}: ${node.host}:${node.port}`,
+            s(
+              `⌎ Configured Redis Sentinel ${i + 1}: ${node.host}:${node.port}`,
+              {
+                color: "blue",
+              },
+            ),
           ),
         );
         return {
@@ -127,7 +183,21 @@ export class RedisClient {
       tsflag(
         "info",
         true,
-        `Configured Redis Sentinel Group: ${tomlConfig.redis?.name || "mymaster"}`,
+        s(`▸ Total Redis Sentinel nodes configured: ${sentinels.length}`, {
+          color: sentinels.length > 0 ? "green" : "yellow",
+        }),
+      ),
+    );
+    betterConsole.log(
+      tsflag(
+        "info",
+        true,
+        s(
+          sentinels.length > 0
+            ? "✓ Sentinel configuration built successfully!"
+            : "⚠ No Sentinel nodes found in configuration.",
+          { color: sentinels.length > 0 ? "green" : "yellow" },
+        ),
       ),
     );
     return sentinels;

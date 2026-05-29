@@ -1,4 +1,4 @@
-import betterConsole, { tsflag } from "ts-better-console";
+import betterConsole, { s, tsflag } from "ts-better-console";
 
 const nodeEnv = process.env.NODE_ENV || "development";
 const isDev = nodeEnv === "development";
@@ -19,18 +19,32 @@ for (const file of envFiles) {
 }
 
 // Log the status with high visibility
-betterConsole.log(tsflag("info", true, `Active Environment: ${nodeEnv}`));
+betterConsole.log(
+  tsflag(
+    "info",
+    true,
+    s(`Active Environment: ${nodeEnv}`, { styles: ["bold"] }),
+  ),
+);
 
 if (loadedFile) {
   betterConsole.log(
-    tsflag("info", true, `✓ Environment variables loaded from: ${loadedFile}`),
+    tsflag(
+      "info",
+      true,
+      s(`✓ Environment variables loaded from: ${loadedFile}`, {
+        color: "green",
+      }),
+    ),
   );
 } else {
   betterConsole.log(
     tsflag(
       "warn",
       true,
-      "⚠ No .env file found. Using system environment variables.",
+      s("⚠ No .env file found. Using system environment variables.", {
+        color: "yellow",
+      }),
     ),
   );
 }
