@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,76 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+model accounts {
+  id                                             BigInt           @id @default(autoincrement())
+  name                                           String           @db.VarChar(64)
+  displayname                                    String           @db.VarChar(64)
+  avatar                                         String?          @db.VarChar(512)
+  banner                                         String?          @db.VarChar(512)
+  email                                          String           @db.VarChar(256)
+  secret                                         String           @unique(map: "secret") @db.VarChar(255)
+  disabled                                       DateTime?        @db.Timestamp(0)
+  deleted                                        DateTime?        @db.Timestamp(0)
+  session_usages_session_usages_uidToaccounts    session_usages[] @relation("session_usages_uidToaccounts")
+  session_usages_session_usages_secretToaccounts session_usages[] @relation("session_usages_secretToaccounts")
+  sessions_sessions_uidToaccounts                sessions[]       @relation("sessions_uidToaccounts")
+  sessions_sessions_secretToaccounts             sessions[]       @relation("sessions_secretToaccounts")
+}
+
+model sessions {
+  id                                 BigInt           @id @default(autoincrement())
+  uid                                BigInt           @default(0)
+  time                               DateTime         @default(now()) @db.Timestamp(0)
+  secret                             String           @db.VarChar(255)
+  token                              String           @unique(map: "token") @db.VarChar(255)
+  method                             String           @db.VarChar(255)
+  user_agent                         String           @db.LongText
+  os                                 String?          @db.VarChar(128)
+  os_ver                             String?          @db.VarChar(128)
+  platform                           String?          @db.VarChar(128)
+  platform_type                      String?          @db.VarChar(128)
+  platform_major                     String?          @db.VarChar(128)
+  platform_ver                       String?          @db.VarChar(128)
+  device_model                       String?          @db.VarChar(128)
+  device_type                        String?          @db.VarChar(128)
+  device_vendor                      String?          @db.VarChar(128)
+  cpu_architecture                   String?          @db.VarChar(128)
+  ip_addr                            String           @db.VarChar(50)
+  ip_addr_country                    String?          @db.VarChar(64)
+  ip_addr_country_code               String?          @db.VarChar(2)
+  ip_addr_country_code_iso3          String?          @db.VarChar(3)
+  ip_addr_continent_code             String?          @db.VarChar(3)
+  ip_addr_postal                     String?          @db.VarChar(32)
+  ip_addr_city                       String?          @db.VarChar(512)
+  ip_addr_region                     String?          @db.VarChar(512)
+  ip_addr_region_code                String?          @db.VarChar(3)
+  ip_addr_lat                        Decimal?         @db.Decimal(9, 6)
+  ip_addr_long                       Decimal?         @db.Decimal(9, 6)
+  ip_addr_isp                        String?          @db.VarChar(512)
+  ip_addr_asn                        String?          @db.VarChar(50)
+  expire                             DateTime         @default(now()) @db.Timestamp(0)
+  disabled                           DateTime?        @db.Timestamp(0)
+  session_usages                     session_usages[]
+  accounts_sessions_uidToaccounts    accounts         @relation("sessions_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts")
+  accounts_sessions_secretToaccounts accounts         @relation("sessions_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts_2")
+
+  @@index([uid], map: "FK_sessions_accounts")
+  @@index([secret], map: "FK_sessions_accounts_2")
+}
+
+model session_usages {
+  id                                       BigInt   @id @default(autoincrement())
+  uid                                      BigInt
+  secret                                   String   @db.VarChar(255)
+  token                                    String   @db.VarChar(255)
+  time                                     DateTime @default(now()) @db.Timestamp(0)
+  accounts_session_usages_uidToaccounts    accounts @relation("session_usages_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts")
+  accounts_session_usages_secretToaccounts accounts @relation("session_usages_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts_2")
+  sessions                                 sessions @relation(fields: [token], references: [token], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_sessions")
+
+  @@index([uid], map: "FK_session_usages_accounts")
+  @@index([secret], map: "FK_session_usages_accounts_2")
+  @@index([token], map: "FK_session_usages_sessions")
 }

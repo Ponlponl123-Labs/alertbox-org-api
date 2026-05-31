@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import betterConsole, {
   Card,
   cs,
@@ -7,6 +8,14 @@ import betterConsole, {
   s,
   tsflag,
 } from "ts-better-console";
+
+const { values } = parseArgs({
+  args: Bun.argv.slice(2),
+  options: {
+    port: { type: "string", short: "p" },
+  },
+  strict: false,
+});
 
 console.log("");
 betterConsole.log(
@@ -38,6 +47,12 @@ betterConsole.log(
 );
 
 import "./config/env";
+
+// @ts-expect-error BigInt.prototype.toJSON is not defined in the type system
+BigInt.prototype.toJSON = function () {
+  return this.toString();
+};
+
 import RedisClient from "./core/redis";
 import Server from "./core/server";
 import PrismaORM from "./core/prisma";
@@ -58,7 +73,7 @@ new Card("· Starting the Elysia Server...", undefined, {
   .split("\n")
   .map((line) => betterConsole.log(tsflag("info", true, line)));
 
-export const server = new Server();
+export const server = new Server(Number(values.port || 3000));
 
 // ==========================
 //

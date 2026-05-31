@@ -12,9 +12,12 @@
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "elysia": "latest",
+    "elysia-ip": "^1.1.0",
     "ioredis": "^5.11.0",
     "mariadb": "^3.5.2",
-    "ts-better-console": "^0.1.4"
+    "nanoid": "^5.1.11",
+    "ts-better-console": "^0.1.4",
+    "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
     "bun-types": "latest",
