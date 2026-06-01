@@ -13,7 +13,10 @@ model accounts {
   create_with                                    String           @db.VarChar(50)
   name                                           String           @db.VarChar(64)
   displayname                                    String           @db.VarChar(64)
-  uri                                            String?          @db.VarChar(64)
+  uri                                            String?          @unique(map: "FK_accounts_reserved_uri") @db.VarChar(64)
+  uri_cooldown                                   DateTime?        @db.Timestamp(0)
+  published                                      DateTime?        @db.Timestamp(0)
+  bio                                            String?          @db.Text
   avatar                                         String?          @db.VarChar(512)
   banner                                         String?          @db.VarChar(512)
   email                                          String           @db.VarChar(256)
@@ -24,6 +27,8 @@ model accounts {
   ffp_secret                                     String?          @db.VarChar(512)
   disabled                                       DateTime?        @db.Timestamp(0)
   deleted                                        DateTime?        @db.Timestamp(0)
+  reserved_uri_accounts_uriToreserved_uri        reserved_uri?    @relation("accounts_uriToreserved_uri", fields: [uri], references: [uri], onDelete: NoAction, onUpdate: NoAction, map: "FK_accounts_reserved_uri")
+  reserved_uri_reserved_uri_uidToaccounts        reserved_uri[]   @relation("reserved_uri_uidToaccounts")
   session_usages_session_usages_uidToaccounts    session_usages[] @relation("session_usages_uidToaccounts")
   session_usages_session_usages_secretToaccounts session_usages[] @relation("session_usages_secretToaccounts")
   sessions_sessions_uidToaccounts                sessions[]       @relation("sessions_uidToaccounts")
@@ -63,6 +68,7 @@ model sessions {
   ip_addr_asn                        String?          @db.VarChar(50)
   expire                             DateTime         @default(now()) @db.Timestamp(0)
   disabled                           DateTime?        @db.Timestamp(0)
+  reserved_uri                       reserved_uri[]
   session_usages                     session_usages[]
   accounts_sessions_uidToaccounts    accounts         @relation("sessions_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts")
   accounts_sessions_secretToaccounts accounts         @relation("sessions_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts_2")
@@ -85,4 +91,19 @@ model session_usages {
   @@index([uid], map: "FK_session_usages_accounts")
   @@index([secret], map: "FK_session_usages_accounts_2")
   @@index([token], map: "FK_session_usages_sessions")
+}
+
+model reserved_uri {
+  id                                  BigInt    @id @default(autoincrement())
+  time                                DateTime  @default(now()) @db.Timestamp(0)
+  uid                                 BigInt
+  uri                                 String    @unique(map: "uri") @db.VarChar(50)
+  by                                  String    @db.VarChar(255)
+  disabled                            DateTime? @db.Timestamp(0)
+  accounts_accounts_uriToreserved_uri accounts? @relation("accounts_uriToreserved_uri")
+  accounts_reserved_uri_uidToaccounts accounts  @relation("reserved_uri_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_reserved_uri_accounts")
+  sessions                            sessions  @relation(fields: [by], references: [token], onDelete: NoAction, onUpdate: NoAction, map: "FK_reserved_uri_sessions")
+
+  @@index([uid], map: "FK_reserved_uri_accounts")
+  @@index([by], map: "FK_reserved_uri_sessions")
 }

@@ -5,12 +5,14 @@ import {
   supported_providers,
 } from "./connections";
 import { endpoint as DeviceEndpoint } from "./device";
+import { endpoint as ProfileEndpoint } from "./profile";
 import Elysia, { t } from "elysia";
 import { prisma, redis } from "@/index";
 
 export const router = new Elysia({ prefix: "me" })
   .use(ConnectionEndpoint)
   .use(DeviceEndpoint)
+  .use(ProfileEndpoint)
   .get(
     "/",
     async ({ headers, set, ip }) => {

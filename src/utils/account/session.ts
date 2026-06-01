@@ -1,10 +1,10 @@
 import { prisma, redis } from "@/index";
-import type { Prisma } from "@/generated/prisma/client";
-import type { BaseSessionSelect, SessionUser } from "@/types/account.types";
 import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "../ip";
+import { day } from "@/consts/time";
+import { SessionUser } from "@/types/account.types";
 
 export async function createSession(
   uid: bigint,
@@ -125,12 +125,11 @@ export async function destroySession(session: string): Promise<boolean> {
   return true;
 }
 
-export async function useSession<S extends Prisma.accountsSelect>(
+export async function useSession(
   session: string,
   ip: string,
   useCache = true,
-  additionals?: S,
-): Promise<false | null | SessionUser<S>> {
+): Promise<false | null | SessionUser> {
   const session_info = await prisma.client.sessions.findFirst({
     where: {
       token: session,
@@ -169,48 +168,37 @@ export async function useSession<S extends Prisma.accountsSelect>(
     const c = await redis.redis.get("user:" + session_info.uid + ":info");
     if (c) {
       if (c === "deleted") return false;
-      return JSON.parse(c);
+      return JSON.parse(c) as SessionUser;
     }
   }
 
-  const defaultSelect: BaseSessionSelect = {
-    id: true,
-    create_with: true,
-    time: true,
-    name: true,
-    email: true,
-    displayname: true,
-    uri: true,
-    avatar: true,
-    banner: true,
-    deleted: true,
-    disabled: true,
-    secret: false,
-  };
-
-  const select = {
-    ...defaultSelect,
-    ...additionals,
-  } as Prisma.accountsSelect;
-
-  const exist_user = (await prisma.client.accounts.findFirst({
-    select,
+  const userRow = await prisma.client.accounts.findFirst({
     where: {
       id: session_info.uid,
     },
-  })) as (SessionUser<S> & { deleted?: Date | null }) | null;
-  if (exist_user?.deleted) {
-    redis.redis.setex(
-      "user:" + session_info.uid + ":info",
-      24 * 60 * 60 * 1000,
-      "deleted",
-    );
+  });
+  if (!userRow) return null;
+
+  const { secret, ...user } = userRow;
+
+  if (user.deleted) {
+    redis.redis.setex("user:" + session_info.uid + ":info", day, "deleted");
     return false;
   }
+
   redis.redis.setex(
     "user:" + session_info.uid + ":info",
-    24 * 60 * 60 * 1000,
-    JSON.stringify(exist_user),
+    day,
+    JSON.stringify(user),
   );
-  return exist_user;
+  if (user?.uri)
+    redis.redis.setex("user:" + session_info.uid + ":uid", day, user?.uri);
+  if (user?.uri_cooldown)
+    redis.redis.setex(
+      "user:" + session_info.uid + ":uri_cooldown",
+      day,
+      String(user?.uri_cooldown.getTime()),
+    );
+
+  return user;
 }

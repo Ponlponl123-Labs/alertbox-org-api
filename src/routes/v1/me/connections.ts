@@ -27,12 +27,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip, false, {
-        stripe_secret: true,
-        bmac_secret: true,
-        kofi_secret: true,
-        ffp_secret: true,
-      });
+      const me = await useSession(auth, ip, false);
       if (!me) {
         set.status = "Unauthorized";
         return "Unauthorized";
