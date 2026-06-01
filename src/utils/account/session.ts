@@ -146,6 +146,7 @@ export async function useSession<S extends Prisma.accountsSelect>(
         uid: session_info.uid,
         secret: session_info.secret,
         token: session,
+        ip_addr: ip,
         time: new Date(),
       },
     })
@@ -173,6 +174,8 @@ export async function useSession<S extends Prisma.accountsSelect>(
 
   const defaultSelect: BaseSessionSelect = {
     id: true,
+    create_with: true,
+    time: true,
     name: true,
     email: true,
     displayname: true,

@@ -25,6 +25,8 @@ export interface MinimalUser {
 
 export type BaseSessionSelect = {
   id: true;
+  create_with: true;
+  time: true;
   name: true;
   email: true;
   displayname: true;

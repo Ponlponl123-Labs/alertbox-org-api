@@ -24,7 +24,7 @@ const endpoint = new Elysia().use(ip()).post(
     let userid;
     const exist_user = await isExist(me.email);
     if (!exist_user) {
-      const user = await createAccount(me.username, me.email);
+      const user = await createAccount(me.username, me.email, "discord");
       if (!user) {
         set.status = "Conflict";
         return "That user already exist";

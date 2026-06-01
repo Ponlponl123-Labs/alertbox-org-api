@@ -9,6 +9,8 @@ datasource db {
 
 model accounts {
   id                                             BigInt           @id @default(autoincrement())
+  time                                           DateTime         @default(now()) @db.Timestamp(0)
+  create_with                                    String           @db.VarChar(50)
   name                                           String           @db.VarChar(64)
   displayname                                    String           @db.VarChar(64)
   uri                                            String?          @db.VarChar(64)
@@ -74,6 +76,7 @@ model session_usages {
   uid                                      BigInt
   secret                                   String   @db.VarChar(255)
   token                                    String   @db.VarChar(255)
+  ip_addr                                  String   @db.VarChar(50)
   time                                     DateTime @default(now()) @db.Timestamp(0)
   accounts_session_usages_uidToaccounts    accounts @relation("session_usages_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts")
   accounts_session_usages_secretToaccounts accounts @relation("session_usages_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts_2")

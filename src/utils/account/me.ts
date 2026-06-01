@@ -6,6 +6,7 @@ import betterConsole, { tsflag } from "ts-better-console";
 export async function createAccount(
   name: string,
   email: string,
+  create_with: string,
 ): Promise<UserCreated | false> {
   const isAccountExist = await isExist(email);
   if (isAccountExist) return false;
@@ -22,6 +23,7 @@ export async function createAccount(
           name,
           email,
           displayname: name,
+          create_with,
           secret: combinedToken,
         },
       });
@@ -68,6 +70,9 @@ export async function getUid(uid: bigint): Promise<User | null> {
       banner: true,
       deleted: true,
       disabled: true,
+      create_with: true,
+      time: true,
+      secret: false,
       ffp_secret: false,
       bmac_secret: false,
       kofi_secret: false,

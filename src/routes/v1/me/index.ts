@@ -4,11 +4,13 @@ import {
   endpoint as ConnectionEndpoint,
   supported_providers,
 } from "./connections";
+import { endpoint as DeviceEndpoint } from "./device";
 import Elysia, { t } from "elysia";
 import { prisma, redis } from "@/index";
 
 export const router = new Elysia({ prefix: "me" })
   .use(ConnectionEndpoint)
+  .use(DeviceEndpoint)
   .get(
     "/",
     async ({ headers, set, ip }) => {
