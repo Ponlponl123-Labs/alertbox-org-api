@@ -92,7 +92,7 @@ const endpoint = new Elysia({ prefix: "/device" })
         ...rest,
         token: undefined,
         last_used: session_usages?.[0]?.time ?? null,
-        this_device: rest.token === auth,
+        isThisDevice: rest.token === auth,
       }));
 
       return devices;
