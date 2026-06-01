@@ -77,7 +77,7 @@ const endpoint = new Elysia({ prefix: "/device" })
           os: true,
           os_ver: true,
           secret: false,
-          token: false,
+          token: true,
         },
         where: {
           uid: me.id,
@@ -95,7 +95,9 @@ const endpoint = new Elysia({ prefix: "/device" })
 
       const devices = devicesRaw.map(({ session_usages, ...rest }) => ({
         ...rest,
+        token: undefined,
         last_used: session_usages?.[0]?.time ?? null,
+        this_device: rest.token === auth,
       }));
 
       return devices;

@@ -134,8 +134,9 @@ export async function useSession<S extends Prisma.accountsSelect>(
   const session_info = await prisma.client.sessions.findFirst({
     where: {
       token: session,
-      AND: {
-        disabled: null,
+      disabled: null,
+      expire: {
+        gt: new Date(),
       },
     },
   });
