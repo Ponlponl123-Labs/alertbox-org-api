@@ -128,6 +128,7 @@ export async function destroySession(session: string): Promise<boolean> {
 export async function useSession<S extends Prisma.accountsSelect>(
   session: string,
   ip: string,
+  useCache = true,
   additionals?: S,
 ): Promise<false | null | SessionUser<S>> {
   const session_info = await prisma.client.sessions.findFirst({
@@ -161,10 +162,13 @@ export async function useSession<S extends Prisma.accountsSelect>(
     void destroySession(session);
     return false;
   }
-  const c = await redis.redis.get("user/" + session_info.uid);
-  if (c) {
-    if (c === "deleted") return false;
-    return JSON.parse(c);
+
+  if (useCache) {
+    const c = await redis.redis.get("user:" + session_info.uid + ":info");
+    if (c) {
+      if (c === "deleted") return false;
+      return JSON.parse(c);
+    }
   }
 
   const defaultSelect: BaseSessionSelect = {
@@ -172,6 +176,7 @@ export async function useSession<S extends Prisma.accountsSelect>(
     name: true,
     email: true,
     displayname: true,
+    uri: true,
     avatar: true,
     banner: true,
     deleted: true,
@@ -192,14 +197,14 @@ export async function useSession<S extends Prisma.accountsSelect>(
   })) as (SessionUser<S> & { deleted?: Date | null }) | null;
   if (exist_user?.deleted) {
     redis.redis.setex(
-      "user/" + session_info.uid,
+      "user:" + session_info.uid + ":info",
       24 * 60 * 60 * 1000,
       "deleted",
     );
     return false;
   }
   redis.redis.setex(
-    "user/" + session_info.uid,
+    "user:" + session_info.uid + ":info",
     24 * 60 * 60 * 1000,
     JSON.stringify(exist_user),
   );

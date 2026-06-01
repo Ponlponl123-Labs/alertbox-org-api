@@ -4,6 +4,7 @@ export interface User {
   id: bigint;
   name: string;
   displayname: string;
+  uri: string;
   email: string;
   avatar: string | null;
   banner: string | null;
@@ -27,6 +28,7 @@ export type BaseSessionSelect = {
   name: true;
   email: true;
   displayname: true;
+  uri: true;
   avatar: true;
   banner: true;
   deleted: true;

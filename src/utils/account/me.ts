@@ -52,7 +52,7 @@ export async function createAccount(
 }
 
 export async function getUid(uid: bigint): Promise<User | null> {
-  const c = await redis.redis.get("user/" + uid);
+  const c = await redis.redis.get("user:" + uid + ":info");
   if (c) {
     if (c === "deleted") return null;
     return JSON.parse(c);
@@ -63,30 +63,45 @@ export async function getUid(uid: bigint): Promise<User | null> {
       name: true,
       email: true,
       displayname: true,
+      uri: true,
       avatar: true,
       banner: true,
       deleted: true,
       disabled: true,
-      secret: false,
+      ffp_secret: false,
+      bmac_secret: false,
+      kofi_secret: false,
+      stripe_secret: false,
     },
     where: {
       id: uid,
     },
   });
   if (exist_user?.deleted) {
-    redis.redis.setex("user/" + uid, 24 * 60 * 60 * 1000, "deleted");
+    redis.redis.setex("user:" + uid + ":info", 24 * 60 * 60 * 1000, "deleted");
     return null;
   }
-  redis.redis.setex(
-    "user/" + uid,
-    24 * 60 * 60 * 1000,
-    JSON.stringify(exist_user),
-  );
-  return exist_user;
+
+  const normalizedUser = exist_user
+    ? {
+        ...exist_user,
+        uri: exist_user.uri ?? "",
+      }
+    : null;
+
+  if (normalizedUser) {
+    redis.redis.setex(
+      "user:" + uid + ":info",
+      24 * 60 * 60 * 1000,
+      JSON.stringify(normalizedUser),
+    );
+  }
+
+  return normalizedUser;
 }
 
 export async function isExist(email: string): Promise<MinimalUser | null> {
-  const c = await redis.redis.get("email/" + email);
+  const c = await redis.redis.get("email:" + email);
   if (c) {
     if (c === "deleted") return null;
     return JSON.parse(c);
@@ -102,12 +117,12 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
     },
   });
   if (exist_user?.deleted) {
-    redis.redis.setex("email/" + email, 24 * 60 * 60 * 1000, "deleted");
+    redis.redis.setex("email:" + email, 24 * 60 * 60 * 1000, "deleted");
     return null;
   }
   if (exist_user) {
     redis.redis.setex(
-      "email/" + email,
+      "email:" + email,
       24 * 60 * 60 * 1000,
       JSON.stringify(exist_user),
     );

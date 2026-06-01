@@ -12,6 +12,11 @@ export const supported_providers = [
   "feelfreepay",
 ];
 
+export const providerAliases: Record<string, string> = {
+  bmac: "buymeacoffee",
+  ffp: "feelfreepay",
+};
+
 const endpoint = new Elysia({ prefix: "/connection" })
   .use(ip())
   .get(
@@ -22,7 +27,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip, {
+      const me = await useSession(auth, ip, false, {
         stripe_secret: true,
         bmac_secret: true,
         kofi_secret: true,
@@ -33,10 +38,10 @@ const endpoint = new Elysia({ prefix: "/connection" })
         return "Unauthorized";
       }
       return {
-        stripe: me.stripe_secret || null,
-        bmac: me.bmac_secret || null,
-        kofi: me.kofi_secret || null,
-        ffp: me.ffp_secret || null,
+        stripe: me.stripe_secret ?? null,
+        bmac: me.bmac_secret ?? null,
+        kofi: me.kofi_secret ?? null,
+        ffp: me.ffp_secret ?? null,
       } as Connections;
     },
     {
@@ -49,10 +54,6 @@ const endpoint = new Elysia({ prefix: "/connection" })
     "/:provider",
     async ({ headers, params, body, set, ip }) => {
       const rawProvider = String(params.provider ?? "").toLowerCase();
-      const providerAliases: Record<string, string> = {
-        bmac: "buymeacoffee",
-        ffp: "feelfreepay",
-      };
       const provider = (providerAliases[rawProvider] ?? rawProvider) as string;
 
       if (!supported_providers.includes(provider)) {
@@ -83,7 +84,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
         },
       });
       void redis.redis.setex(
-        `user/${me.id}/${target}`,
+        `user:${me.id}:connections:${target}`,
         24 * 60 * 60 * 1000,
         body,
       );
@@ -136,7 +137,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
           id: me.id,
         },
       });
-      void redis.redis.del(`user/${me.id}/${target}`);
+      void redis.redis.del(`user:${me.id}:connections:${target}`);
       return "OK";
     },
     {

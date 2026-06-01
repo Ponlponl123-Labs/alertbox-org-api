@@ -11,6 +11,7 @@ model accounts {
   id                                             BigInt           @id @default(autoincrement())
   name                                           String           @db.VarChar(64)
   displayname                                    String           @db.VarChar(64)
+  uri                                            String?          @db.VarChar(64)
   avatar                                         String?          @db.VarChar(512)
   banner                                         String?          @db.VarChar(512)
   email                                          String           @db.VarChar(256)
