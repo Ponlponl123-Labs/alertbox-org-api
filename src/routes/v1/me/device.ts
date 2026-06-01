@@ -64,11 +64,6 @@ const endpoint = new Elysia({ prefix: "/device" })
             select: {
               time: true,
             },
-            where: {
-              token: {
-                equals: auth,
-              },
-            },
             orderBy: {
               id: "desc",
             },
@@ -122,14 +117,19 @@ const endpoint = new Elysia({ prefix: "/device" })
         return "Unauthorized";
       }
       try {
-        await prisma.client.sessions.update({
+        const result = await prisma.client.sessions.updateMany({
           data: {
             disabled: new Date(),
           },
           where: {
             id: BigInt(String(params.id)),
+            uid: me.id,
           },
         });
+        if (result.count === 0) {
+          set.status = "Bad Request";
+          return "Bad Request";
+        }
       } catch (e) {
         set.status = "Bad Request";
         return "Bad Request";
