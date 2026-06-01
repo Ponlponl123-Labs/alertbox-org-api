@@ -1,9 +1,10 @@
 import { prisma, redis } from "@/index";
+import type { Prisma } from "@/generated/prisma/client";
+import type { BaseSessionSelect, SessionUser } from "@/types/account.types";
 import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "../ip";
-import { User } from "@/types/account.types";
 
 export async function createSession(
   uid: bigint,
@@ -124,10 +125,11 @@ export async function destroySession(session: string): Promise<boolean> {
   return true;
 }
 
-export async function useSession(
+export async function useSession<S extends Prisma.accountsSelect>(
   session: string,
   ip: string,
-): Promise<User | null | false> {
+  additionals?: S,
+): Promise<false | null | SessionUser<S>> {
   const session_info = await prisma.client.sessions.findFirst({
     where: {
       token: session,
@@ -164,22 +166,30 @@ export async function useSession(
     if (c === "deleted") return false;
     return JSON.parse(c);
   }
-  const exist_user = await prisma.client.accounts.findFirst({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      displayname: true,
-      avatar: true,
-      banner: true,
-      deleted: true,
-      disabled: true,
-      secret: false,
-    },
+
+  const defaultSelect: BaseSessionSelect = {
+    id: true,
+    name: true,
+    email: true,
+    displayname: true,
+    avatar: true,
+    banner: true,
+    deleted: true,
+    disabled: true,
+    secret: false,
+  };
+
+  const select = {
+    ...defaultSelect,
+    ...additionals,
+  } as Prisma.accountsSelect;
+
+  const exist_user = (await prisma.client.accounts.findFirst({
+    select,
     where: {
       id: session_info.uid,
     },
-  });
+  })) as (SessionUser<S> & { deleted?: Date | null }) | null;
   if (exist_user?.deleted) {
     redis.redis.setex(
       "user/" + session_info.uid,

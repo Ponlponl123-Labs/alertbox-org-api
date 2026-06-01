@@ -1,9 +1,9 @@
 import { useSession } from "@/utils/account/session";
 import { isBearerToken } from "@/utils/bearer-token";
+import { endpoint as ConnectionEndpoint } from "./connections";
 import Elysia, { t } from "elysia";
-import { ip } from "elysia-ip";
 
-export const router = new Elysia({ prefix: "me" }).use(ip()).get(
+export const router = new Elysia({ prefix: "me" }).use(ConnectionEndpoint).get(
   "/",
   async ({ headers, set, ip }) => {
     const auth = isBearerToken(headers.authorization);
