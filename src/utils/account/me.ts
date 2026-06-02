@@ -1,7 +1,14 @@
 import { prisma, redis } from "@/index";
-import { MinimalUser, User, UserCreated } from "@/types/account.types";
+import {
+  MinimalUser,
+  SessionUser,
+  User,
+  UserCreated,
+} from "@/types/account.types";
 import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
+import { isBearerToken } from "../bearer-token";
+import { useSession } from "./session";
 
 export async function createAccount(
   name: string,
@@ -133,4 +140,24 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
     );
   }
   return exist_user;
+}
+
+export async function getMe(
+  headers: { authorization?: string | undefined },
+  set: { status?: string | number },
+  ip: string,
+): Promise<SessionUser | null | false> {
+  const token = isBearerToken(headers.authorization ?? "");
+  if (!token) {
+    set.status = "Bad Request";
+    return false;
+  }
+
+  const me = await useSession(token, ip);
+  if (!me) {
+    set.status = "Unauthorized";
+    return null;
+  }
+
+  return me;
 }

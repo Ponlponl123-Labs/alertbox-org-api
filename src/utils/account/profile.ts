@@ -10,80 +10,105 @@ export async function registerURI(
   if (!isValidUri(uri)) return false;
 
   const t = await redis.redis.get("uri:" + uri + ":owner");
-  if (t !== "noone") {
+  if (t && t !== "noone") {
     return false;
   }
+
   const isURIAlreadyRegistered = await prisma.client.reserved_uri.findFirst({
-    select: { uid: true },
+    select: { uid: true, time: true, disabled: true },
     where: { uri },
     orderBy: { id: "desc" },
   });
+
   if (isURIAlreadyRegistered) {
-    void redis.redis.setex(
-      "uri:" + uri + ":owner",
-      week,
-      String(isURIAlreadyRegistered.uid),
-    );
+    if (isURIAlreadyRegistered.disabled) {
+      void redis.redis.setex("uri:" + uri + ":owner", week, "disabled");
+    } else {
+      void redis.redis.setex(
+        "uri:" + uri + ":owner",
+        week,
+        String(isURIAlreadyRegistered.uid),
+      );
+    }
     return false;
   }
 
-  const cooldown = new Date().getTime() + week;
+  const cooldown = new Date(Date.now() + week);
 
-  await prisma.client.reserved_uri.create({
-    data: {
-      uri,
-      uid,
-      by: token,
-    },
-  });
-  await prisma.client.accounts.update({
-    data: {
-      uri,
-      uri_cooldown: new Date(cooldown),
-    },
-    where: {
-      id: uid,
-    },
-  });
-  void redis.redis.setex("uri:" + uri + ":owner", week, String(uid));
-  void redis.redis.setex(
-    "uri:" + uri + ":registered_date",
-    week,
-    String(new Date().getTime()),
-  );
-  void redis.redis.setex("user:" + uid + ":uri", week, String(uri));
-  void redis.redis.setex(
-    "user:" + uid + ":uri_cooldown",
-    week,
-    String(cooldown),
-  );
+  try {
+    await prisma.client.$transaction(async (tx) => {
+      await tx.reserved_uri.create({
+        data: {
+          uri,
+          uid,
+          by: token,
+        },
+      });
 
-  return true;
+      await tx.accounts.update({
+        data: {
+          uri,
+          uri_cooldown: cooldown,
+        },
+        where: {
+          id: uid,
+        },
+      });
+    });
+
+    const now = Date.now();
+    await Promise.all([
+      redis.redis.setex("uri:" + uri + ":owner", week, String(uid)),
+      redis.redis.setex("uri:" + uri + ":registered_date", week, String(now)),
+      redis.redis.setex("user:" + uid + ":uri", week, uri),
+      redis.redis.setex(
+        "user:" + uid + ":uri_cooldown",
+        week,
+        String(cooldown.getTime()),
+      ),
+      redis.redis.del("user:" + uid + ":info"),
+    ]);
+
+    return true;
+  } catch (err) {
+    console.error("Failed to register URI:", err);
+    return false;
+  }
 }
 
-export async function registerUriCooldown(uri: string): Promise<Date | null> {
+export async function registeredUri(uri: string): Promise<bigint | false> {
   const t = await redis.redis.get("uri:" + uri + ":owner");
-  if (t === "noone") {
-    return null;
+
+  if (t === "noone" || t === "disabled") {
+    return false;
   }
 
-  const c = await redis.redis.get("uri:" + uri + ":registered_date");
-  if (c) {
-    return new Date(c + week);
+  if (t) {
+    try {
+      return BigInt(t);
+    } catch {
+      // Fallback to DB if cache is corrupted
+    }
   }
 
   const lastRegisteredURI = await prisma.client.reserved_uri.findFirst({
-    select: { time: true, uid: true },
+    select: { time: true, uid: true, disabled: true },
     where: { uri },
     orderBy: { id: "desc" },
   });
 
   if (!lastRegisteredURI) {
     void redis.redis.setex("uri:" + uri + ":owner", week, "noone");
-    return null;
+    return false;
+  } else if (lastRegisteredURI.disabled) {
+    void redis.redis.setex("uri:" + uri + ":owner", week, "disabled");
+    void redis.redis.setex(
+      "uri:" + uri + ":registered_date",
+      week,
+      String(lastRegisteredURI.time.getTime()),
+    );
+    return false;
   }
-
-  const cooldownEnds = new Date(lastRegisteredURI.time.getTime() + week);
 
   void redis.redis.setex(
     "uri:" + uri + ":owner",
@@ -96,7 +121,5 @@ export async function registerUriCooldown(uri: string): Promise<Date | null> {
     String(lastRegisteredURI.time.getTime()),
   );
 
-  if (cooldownEnds > new Date()) return cooldownEnds;
-
-  return null;
+  return lastRegisteredURI.uid;
 }
