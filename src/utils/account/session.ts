@@ -192,7 +192,7 @@ export async function useSession(
     JSON.stringify(user),
   );
   if (user?.uri)
-    redis.redis.setex("user:" + session_info.uid + ":uid", day, user?.uri);
+    redis.redis.setex("user:" + session_info.uid + ":uri", day, user?.uri);
   if (user?.uri_cooldown)
     redis.redis.setex(
       "user:" + session_info.uid + ":uri_cooldown",

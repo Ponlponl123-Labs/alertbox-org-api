@@ -79,7 +79,7 @@ export const router = new Elysia({ prefix: "profile" })
         JSON.stringify(user),
       );
       if (user?.uri)
-        redis.redis.setex("user:" + owner + ":uid", day, user?.uri);
+        redis.redis.setex("user:" + owner + ":uri", day, user?.uri);
       if (user?.uri_cooldown)
         redis.redis.setex(
           "user:" + owner + ":uri_cooldown",
