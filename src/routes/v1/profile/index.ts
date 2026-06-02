@@ -5,6 +5,9 @@ import { registeredUri } from "@/utils/account/profile";
 import { isValidUri } from "@/utils/regex";
 import Elysia, { t } from "elysia";
 
+import { accounts } from "@/generated/prisma/client";
+import { filterSessionUser } from "@/utils/account/me";
+
 export const router = new Elysia({ prefix: "profile" })
   .get(
     "/:uri",
@@ -46,15 +49,26 @@ export const router = new Elysia({ prefix: "profile" })
         set.status = "Forbidden";
         return "Forbidden";
       } else if (t) {
-        const parsed: SessionUser = JSON.parse(t);
+        const parsed: accounts = JSON.parse(t);
+        const detail = filterSessionUser(parsed);
+        if (!detail.published || detail.disabled || detail.deleted) {
+          set.status = "Forbidden";
+          return "Forbidden";
+        }
         return {
-          avatar: parsed.avatar,
-          banner: parsed.banner,
-          displayname: parsed.displayname,
-          bio: parsed.bio,
-          published: parsed.published,
-          disabled: parsed.disabled,
-          deleted: parsed.deleted,
+          avatar: detail.avatar,
+          banner: detail.banner,
+          displayname: detail.displayname,
+          bio: detail.bio,
+          social_discord: detail.social_discord,
+          social_facebook: detail.social_facebook,
+          social_reddit: detail.social_reddit,
+          social_twitchtv: detail.social_twitchtv,
+          social_twitter: detail.social_twitter,
+          social_youtube: detail.social_youtube,
+          published: detail.published,
+          disabled: detail.disabled,
+          deleted: detail.deleted,
         };
       }
       const user = await prisma.client.accounts.findFirst({
@@ -66,9 +80,9 @@ export const router = new Elysia({ prefix: "profile" })
         set.status = "Not Found";
         return "Not Found";
       }
-      const { secret, ...detail } = user;
-      if (!detail.published || detail.disabled || detail.deleted) {
-        if (detail.deleted)
+
+      if (!user.published || user.disabled || user.deleted) {
+        if (user.deleted)
           void redis.redis.setex("user:" + owner + ":info", day, "deleted");
         set.status = "Forbidden";
         return "Forbidden";
@@ -86,11 +100,19 @@ export const router = new Elysia({ prefix: "profile" })
           day,
           String(user?.uri_cooldown.getTime()),
         );
+
+      const detail = filterSessionUser(user);
       return {
         avatar: detail.avatar,
         banner: detail.banner,
         displayname: detail.displayname,
         bio: detail.bio,
+        social_discord: detail.social_discord,
+        social_facebook: detail.social_facebook,
+        social_reddit: detail.social_reddit,
+        social_twitchtv: detail.social_twitchtv,
+        social_twitter: detail.social_twitter,
+        social_youtube: detail.social_youtube,
         published: detail.published,
         disabled: detail.disabled,
         deleted: detail.deleted,

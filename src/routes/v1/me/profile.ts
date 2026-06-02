@@ -1,4 +1,4 @@
-import { day, week } from "@/consts/time";
+import { day } from "@/consts/time";
 import { prisma, redis } from "@/index";
 import { getMe } from "@/utils/account/me";
 import { registerURI } from "@/utils/account/profile";

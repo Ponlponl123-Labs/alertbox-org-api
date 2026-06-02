@@ -17,6 +17,12 @@ model accounts {
   uri_cooldown                                   DateTime?        @db.Timestamp(0)
   published                                      DateTime?        @db.Timestamp(0)
   bio                                            String?          @db.Text
+  social_twitchtv                                String?          @db.VarChar(512)
+  social_youtube                                 String?          @db.VarChar(512)
+  social_twitter                                 String?          @db.VarChar(512)
+  social_facebook                                String?          @db.VarChar(512)
+  social_reddit                                  String?          @db.VarChar(512)
+  social_discord                                 String?          @db.VarChar(512)
   avatar                                         String?          @db.VarChar(512)
   banner                                         String?          @db.VarChar(512)
   email                                          String           @db.VarChar(256)

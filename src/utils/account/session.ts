@@ -125,11 +125,13 @@ export async function destroySession(session: string): Promise<boolean> {
   return true;
 }
 
+import { accounts } from "@/generated/prisma/client";
+
 export async function useSession(
   session: string,
   ip: string,
   useCache = true,
-): Promise<false | null | SessionUser> {
+): Promise<false | null | accounts> {
   const session_info = await prisma.client.sessions.findFirst({
     where: {
       token: session,
@@ -168,18 +170,16 @@ export async function useSession(
     const c = await redis.redis.get("user:" + session_info.uid + ":info");
     if (c) {
       if (c === "deleted") return false;
-      return JSON.parse(c) as SessionUser;
+      return JSON.parse(c) as accounts;
     }
   }
 
-  const userRow = await prisma.client.accounts.findFirst({
+  const user = await prisma.client.accounts.findFirst({
     where: {
       id: session_info.uid,
     },
   });
-  if (!userRow) return null;
-
-  const { secret, ...user } = userRow;
+  if (!user) return null;
 
   if (user.deleted) {
     redis.redis.setex("user:" + session_info.uid + ":info", day, "deleted");

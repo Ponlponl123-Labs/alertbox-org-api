@@ -5,7 +5,6 @@ const RESERVED_LIST = [
   "alertbox",
   "tip-to",
   "tipto",
-  "ponlponl123",
   "support",
   "help",
   "api",

@@ -23,7 +23,10 @@ export interface MinimalUser {
   deleted: Date | null;
 }
 
-export type SessionUser = Omit<accounts, "secret">;
+export type SessionUser = Omit<
+  accounts,
+  "secret" | "stripe_secret" | "bmac_secret" | "kofi_secret" | "ffp_secret"
+>;
 
 export interface Connections {
   stripe: string | null;

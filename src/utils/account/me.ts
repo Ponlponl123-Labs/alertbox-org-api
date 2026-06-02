@@ -1,4 +1,5 @@
 import { prisma, redis } from "@/index";
+import { accounts } from "@/generated/prisma/client";
 import {
   MinimalUser,
   SessionUser,
@@ -9,6 +10,7 @@ import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { isBearerToken } from "../bearer-token";
 import { useSession } from "./session";
+import { sessionUserSelect } from "@/consts/session";
 
 export async function createAccount(
   name: string,
@@ -67,24 +69,7 @@ export async function getUid(uid: bigint): Promise<User | null> {
     return JSON.parse(c);
   }
   const exist_user = await prisma.client.accounts.findFirst({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      displayname: true,
-      uri: true,
-      avatar: true,
-      banner: true,
-      deleted: true,
-      disabled: true,
-      create_with: true,
-      time: true,
-      secret: false,
-      ffp_secret: false,
-      bmac_secret: false,
-      kofi_secret: false,
-      stripe_secret: false,
-    },
+    select: sessionUserSelect,
     where: {
       id: uid,
     },
@@ -142,6 +127,18 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
   return exist_user;
 }
 
+export function filterSessionUser(user: accounts): SessionUser {
+  const {
+    secret,
+    stripe_secret,
+    bmac_secret,
+    kofi_secret,
+    ffp_secret,
+    ...safe
+  } = user;
+  return safe;
+}
+
 export async function getMe(
   headers: { authorization?: string | undefined },
   set: { status?: string | number },
@@ -159,5 +156,5 @@ export async function getMe(
     return null;
   }
 
-  return me;
+  return filterSessionUser(me);
 }

@@ -17,6 +17,8 @@ export const providerAliases: Record<string, string> = {
   ffp: "feelfreepay",
 };
 
+import { accounts } from "@/generated/prisma/client";
+
 const endpoint = new Elysia({ prefix: "/connection" })
   .use(ip())
   .get(
@@ -27,11 +29,12 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip, false);
+      const me = (await useSession(auth, ip, false)) as accounts | null | false;
       if (!me) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
+
       return {
         stripe: me.stripe_secret ?? null,
         bmac: me.bmac_secret ?? null,
