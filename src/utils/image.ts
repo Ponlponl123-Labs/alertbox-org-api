@@ -12,7 +12,7 @@ export async function processAvatar(buffer: Buffer): Promise<ProcessedImage> {
       fit: "cover",
       position: "center",
     })
-    .webp({ quality: 80, effort: 6 })
+    .webp({ quality: 100, effort: 0 })
     .toBuffer();
 
   return {
@@ -28,7 +28,7 @@ export async function processBanner(buffer: Buffer): Promise<ProcessedImage> {
       fit: "cover",
       position: "center",
     })
-    .webp({ quality: 80, effort: 6 })
+    .webp({ quality: 100, effort: 0 })
     .toBuffer();
 
   return {

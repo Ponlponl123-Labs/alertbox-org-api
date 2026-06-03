@@ -31,6 +31,7 @@ model accounts {
   bmac_secret                                    String?          @db.VarChar(512)
   kofi_secret                                    String?          @db.VarChar(512)
   ffp_secret                                     String?          @db.VarChar(512)
+  streamlabs_secret                              String?          @db.VarChar(512)
   disabled                                       DateTime?        @db.Timestamp(0)
   deleted                                        DateTime?        @db.Timestamp(0)
   reserved_uri_accounts_uriToreserved_uri        reserved_uri?    @relation("accounts_uriToreserved_uri", fields: [uri], references: [uri], onDelete: NoAction, onUpdate: NoAction, map: "FK_accounts_reserved_uri")

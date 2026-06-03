@@ -26,4 +26,5 @@ export const sessionUserSelect = {
   ffp_secret: false,
   kofi_secret: false,
   stripe_secret: false,
+  streamlabs_secret: false,
 } as const satisfies Prisma.accountsSelect;

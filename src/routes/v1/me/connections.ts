@@ -10,6 +10,7 @@ export const supported_providers = [
   "buymeacoffee",
   "kofi",
   "feelfreepay",
+  "streamlabs",
 ];
 
 export const providerAliases: Record<string, string> = {
@@ -40,6 +41,11 @@ const endpoint = new Elysia({ prefix: "/connection" })
         bmac: me.bmac_secret ?? null,
         kofi: me.kofi_secret ?? null,
         ffp: me.ffp_secret ?? null,
+        youtube: null,
+        facebook: null,
+        twitch: null,
+        patreon: null,
+        streamlabs: me.streamlabs_secret ?? null,
       } as Connections;
     },
     {
@@ -76,6 +82,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
           bmac_secret: target === "buymeacoffee" ? body : undefined,
           kofi_secret: target === "kofi" ? body : undefined,
           ffp_secret: target === "feelfreepay" ? body : undefined,
+          streamlabs_secret: target === "streamlabs" ? body : undefined,
         },
         where: {
           id: me.id,
@@ -130,6 +137,7 @@ const endpoint = new Elysia({ prefix: "/connection" })
           bmac_secret: target === "buymeacoffee" ? null : undefined,
           kofi_secret: target === "kofi" ? null : undefined,
           ffp_secret: target === "feelfreepay" ? null : undefined,
+          streamlabs_secret: target === "streamlabs" ? null : undefined,
         },
         where: {
           id: me.id,

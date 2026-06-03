@@ -25,7 +25,12 @@ export interface MinimalUser {
 
 export type SessionUser = Omit<
   accounts,
-  "secret" | "stripe_secret" | "bmac_secret" | "kofi_secret" | "ffp_secret"
+  | "secret"
+  | "stripe_secret"
+  | "bmac_secret"
+  | "kofi_secret"
+  | "ffp_secret"
+  | "streamlabs_secret"
 >;
 
 export interface Connections {
@@ -33,4 +38,9 @@ export interface Connections {
   bmac: string | null;
   kofi: string | null;
   ffp: string | null;
+  youtube: string | null;
+  facebook: string | null;
+  twitch: string | null;
+  patreon: string | null;
+  streamlabs: string | null;
 }

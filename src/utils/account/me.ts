@@ -134,6 +134,7 @@ export function filterSessionUser(user: accounts): SessionUser {
     bmac_secret,
     kofi_secret,
     ffp_secret,
+    streamlabs_secret,
     ...safe
   } = user;
   return safe;
