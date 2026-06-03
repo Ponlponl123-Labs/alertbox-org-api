@@ -1,9 +1,10 @@
 import { prisma, redis } from "@/index";
 import { Connections } from "@/types/account.types";
-import { useSession } from "@/utils/account/session";
+import { Me } from "@/classes/me";
 import { isBearerToken } from "@/utils/bearer-token";
 import Elysia, { t } from "elysia";
 import { ip } from "elysia-ip";
+import { connectionSecretSelect } from "@/consts/session";
 
 export const supported_providers = [
   "stripe",
@@ -30,22 +31,26 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = (await useSession(auth, ip, false)) as accounts | null | false;
-      if (!me) {
+      const user = await new Me({ cache: false }).use(
+        auth,
+        ip,
+        connectionSecretSelect,
+      );
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
 
       return {
-        stripe: me.stripe_secret ?? null,
-        bmac: me.bmac_secret ?? null,
-        kofi: me.kofi_secret ?? null,
-        ffp: me.ffp_secret ?? null,
+        stripe: user.data.stripe_secret ?? null,
+        bmac: user.data.bmac_secret ?? null,
+        kofi: user.data.kofi_secret ?? null,
+        ffp: user.data.ffp_secret ?? null,
         youtube: null,
         facebook: null,
         twitch: null,
         patreon: null,
-        streamlabs: me.streamlabs_secret ?? null,
+        streamlabs: user.data.streamlabs_secret ?? null,
       } as Connections;
     },
     {
@@ -71,8 +76,8 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip);
-      if (!me) {
+      const user = await new Me().use(auth, ip);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -85,11 +90,11 @@ const endpoint = new Elysia({ prefix: "/connection" })
           streamlabs_secret: target === "streamlabs" ? body : undefined,
         },
         where: {
-          id: me.id,
+          id: user.data.id,
         },
       });
       void redis.redis.setex(
-        `user:${me.id}:connections:${target}`,
+        `user:${user.data.id}:connections:${target}`,
         24 * 60 * 60 * 1000,
         body,
       );
@@ -126,8 +131,8 @@ const endpoint = new Elysia({ prefix: "/connection" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip);
-      if (!me) {
+      const user = await new Me().use(auth, ip);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -140,10 +145,10 @@ const endpoint = new Elysia({ prefix: "/connection" })
           streamlabs_secret: target === "streamlabs" ? null : undefined,
         },
         where: {
-          id: me.id,
+          id: user.data.id,
         },
       });
-      void redis.redis.del(`user:${me.id}:connections:${target}`);
+      void redis.redis.del(`user:${user.data.id}:connections:${target}`);
       return "OK";
     },
     {

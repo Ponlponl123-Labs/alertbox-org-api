@@ -1,12 +1,10 @@
 import { day } from "@/consts/time";
 import { prisma, redis } from "@/index";
-import { SessionUser } from "@/types/account.types";
 import { registeredUri } from "@/utils/account/profile";
 import { isValidUri } from "@/utils/regex";
 import Elysia, { t } from "elysia";
 
 import { accounts } from "@/generated/prisma/client";
-import { filterSessionUser } from "@/utils/account/me";
 
 export const router = new Elysia({ prefix: "profile" })
   .get(
@@ -44,32 +42,34 @@ export const router = new Elysia({ prefix: "profile" })
         set.status = "Not Found";
         return "Not Found";
       }
+
+      const filterDetail = (detail: any) => ({
+        avatar: detail.avatar,
+        banner: detail.banner,
+        displayname: detail.displayname,
+        bio: detail.bio,
+        social_discord: detail.social_discord,
+        social_facebook: detail.social_facebook,
+        social_reddit: detail.social_reddit,
+        social_twitchtv: detail.social_twitchtv,
+        social_twitter: detail.social_twitter,
+        social_youtube: detail.social_youtube,
+        published: detail.published,
+        disabled: detail.disabled,
+        deleted: detail.deleted,
+      });
+
       const t = await redis.redis.get("user:" + owner + ":info");
       if (t === "deleted") {
         set.status = "Forbidden";
         return "Forbidden";
       } else if (t) {
         const parsed: accounts = JSON.parse(t);
-        const detail = filterSessionUser(parsed);
-        if (!detail.published || detail.disabled || detail.deleted) {
+        if (!parsed.published || parsed.disabled || parsed.deleted) {
           set.status = "Forbidden";
           return "Forbidden";
         }
-        return {
-          avatar: detail.avatar,
-          banner: detail.banner,
-          displayname: detail.displayname,
-          bio: detail.bio,
-          social_discord: detail.social_discord,
-          social_facebook: detail.social_facebook,
-          social_reddit: detail.social_reddit,
-          social_twitchtv: detail.social_twitchtv,
-          social_twitter: detail.social_twitter,
-          social_youtube: detail.social_youtube,
-          published: detail.published,
-          disabled: detail.disabled,
-          deleted: detail.deleted,
-        };
+        return filterDetail(parsed);
       }
       const user = await prisma.client.accounts.findFirst({
         where: {
@@ -101,22 +101,7 @@ export const router = new Elysia({ prefix: "profile" })
           String(user?.uri_cooldown.getTime()),
         );
 
-      const detail = filterSessionUser(user);
-      return {
-        avatar: detail.avatar,
-        banner: detail.banner,
-        displayname: detail.displayname,
-        bio: detail.bio,
-        social_discord: detail.social_discord,
-        social_facebook: detail.social_facebook,
-        social_reddit: detail.social_reddit,
-        social_twitchtv: detail.social_twitchtv,
-        social_twitter: detail.social_twitter,
-        social_youtube: detail.social_youtube,
-        published: detail.published,
-        disabled: detail.disabled,
-        deleted: detail.deleted,
-      };
+      return filterDetail(user);
     },
     {
       params: t.Object({

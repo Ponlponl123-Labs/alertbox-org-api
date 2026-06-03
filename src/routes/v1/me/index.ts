@@ -1,4 +1,4 @@
-import { useSession } from "@/utils/account/session";
+import { Me } from "@/classes/me";
 import { isBearerToken } from "@/utils/bearer-token";
 import {
   endpoint as ConnectionEndpoint,
@@ -13,8 +13,7 @@ import Elysia, { t } from "elysia";
 import { prisma, redis } from "@/index";
 import { day } from "@/consts/time";
 
-import { filterSessionUser } from "@/utils/account/me";
-import { accounts } from "@/generated/prisma/client";
+import { sessionUserSelect } from "@/consts/session";
 
 export const router = new Elysia({ prefix: "me" })
   .use(ConnectionEndpoint)
@@ -28,12 +27,12 @@ export const router = new Elysia({ prefix: "me" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = (await useSession(auth, ip)) as accounts | null | false;
-      if (!me) {
+      const user = await new Me().use(auth, ip, sessionUserSelect);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      return filterSessionUser(me);
+      return user.data;
     },
     {
       headers: t.Object({
@@ -49,8 +48,8 @@ export const router = new Elysia({ prefix: "me" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = (await useSession(auth, ip)) as accounts | null | false;
-      if (!me) {
+      const user = await new Me().use(auth, ip, sessionUserSelect);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -99,14 +98,14 @@ export const router = new Elysia({ prefix: "me" })
           const buffer = Buffer.from(await body.avatar.arrayBuffer());
           const processed = await processAvatar(buffer);
           const { url } = await saveProfileImage(
-            String(me.id),
+            String(user.data.id),
             "avatar",
             nanoid(),
             processed.buffer,
           );
 
-          if (me.avatar) {
-            await deleteProfileImage(me.avatar).catch(console.error);
+          if (user.data.avatar) {
+            await deleteProfileImage(user.data.avatar).catch(console.error);
           }
 
           data.avatar = url;
@@ -120,14 +119,14 @@ export const router = new Elysia({ prefix: "me" })
           const buffer = Buffer.from(await body.banner.arrayBuffer());
           const processed = await processBanner(buffer);
           const { url } = await saveProfileImage(
-            String(me.id),
+            String(user.data.id),
             "banner",
             nanoid(),
             processed.buffer,
           );
 
-          if (me.banner) {
-            await deleteProfileImage(me.banner).catch(console.error);
+          if (user.data.banner) {
+            await deleteProfileImage(user.data.banner).catch(console.error);
           }
 
           data.banner = url;
@@ -140,20 +139,25 @@ export const router = new Elysia({ prefix: "me" })
         return "No changes";
       }
 
-      const updated = await prisma.client.accounts.update({
+      const updated = (await prisma.client.accounts.update({
         data,
         where: {
-          id: me.id,
+          id: user.data.id,
         },
-      });
+      })) as any;
 
+      const { secret: _, ...cacheableUpdated } = updated;
       void redis.redis.setex(
-        "user:" + me.id + ":info",
+        "user:" + user.data.id + ":info",
         day,
-        JSON.stringify(updated),
+        JSON.stringify(cacheableUpdated),
       );
 
-      return filterSessionUser(updated);
+      // We return the filtered updated user
+      return Object.keys(sessionUserSelect).reduce((acc, key) => {
+        if ((sessionUserSelect as any)[key]) acc[key] = (updated as any)[key];
+        return acc;
+      }, {} as any);
     },
     {
       headers: t.Object({
@@ -181,8 +185,8 @@ export const router = new Elysia({ prefix: "me" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip);
-      if (!me) {
+      const user = await new Me().use(auth, ip, sessionUserSelect);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -191,13 +195,13 @@ export const router = new Elysia({ prefix: "me" })
           deleted: new Date(),
         },
         where: {
-          id: me.id,
+          id: user.data.id,
         },
       });
-      await redis.redis.del(`user:${me.id}:info`);
-      await redis.redis.del(`email:${me.email}`);
+      await redis.redis.del(`user:${user.data.id}:info`);
+      await redis.redis.del(`email:${user.data.email}`);
       supported_providers.forEach(async (provider) => {
-        await redis.redis.del(`user:${me.id}:connections:${provider}`);
+        await redis.redis.del(`user:${user.data!.id}:connections:${provider}`);
       });
       return "OK, Goodbye!";
     },

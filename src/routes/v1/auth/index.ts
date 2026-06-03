@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { endpoint as DiscordAuthEndpoint } from "./discord";
 import { isBearerToken } from "@/utils/bearer-token";
-import { destroySession, useSession } from "@/utils/account/session";
+import { Me } from "@/classes/me";
 
 export const router = new Elysia({ prefix: "auth" })
   .use(DiscordAuthEndpoint)
@@ -13,7 +13,7 @@ export const router = new Elysia({ prefix: "auth" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const r = await destroySession(auth);
+      const r = await Me.destroySession(auth);
       if (!r) {
         set.status = "Unauthorized";
         return "Unauthorized";

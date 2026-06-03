@@ -1,6 +1,6 @@
 import { prisma, redis } from "@/index";
 import { Connections } from "@/types/account.types";
-import { useSession } from "@/utils/account/session";
+import { Me } from "@/classes/me";
 import { isBearerToken } from "@/utils/bearer-token";
 import Elysia, { t } from "elysia";
 import { ip } from "elysia-ip";
@@ -27,8 +27,8 @@ const endpoint = new Elysia({ prefix: "/device" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip);
-      if (!me) {
+      const user = await new Me().use(auth, ip);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -75,7 +75,7 @@ const endpoint = new Elysia({ prefix: "/device" })
           token: true,
         },
         where: {
-          uid: me.id,
+          uid: user.data.id,
           AND: {
             disabled: null,
             AND: {
@@ -111,8 +111,8 @@ const endpoint = new Elysia({ prefix: "/device" })
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const me = await useSession(auth, ip);
-      if (!me) {
+      const user = await new Me().use(auth, ip);
+      if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
@@ -123,7 +123,7 @@ const endpoint = new Elysia({ prefix: "/device" })
           },
           where: {
             id: BigInt(String(params.id)),
-            uid: me.id,
+            uid: user.data.id,
           },
         });
         if (result.count === 0) {

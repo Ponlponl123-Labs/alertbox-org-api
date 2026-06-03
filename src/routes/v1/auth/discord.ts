@@ -1,5 +1,4 @@
-import { createAccount, isExist } from "@/utils/account/me";
-import { createSession } from "@/utils/account/session";
+import { Me } from "@/classes/me";
 import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 import Elysia, { t } from "elysia";
 import { ip } from "elysia-ip";
@@ -12,36 +11,40 @@ const endpoint = new Elysia().use(ip()).post(
       set.status = "Unauthorized";
       return "Unauthorized, cannot be exchange code";
     }
-    const me = await get_me(access_token);
-    if (!me || !me.email) {
+    const discordMe = await get_me(access_token);
+    if (!discordMe || !discordMe.email) {
       set.status = "Unauthorized";
       return "Unauthorized";
     }
-    if (!me.verified) {
+    if (!discordMe.verified) {
       set.status = "Not Acceptable";
       return "User email isn't verified";
     }
-    let userid;
-    const exist_user = await isExist(me.email);
+
+    const user = new Me();
+    const exist_user = await Me.isExist(discordMe.email);
+
     if (!exist_user) {
-      const user = await createAccount(me.username, me.email, "discord");
-      if (!user) {
+      const created = await user.create(discordMe.username, discordMe.email, "discord");
+      if (!created) {
         set.status = "Conflict";
         return "That user already exist";
       }
-      userid = user.id;
     } else {
-      userid = exist_user.id;
+      await user.load(exist_user.id);
     }
-    const session = await createSession(userid, {
+
+    const session = await user.session.create({
       ip_addr: server?.requestIP(request)?.address || ip,
       method: request.method,
       user_agent: request.headers.get("user-agent") || "Unknown",
     });
+
     if (!session) {
       set.status = "Conflict";
       return "User have corrupted data";
     }
+
     void revoke_access_token(access_token.token);
     return session;
   },

@@ -28,3 +28,16 @@ export const sessionUserSelect = {
   stripe_secret: false,
   streamlabs_secret: false,
 } as const satisfies Prisma.accountsSelect;
+
+export const basicUserSelect = {
+  id: true,
+} as const satisfies Prisma.accountsSelect;
+
+export const connectionSecretSelect = {
+  id: true,
+  stripe_secret: true,
+  bmac_secret: true,
+  kofi_secret: true,
+  ffp_secret: true,
+  streamlabs_secret: true,
+} as const satisfies Prisma.accountsSelect;

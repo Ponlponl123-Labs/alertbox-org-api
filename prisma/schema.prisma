@@ -11,27 +11,63 @@ model accounts {
   id                                             BigInt           @id @default(autoincrement())
   time                                           DateTime         @default(now()) @db.Timestamp(0)
   create_with                                    String           @db.VarChar(50)
+  email                                          String           @db.VarChar(256)
   name                                           String           @db.VarChar(64)
   displayname                                    String           @db.VarChar(64)
+  accent_color                                   Int              @default(0) @db.UnsignedInt
   uri                                            String?          @unique(map: "FK_accounts_reserved_uri") @db.VarChar(64)
   uri_cooldown                                   DateTime?        @db.Timestamp(0)
   published                                      DateTime?        @db.Timestamp(0)
   bio                                            String?          @db.Text
-  social_twitchtv                                String?          @db.VarChar(512)
-  social_youtube                                 String?          @db.VarChar(512)
-  social_twitter                                 String?          @db.VarChar(512)
-  social_facebook                                String?          @db.VarChar(512)
-  social_reddit                                  String?          @db.VarChar(512)
-  social_discord                                 String?          @db.VarChar(512)
+  widget_id                                      String           @unique(map: "widget_id") @db.VarChar(255)
+  default_donor_name                             String           @default("Anonymous") @db.VarChar(48)
+  default_donor_amount                           Int              @default(1) @db.UnsignedSmallInt
+  default_donor_avatar                           String?          @db.VarChar(512)
+  currency                                       Int?             @db.UnsignedSmallInt
+  min_tip_amount                                 Int              @default(1) @db.UnsignedSmallInt
+  max_ip_amount                                  Int              @default(10000) @db.UnsignedSmallInt
+  notify_animation_in                            String?          @default("fade_in_up") @db.VarChar(64)
+  notify_animation_out                           String?          @default("fade_out_up") @db.VarChar(64)
+  notify_animation_in_duration                   Float            @default(1) @db.Float
+  notify_animation_out_duration                  Float            @default(1) @db.Float
+  notify_min_visible_duration                    Float            @default(3) @db.Float
+  notify_prefix                                  String?          @db.VarChar(64)
+  notify_subfix                                  String?          @db.VarChar(64)
+  notify_fontfamily                              String?          @db.VarChar(64)
+  notify_fontweight                              Int              @default(600) @db.UnsignedSmallInt
+  notify_fontsize                                Int              @default(32) @db.UnsignedTinyInt
+  notify_outline_size                            Int              @default(3) @db.UnsignedTinyInt
+  notify_outline_color                           Int              @default(0) @db.UnsignedTinyInt
+  notify_text_color                              Int              @default(16777215) @db.UnsignedInt
+  notify_donor_color                             Int              @default(6723532) @db.UnsignedInt
+  notify_subfix_color                            Int              @default(13369548) @db.UnsignedInt
+  notify_vol                                     Float            @default(0.5) @db.Float
+  notify_tts_enabled                             DateTime?        @default(now()) @db.Timestamp(0)
+  notify_tts_vol                                 Float            @default(0.5) @db.Float
+  notify_tts_speed                               Float            @default(0.5) @db.Float
+  notify_tts_pitch                               Float            @default(0.5) @db.Float
+  notify_tts_min_tip                             Int              @default(0) @db.UnsignedSmallInt
+  notify_tts_model                               String?          @db.VarChar(50)
+  notify_tts_options                             Int              @default(0) @db.UnsignedInt
+  social_twitchtv                                String?          @db.VarChar(48)
+  social_youtube                                 String?          @db.VarChar(48)
+  social_twitter                                 String?          @db.VarChar(48)
+  social_facebook                                String?          @db.VarChar(64)
+  social_reddit                                  String?          @db.VarChar(48)
+  social_discord                                 String?          @db.VarChar(32)
   avatar                                         String?          @db.VarChar(512)
   banner                                         String?          @db.VarChar(512)
-  email                                          String           @db.VarChar(256)
   secret                                         String           @unique(map: "secret") @db.VarChar(255)
   stripe_secret                                  String?          @db.VarChar(512)
+  stripe_options                                 Int              @default(0) @db.UnsignedInt
   bmac_secret                                    String?          @db.VarChar(512)
+  bmac_options                                   Int              @default(0) @db.UnsignedInt
   kofi_secret                                    String?          @db.VarChar(512)
+  kofi_options                                   Int              @default(0) @db.UnsignedInt
   ffp_secret                                     String?          @db.VarChar(512)
+  ffp_options                                    Int              @default(0) @db.UnsignedInt
   streamlabs_secret                              String?          @db.VarChar(512)
+  streamlabs_options                             Int              @default(0) @db.UnsignedInt
   disabled                                       DateTime?        @db.Timestamp(0)
   deleted                                        DateTime?        @db.Timestamp(0)
   reserved_uri_accounts_uriToreserved_uri        reserved_uri?    @relation("accounts_uriToreserved_uri", fields: [uri], references: [uri], onDelete: NoAction, onUpdate: NoAction, map: "FK_accounts_reserved_uri")
@@ -40,6 +76,17 @@ model accounts {
   session_usages_session_usages_secretToaccounts session_usages[] @relation("session_usages_secretToaccounts")
   sessions_sessions_uidToaccounts                sessions[]       @relation("sessions_uidToaccounts")
   sessions_sessions_secretToaccounts             sessions[]       @relation("sessions_secretToaccounts")
+
+  @@index([accent_color], map: "accent_color")
+  @@index([avatar], map: "avatar")
+  @@index([banner], map: "banner")
+  @@index([deleted], map: "deleted")
+  @@index([disabled], map: "disabled")
+  @@index([displayname], map: "displayname")
+  @@index([email], map: "email")
+  @@index([name], map: "name")
+  @@index([published], map: "published")
+  @@fulltext([bio], map: "bio")
 }
 
 model sessions {
