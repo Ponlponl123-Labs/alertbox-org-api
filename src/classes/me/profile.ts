@@ -5,6 +5,7 @@ import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { nanoid } from "nanoid";
 import { setCachedUser } from "./cache";
+import betterConsole, { tsflag } from "ts-better-console";
 
 /**
  * Update user profile data and/or images.
@@ -51,7 +52,7 @@ export async function updateProfile(
     const buffer = Buffer.from(await payload.avatar.arrayBuffer());
     const processed = await processAvatar(buffer);
     const { url } = await saveProfileImage(String(uid), "avatar", nanoid(), processed.buffer);
-    if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch(console.error);
+    if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old avatar: ${err}`)));
     data.avatar = url;
   }
 
@@ -59,7 +60,7 @@ export async function updateProfile(
     const buffer = Buffer.from(await payload.banner.arrayBuffer());
     const processed = await processBanner(buffer);
     const { url } = await saveProfileImage(String(uid), "banner", nanoid(), processed.buffer);
-    if (currentData.banner) await deleteProfileImage(currentData.banner).catch(console.error);
+    if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
     data.banner = url;
   }
 
@@ -141,7 +142,7 @@ export async function registerURI(
 
     return true;
   } catch (err) {
-    console.error(`[Profile > registerURI] Failed for UID ${uid}, URI ${parsedUri}:`, err);
+    betterConsole.error(tsflag("error", true, `[Profile > registerURI] Failed for UID ${uid}, URI ${parsedUri}: ${err}`));
     return false;
   }
 }
