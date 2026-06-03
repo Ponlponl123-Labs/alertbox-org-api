@@ -1,7 +1,6 @@
 import { day } from "@/consts/time";
 import { prisma, redis } from "@/index";
 import { Me } from "@/classes/me";
-import { registerURI } from "@/utils/account/profile";
 import { isValidUri } from "@/utils/regex";
 import { isBearerToken } from "@/utils/bearer-token";
 import Elysia, { t } from "elysia";
@@ -65,20 +64,23 @@ export const endpoint = new Elysia({ prefix: "profile" })
         return "Bad Request";
       }
 
-      const user = await new Me().use(authToken, ip, sessionUserSelect);
+      const user = await new Me().use(authToken, ip, {
+        uri_cooldown: true,
+      });
       if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
 
       const now = Date.now();
-      const cooldown = user.data.uri_cooldown && new Date(user.data.uri_cooldown);
+      const cooldown =
+        user.data.uri_cooldown && new Date(user.data.uri_cooldown);
       if (cooldown && cooldown.getTime() > now) {
         set.status = "Too Many Requests";
         return "Please retry again after " + cooldown.getTime();
       }
 
-      const success = await registerURI(user.data.id, parsedUri, authToken);
+      const success = await user.profile.registerURI(parsedUri);
 
       if (!success) {
         set.status = "Forbidden";
