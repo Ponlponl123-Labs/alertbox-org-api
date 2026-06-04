@@ -1,37 +1,23 @@
-import type { accounts } from "@/generated/prisma/client";
-
 export interface User {
-  id: bigint;
-  name: string;
-  displayname: string;
-  uri: string;
+  id: string;
   email: string;
-  avatar: string | null;
-  banner: string | null;
-  disabled: Date | null;
-  deleted: Date | null;
+  createWith: string;
+  createdAt: Date;
+  updatedAt: Date;
+  disabledAt: Date | null;
+  deletedAt: Date | null;
 }
 
 export interface UserCreated {
-  id: bigint;
+  id: string;
   secret: string;
 }
 
 export interface MinimalUser {
-  id: bigint;
-  disabled: Date | null;
-  deleted: Date | null;
+  id: string;
+  disabledAt: Date | null;
+  deletedAt: Date | null;
 }
-
-export type SessionUser = Omit<
-  accounts,
-  | "secret"
-  | "stripe_secret"
-  | "bmac_secret"
-  | "kofi_secret"
-  | "ffp_secret"
-  | "streamlabs_secret"
->;
 
 export interface Connections {
   stripe: string | null;

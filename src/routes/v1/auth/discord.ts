@@ -1,7 +1,8 @@
-import { Me } from "@/classes/me";
-import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 import Elysia, { t } from "elysia";
+
+import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
+import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 
 const endpoint = new Elysia().use(ip()).post(
   "/discord",
@@ -28,7 +29,7 @@ const endpoint = new Elysia().use(ip()).post(
       const created = await user.create({
         name: discordMe.username,
         email: discordMe.email,
-        create_with: "discord",
+        createWith: "discord",
       });
       if (!created) {
         set.status = "Conflict";
@@ -39,9 +40,9 @@ const endpoint = new Elysia().use(ip()).post(
     }
 
     const session = await user.session.create({
-      ip_addr: server?.requestIP(request)?.address || ip,
+      ipAddress: server?.requestIP(request)?.address || ip,
       method: request.method,
-      user_agent: request.headers.get("user-agent") || "Unknown",
+      userAgent: request.headers.get("user-agent") || "Unknown",
     });
 
     if (!session) {

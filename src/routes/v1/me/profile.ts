@@ -24,20 +24,39 @@ export const endpoint = new Elysia({ prefix: "profile" })
         return "Unauthorized";
       }
 
-      const updated = await prisma.client.accounts.update({
+      const updated = await prisma.client.profile.update({
         data: {
-          published: new Date(),
+          publishedAt: new Date(),
         },
         where: {
-          id: user.data.id,
+          userId: user.data.id,
         },
       });
 
-      void redis.redis.setex(
-        "user:" + user.data.id + ":info",
-        day,
-        JSON.stringify(updated),
-      );
+      // Fetch full user for cache sync
+      const fullUser = await prisma.client.user.findUnique({
+        where: { id: user.data.id },
+        include: {
+          profile: true,
+          widgets: {
+            include: {
+              alertbox: {
+                include: {
+                  events: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (fullUser) {
+        void redis.redis.setex(
+          "user:" + user.data.id + ":info",
+          day,
+          JSON.stringify(fullUser),
+        );
+      }
 
       return "OK";
     },
@@ -65,7 +84,11 @@ export const endpoint = new Elysia({ prefix: "profile" })
       }
 
       const user = await new Me().use(authToken, ip, {
-        uri_cooldown: true,
+        profile: {
+          select: {
+            uriCooldownEnd: true,
+          }
+        }
       });
       if (!user || !user.data) {
         set.status = "Unauthorized";
@@ -74,7 +97,7 @@ export const endpoint = new Elysia({ prefix: "profile" })
 
       const now = Date.now();
       const cooldown =
-        user.data.uri_cooldown && new Date(user.data.uri_cooldown);
+        user.data.profile?.uriCooldownEnd && new Date(user.data.profile.uriCooldownEnd);
       if (cooldown && cooldown.getTime() > now) {
         set.status = "Too Many Requests";
         return "Please retry again after " + cooldown.getTime();
@@ -111,20 +134,39 @@ export const endpoint = new Elysia({ prefix: "profile" })
         return "Unauthorized";
       }
 
-      const updated = await prisma.client.accounts.update({
+      const updated = await prisma.client.profile.update({
         data: {
-          published: null,
+          publishedAt: null,
         },
         where: {
-          id: user.data.id,
+          userId: user.data.id,
         },
       });
 
-      void redis.redis.setex(
-        "user:" + user.data.id + ":info",
-        day,
-        JSON.stringify(updated),
-      );
+      // Fetch full user for cache sync
+      const fullUser = await prisma.client.user.findUnique({
+        where: { id: user.data.id },
+        include: {
+          profile: true,
+          widgets: {
+            include: {
+              alertbox: {
+                include: {
+                  events: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (fullUser) {
+        void redis.redis.setex(
+          "user:" + user.data.id + ":info",
+          day,
+          JSON.stringify(fullUser),
+        );
+      }
 
       return "OK";
     },

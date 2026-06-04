@@ -1,43 +1,38 @@
 import { Prisma } from "@/generated/prisma/client";
 
+/**
+ * Selection for full user data including profile and widgets.
+ */
 export const sessionUserSelect = {
   id: true,
-  name: true,
-  displayname: true,
-  uri: true,
   email: true,
-  avatar: true,
-  banner: true,
-  disabled: true,
-  deleted: true,
-  create_with: true,
-  time: true,
-  uri_cooldown: true,
-  bio: true,
-  published: true,
-  social_discord: true,
-  social_facebook: true,
-  social_reddit: true,
-  social_twitchtv: true,
-  social_twitter: true,
-  social_youtube: true,
-  secret: false,
-  bmac_secret: false,
-  ffp_secret: false,
-  kofi_secret: false,
-  stripe_secret: false,
-  streamlabs_secret: false,
-} as const satisfies Prisma.accountsSelect;
+  createWith: true,
+  createdAt: true,
+  disabledAt: true,
+  deletedAt: true,
+  profile: true,
+  widgets: {
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.UserSelect;
 
+/**
+ * Minimal selection for presence checks.
+ */
 export const basicUserSelect = {
   id: true,
-} as const satisfies Prisma.accountsSelect;
+} as const satisfies Prisma.UserSelect;
 
-export const connectionSecretSelect = {
+/**
+ * Selection for integration secrets.
+ */
+export const integrationSelect = {
   id: true,
-  stripe_secret: true,
-  bmac_secret: true,
-  kofi_secret: true,
-  ffp_secret: true,
-  streamlabs_secret: true,
-} as const satisfies Prisma.accountsSelect;
+  integration: true,
+} as const satisfies Prisma.UserSelect;

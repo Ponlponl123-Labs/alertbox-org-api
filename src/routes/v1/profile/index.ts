@@ -1,9 +1,6 @@
-import { day } from "@/consts/time";
-import { prisma, redis } from "@/index";
 import { isValidUri } from "@/utils/regex";
 import Elysia, { t } from "elysia";
 
-import { accounts } from "@/generated/prisma/client";
 import { Me } from "@/classes/me";
 
 export const router = new Elysia({ prefix: "profile" })
@@ -44,33 +41,24 @@ export const router = new Elysia({ prefix: "profile" })
       }
 
       const user = await new Me().load(owner, {
-        avatar: true,
-        banner: true,
-        displayname: true,
-        bio: true,
-        social_discord: true,
-        social_facebook: true,
-        social_reddit: true,
-        social_twitchtv: true,
-        social_twitter: true,
-        social_youtube: true,
-        published: true,
-        disabled: true,
-        deleted: true,
+        profile: true,
+        disabledAt: true,
+        deletedAt: true,
       });
 
-      if (!user || !user.data) {
+      if (!user || !user.data || !user.data.profile) {
         set.status = "Not Found";
         return "Not Found";
       }
 
-      if (!user.data.published || user.data.disabled || user.data.deleted) {
+      if (!user.data.profile.publishedAt || user.data.disabledAt || user.data.deletedAt) {
         set.status = "Forbidden";
         return "Forbidden";
       }
 
-      const { id: _, ...publicData } = user.data;
-      return publicData;
+      // Exclude userId from the returned profile data
+      const { userId: _, ...publicProfile } = user.data.profile;
+      return publicProfile;
     },
     {
       params: t.Object({

@@ -4,6 +4,6 @@ export interface MeOptions {
 
 export interface SessionMetadata {
   method: string;
-  user_agent: string;
-  ip_addr: string;
+  userAgent: string;
+  ipAddress: string;
 }

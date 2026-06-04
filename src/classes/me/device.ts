@@ -3,38 +3,38 @@ import { prisma } from "@/index";
 /**
  * List all active sessions/devices for a user.
  */
-export async function listUserDevices(uid: bigint, currentAuthToken: string) {
-  const devicesRaw = await prisma.client.sessions.findMany({
+export async function listUserDevices(uid: string, currentAuthToken: string) {
+  const devicesRaw = await prisma.client.session.findMany({
     select: {
       id: true,
-      time: true,
-      disabled: true,
-      expire: true,
-      ip_addr: true,
-      user_agent: true,
+      createdAt: true,
+      disabledAt: true,
+      expiresAt: true,
+      ipAddress: true,
+      userAgent: true,
       platform: true,
-      platform_major: true,
-      platform_ver: true,
-      platform_type: true,
-      cpu_architecture: true,
-      device_model: true,
-      device_type: true,
-      device_vendor: true,
-      ip_addr_asn: true,
-      ip_addr_city: true,
-      ip_addr_continent_code: true,
-      ip_addr_country: true,
-      ip_addr_country_code: true,
-      ip_addr_country_code_iso3: true,
-      ip_addr_isp: true,
-      ip_addr_lat: true,
-      ip_addr_long: true,
-      ip_addr_postal: true,
-      ip_addr_region: true,
-      ip_addr_region_code: true,
-      session_usages: {
+      platformMajor: true,
+      platformVersion: true,
+      platformType: true,
+      cpuArchitecture: true,
+      deviceModel: true,
+      deviceType: true,
+      deviceVendor: true,
+      asn: true,
+      city: true,
+      continentCode: true,
+      country: true,
+      countryCode: true,
+      countryCodeIso3: true,
+      isp: true,
+      latitude: true,
+      longitude: true,
+      postal: true,
+      region: true,
+      regionCode: true,
+      sessionUsages: {
         select: {
-          time: true,
+          createdAt: true,
         },
         orderBy: {
           id: "desc",
@@ -42,21 +42,21 @@ export async function listUserDevices(uid: bigint, currentAuthToken: string) {
         take: 1,
       },
       os: true,
-      os_ver: true,
+      osVersion: true,
       token: true,
     },
     where: {
-      uid,
-      disabled: null,
-      expire: {
+      userId: uid,
+      disabledAt: null,
+      expiresAt: {
         gt: new Date(),
       },
     },
   });
 
-  return devicesRaw.map(({ session_usages, token, ...rest }) => ({
+  return devicesRaw.map(({ sessionUsages, token, ...rest }) => ({
     ...rest,
-    last_used: session_usages?.[0]?.time ?? null,
+    lastUsed: sessionUsages?.[0]?.createdAt ?? null,
     isThisDevice: token === currentAuthToken,
   }));
 }
@@ -64,14 +64,14 @@ export async function listUserDevices(uid: bigint, currentAuthToken: string) {
 /**
  * Invalidate a specific session by its internal ID.
  */
-export async function destroyUserDevice(uid: bigint, deviceId: bigint) {
-  const result = await prisma.client.sessions.updateMany({
+export async function destroyUserDevice(uid: string, deviceId: string) {
+  const result = await prisma.client.session.updateMany({
     data: {
-      disabled: new Date(),
+      disabledAt: new Date(),
     },
     where: {
       id: deviceId,
-      uid,
+      userId: uid,
     },
   });
 

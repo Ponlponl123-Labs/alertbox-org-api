@@ -7,157 +7,219 @@ datasource db {
   provider = "mysql"
 }
 
-model accounts {
-  id                                             BigInt           @id @default(autoincrement())
-  time                                           DateTime         @default(now()) @db.Timestamp(0)
-  create_with                                    String           @db.VarChar(50)
-  email                                          String           @db.VarChar(256)
-  name                                           String           @db.VarChar(64)
-  displayname                                    String           @db.VarChar(64)
-  accent_color                                   Int              @default(0) @db.UnsignedInt
-  uri                                            String?          @unique(map: "FK_accounts_reserved_uri") @db.VarChar(64)
-  uri_cooldown                                   DateTime?        @db.Timestamp(0)
-  published                                      DateTime?        @db.Timestamp(0)
-  bio                                            String?          @db.Text
-  widget_id                                      String           @unique(map: "widget_id") @db.VarChar(255)
-  default_donor_name                             String           @default("Anonymous") @db.VarChar(48)
-  default_donor_amount                           Int              @default(1) @db.UnsignedSmallInt
-  default_donor_avatar                           String?          @db.VarChar(512)
-  currency                                       Int?             @db.UnsignedSmallInt
-  min_tip_amount                                 Int              @default(1) @db.UnsignedSmallInt
-  max_ip_amount                                  Int              @default(10000) @db.UnsignedSmallInt
-  notify_animation_in                            String?          @default("fade_in_up") @db.VarChar(64)
-  notify_animation_out                           String?          @default("fade_out_up") @db.VarChar(64)
-  notify_animation_in_duration                   Float            @default(1) @db.Float
-  notify_animation_out_duration                  Float            @default(1) @db.Float
-  notify_min_visible_duration                    Float            @default(3) @db.Float
-  notify_prefix                                  String?          @db.VarChar(64)
-  notify_subfix                                  String?          @db.VarChar(64)
-  notify_fontfamily                              String?          @db.VarChar(64)
-  notify_fontweight                              Int              @default(600) @db.UnsignedSmallInt
-  notify_fontsize                                Int              @default(32) @db.UnsignedTinyInt
-  notify_outline_size                            Int              @default(3) @db.UnsignedTinyInt
-  notify_outline_color                           Int              @default(0) @db.UnsignedTinyInt
-  notify_text_color                              Int              @default(16777215) @db.UnsignedInt
-  notify_donor_color                             Int              @default(6723532) @db.UnsignedInt
-  notify_subfix_color                            Int              @default(13369548) @db.UnsignedInt
-  notify_vol                                     Float            @default(0.5) @db.Float
-  notify_tts_enabled                             DateTime?        @default(now()) @db.Timestamp(0)
-  notify_tts_vol                                 Float            @default(0.5) @db.Float
-  notify_tts_speed                               Float            @default(0.5) @db.Float
-  notify_tts_pitch                               Float            @default(0.5) @db.Float
-  notify_tts_min_tip                             Int              @default(0) @db.UnsignedSmallInt
-  notify_tts_model                               String?          @db.VarChar(50)
-  notify_tts_options                             Int              @default(0) @db.UnsignedInt
-  social_twitchtv                                String?          @db.VarChar(48)
-  social_youtube                                 String?          @db.VarChar(48)
-  social_twitter                                 String?          @db.VarChar(48)
-  social_facebook                                String?          @db.VarChar(64)
-  social_reddit                                  String?          @db.VarChar(48)
-  social_discord                                 String?          @db.VarChar(32)
-  avatar                                         String?          @db.VarChar(512)
-  banner                                         String?          @db.VarChar(512)
-  secret                                         String           @unique(map: "secret") @db.VarChar(255)
-  stripe_secret                                  String?          @db.VarChar(512)
-  stripe_options                                 Int              @default(0) @db.UnsignedInt
-  bmac_secret                                    String?          @db.VarChar(512)
-  bmac_options                                   Int              @default(0) @db.UnsignedInt
-  kofi_secret                                    String?          @db.VarChar(512)
-  kofi_options                                   Int              @default(0) @db.UnsignedInt
-  ffp_secret                                     String?          @db.VarChar(512)
-  ffp_options                                    Int              @default(0) @db.UnsignedInt
-  streamlabs_secret                              String?          @db.VarChar(512)
-  streamlabs_options                             Int              @default(0) @db.UnsignedInt
-  disabled                                       DateTime?        @db.Timestamp(0)
-  deleted                                        DateTime?        @db.Timestamp(0)
-  reserved_uri_accounts_uriToreserved_uri        reserved_uri?    @relation("accounts_uriToreserved_uri", fields: [uri], references: [uri], onDelete: NoAction, onUpdate: NoAction, map: "FK_accounts_reserved_uri")
-  reserved_uri_reserved_uri_uidToaccounts        reserved_uri[]   @relation("reserved_uri_uidToaccounts")
-  session_usages_session_usages_uidToaccounts    session_usages[] @relation("session_usages_uidToaccounts")
-  session_usages_session_usages_secretToaccounts session_usages[] @relation("session_usages_secretToaccounts")
-  sessions_sessions_uidToaccounts                sessions[]       @relation("sessions_uidToaccounts")
-  sessions_sessions_secretToaccounts             sessions[]       @relation("sessions_secretToaccounts")
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique @db.VarChar(256)
+  createWith    String         @db.VarChar(50)
+  secret        String         @unique @db.VarChar(255)
+  disabledAt    DateTime?      @db.Timestamp(0)
+  deletedAt     DateTime?      @db.Timestamp(0)
+  createdAt     DateTime       @default(now()) @db.Timestamp(0)
+  updatedAt     DateTime       @updatedAt @db.Timestamp(0)
+  integration   Integration?
+  profile       Profile?
+  reservedUris  ReservedUri[]
+  sessions      Session[]      @relation("UserSessions")
+  sessionUsages SessionUsage[]
+  widgets       Widget[]
 
-  @@index([accent_color], map: "accent_color")
-  @@index([avatar], map: "avatar")
-  @@index([banner], map: "banner")
-  @@index([deleted], map: "deleted")
-  @@index([disabled], map: "disabled")
-  @@index([displayname], map: "displayname")
-  @@index([email], map: "email")
-  @@index([name], map: "name")
-  @@index([published], map: "published")
-  @@fulltext([bio], map: "bio")
+  @@unique([id, secret])
+  @@index([email])
 }
 
-model sessions {
-  id                                 BigInt           @id @default(autoincrement())
-  uid                                BigInt           @default(0)
-  time                               DateTime         @default(now()) @db.Timestamp(0)
-  secret                             String           @db.VarChar(255)
-  token                              String           @unique(map: "token") @db.VarChar(255)
-  method                             String           @db.VarChar(255)
-  user_agent                         String           @db.LongText
-  os                                 String?          @db.VarChar(128)
-  os_ver                             String?          @db.VarChar(128)
-  platform                           String?          @db.VarChar(128)
-  platform_type                      String?          @db.VarChar(128)
-  platform_major                     String?          @db.VarChar(128)
-  platform_ver                       String?          @db.VarChar(128)
-  device_model                       String?          @db.VarChar(128)
-  device_type                        String?          @db.VarChar(128)
-  device_vendor                      String?          @db.VarChar(128)
-  cpu_architecture                   String?          @db.VarChar(128)
-  ip_addr                            String           @db.VarChar(50)
-  ip_addr_country                    String?          @db.VarChar(64)
-  ip_addr_country_code               String?          @db.VarChar(2)
-  ip_addr_country_code_iso3          String?          @db.VarChar(3)
-  ip_addr_continent_code             String?          @db.VarChar(3)
-  ip_addr_postal                     String?          @db.VarChar(32)
-  ip_addr_city                       String?          @db.VarChar(512)
-  ip_addr_region                     String?          @db.VarChar(512)
-  ip_addr_region_code                String?          @db.VarChar(3)
-  ip_addr_lat                        Decimal?         @db.Decimal(9, 6)
-  ip_addr_long                       Decimal?         @db.Decimal(9, 6)
-  ip_addr_isp                        String?          @db.VarChar(512)
-  ip_addr_asn                        String?          @db.VarChar(50)
-  expire                             DateTime         @default(now()) @db.Timestamp(0)
-  disabled                           DateTime?        @db.Timestamp(0)
-  reserved_uri                       reserved_uri[]
-  session_usages                     session_usages[]
-  accounts_sessions_uidToaccounts    accounts         @relation("sessions_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts")
-  accounts_sessions_secretToaccounts accounts         @relation("sessions_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_sessions_accounts_2")
+model Profile {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique
+  name                   String    @db.VarChar(64)
+  displayName            String    @db.VarChar(64)
+  bio                    String?   @db.Text
+  avatar                 String?   @db.VarChar(512)
+  banner                 String?   @db.VarChar(512)
+  accentColor            Int       @default(0) @db.UnsignedInt
+  uri                    String?   @unique @db.VarChar(64)
+  uriCooldownEnd         DateTime? @db.Timestamp(0)
+  publishedAt            DateTime? @db.Timestamp(0)
+  twitch                 String?   @db.VarChar(48)
+  youtube                String?   @db.VarChar(48)
+  twitter                String?   @db.VarChar(48)
+  facebook               String?   @db.VarChar(64)
+  reddit                 String?   @db.VarChar(48)
+  discord                String?   @db.VarChar(32)
+  defaultDonorName       String    @default("Anonymous") @db.VarChar(48)
+  defaultDonorAmount     Int       @default(1) @db.UnsignedSmallInt
+  defaultDonorAvatar     String?   @db.VarChar(512)
+  isDonorCanCustomAvatar DateTime? @default(now()) @db.Timestamp(0)
+  currency               Int?      @db.UnsignedSmallInt
+  minTipAmount           Int       @default(1) @db.UnsignedSmallInt
+  maxTipAmount           Int       @default(10000) @db.UnsignedSmallInt
+  deletedAt              DateTime? @db.Timestamp(0)
+  createdAt              DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt              DateTime  @updatedAt @db.Timestamp(0)
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([uid], map: "FK_sessions_accounts")
-  @@index([secret], map: "FK_sessions_accounts_2")
+  @@index([displayName])
+  @@index([uri])
+  @@fulltext([bio])
 }
 
-model session_usages {
-  id                                       BigInt   @id @default(autoincrement())
-  uid                                      BigInt
-  secret                                   String   @db.VarChar(255)
-  token                                    String   @db.VarChar(255)
-  ip_addr                                  String   @db.VarChar(50)
-  time                                     DateTime @default(now()) @db.Timestamp(0)
-  accounts_session_usages_uidToaccounts    accounts @relation("session_usages_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts")
-  accounts_session_usages_secretToaccounts accounts @relation("session_usages_secretToaccounts", fields: [secret], references: [secret], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_accounts_2")
-  sessions                                 sessions @relation(fields: [token], references: [token], onDelete: NoAction, onUpdate: NoAction, map: "FK_session_usages_sessions")
+model Widget {
+  id        String           @id @default(cuid())
+  userId    String
+  type      WidgetType
+  token     String           @unique @db.VarChar(255)
+  deletedAt DateTime?        @db.Timestamp(0)
+  createdAt DateTime         @default(now()) @db.Timestamp(0)
+  updatedAt DateTime         @updatedAt @db.Timestamp(0)
+  alertbox  AlertboxSetting?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([uid], map: "FK_session_usages_accounts")
-  @@index([secret], map: "FK_session_usages_accounts_2")
-  @@index([token], map: "FK_session_usages_sessions")
+  @@index([userId])
 }
 
-model reserved_uri {
-  id                                  BigInt    @id @default(autoincrement())
-  time                                DateTime  @default(now()) @db.Timestamp(0)
-  uid                                 BigInt
-  uri                                 String    @unique(map: "uri") @db.VarChar(50)
-  by                                  String    @db.VarChar(255)
-  disabled                            DateTime? @db.Timestamp(0)
-  accounts_accounts_uriToreserved_uri accounts? @relation("accounts_uriToreserved_uri")
-  accounts_reserved_uri_uidToaccounts accounts  @relation("reserved_uri_uidToaccounts", fields: [uid], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_reserved_uri_accounts")
-  sessions                            sessions  @relation(fields: [by], references: [token], onDelete: NoAction, onUpdate: NoAction, map: "FK_reserved_uri_sessions")
+model AlertboxSetting {
+  id           String          @id @default(cuid())
+  widgetId     String          @unique
+  globalVolume Float           @default(0.5) @db.Float
+  events       AlertboxEvent[]
+  widget       Widget          @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+}
 
-  @@index([uid], map: "FK_reserved_uri_accounts")
-  @@index([by], map: "FK_reserved_uri_sessions")
+model AlertboxEvent {
+  id                 String          @id @default(cuid())
+  alertboxId         String
+  eventType          AlertEventType
+  isEnabled          Boolean         @default(true)
+  prefix             String?         @db.VarChar(64)
+  subfix             String?         @db.VarChar(64)
+  messageLayout      String?         @default("image-above") @db.VarChar(32)
+  minVisibleDuration Float           @default(3) @db.Float
+  animIn             String?         @default("fade_in_up") @db.VarChar(64)
+  animOut            String?         @default("fade_out_up") @db.VarChar(64)
+  animInDuration     Float           @default(1) @db.Float
+  animOutDuration    Float           @default(1) @db.Float
+  image              String?         @db.VarChar(512)
+  sound              String?         @db.VarChar(512)
+  soundVolume        Float           @default(0.5) @db.Float
+  fontFamily         String?         @default("Open Sans") @db.VarChar(64)
+  fontSize           Int             @default(32) @db.UnsignedTinyInt
+  fontWeight         Int             @default(600) @db.UnsignedSmallInt
+  textColor          Int             @default(16777215) @db.UnsignedInt
+  accentColor        Int             @default(6723532) @db.UnsignedInt
+  subfixColor        Int             @default(13369548) @db.UnsignedInt
+  donorColor         Int             @default(6723532) @db.UnsignedInt
+  amountColor        Int             @default(13369548) @db.UnsignedInt
+  textShadowColor    Int             @default(0) @db.UnsignedInt
+  textShadowSize     Int             @default(0) @db.UnsignedTinyInt
+  outlineColor       Int             @default(0) @db.UnsignedInt
+  outlineSize        Int             @default(3) @db.UnsignedTinyInt
+  ttsEnabled         Boolean         @default(false)
+  ttsMinTip          Int             @default(0) @db.UnsignedSmallInt
+  ttsVoice           String?         @db.VarChar(64)
+  ttsVolume          Float           @default(0.5) @db.Float
+  ttsSpeed           Float           @default(0.5) @db.Float
+  ttsPitch           Float           @default(0.5) @db.Float
+  ttsDelay           Float           @default(0) @db.Float
+  ttsOptions         Int             @default(0) @db.UnsignedInt
+  updatedAt          DateTime        @updatedAt @db.Timestamp(0)
+  alertbox           AlertboxSetting @relation(fields: [alertboxId], references: [id], onDelete: Cascade)
+
+  @@unique([alertboxId, eventType])
+}
+
+model Integration {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  stripeSecret      String?   @db.VarChar(512)
+  stripeOptions     Int       @default(0) @db.UnsignedInt
+  bmacSecret        String?   @db.VarChar(512)
+  bmacOptions       Int       @default(0) @db.UnsignedInt
+  kofiSecret        String?   @db.VarChar(512)
+  kofiOptions       Int       @default(0) @db.UnsignedInt
+  ffpSecret         String?   @db.VarChar(512)
+  ffpOptions        Int       @default(0) @db.UnsignedInt
+  streamlabsSecret  String?   @db.VarChar(512)
+  streamlabsOptions Int       @default(0) @db.UnsignedInt
+  deletedAt         DateTime? @db.Timestamp(0)
+  updatedAt         DateTime  @updatedAt @db.Timestamp(0)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id              String         @id @default(cuid())
+  userId          String
+  userSecret      String         @db.VarChar(255)
+  token           String         @unique @db.VarChar(255)
+  method          String         @db.VarChar(255)
+  userAgent       String         @db.LongText
+  os              String?        @db.VarChar(128)
+  osVersion       String?        @db.VarChar(128)
+  platform        String?        @db.VarChar(128)
+  platformType    String?        @db.VarChar(128)
+  platformMajor   String?        @db.VarChar(128)
+  platformVersion String?        @db.VarChar(128)
+  deviceModel     String?        @db.VarChar(128)
+  deviceType      String?        @db.VarChar(128)
+  deviceVendor    String?        @db.VarChar(128)
+  cpuArchitecture String?        @db.VarChar(128)
+  ipAddress       String         @db.VarChar(50)
+  country         String?        @db.VarChar(64)
+  countryCode     String?        @db.VarChar(2)
+  countryCodeIso3 String?        @db.VarChar(3)
+  continentCode   String?        @db.VarChar(3)
+  postal          String?        @db.VarChar(32)
+  city            String?        @db.VarChar(512)
+  region          String?        @db.VarChar(512)
+  regionCode      String?        @db.VarChar(3)
+  latitude        Decimal?       @db.Decimal(9, 6)
+  longitude       Decimal?       @db.Decimal(9, 6)
+  isp             String?        @db.VarChar(512)
+  asn             String?        @db.VarChar(50)
+  expiresAt       DateTime       @default(now()) @db.Timestamp(0)
+  disabledAt      DateTime?      @db.Timestamp(0)
+  deletedAt       DateTime?      @db.Timestamp(0)
+  createdAt       DateTime       @default(now()) @db.Timestamp(0)
+  user            User           @relation("UserSessions", fields: [userId, userSecret], references: [id, secret], onDelete: Cascade)
+  sessionUsages   SessionUsage[]
+
+  @@index([userId, userSecret])
+}
+
+model SessionUsage {
+  id        String    @id @default(cuid())
+  sessionId String
+  userId    String
+  ipAddress String    @db.VarChar(50)
+  deletedAt DateTime? @db.Timestamp(0)
+  createdAt DateTime  @default(now()) @db.Timestamp(0)
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model ReservedUri {
+  id              String    @id @default(cuid())
+  userId          String
+  uri             String    @unique @db.VarChar(50)
+  reservedByToken String    @db.VarChar(255)
+  disabledAt      DateTime? @db.Timestamp(0)
+  deletedAt       DateTime? @db.Timestamp(0)
+  createdAt       DateTime  @default(now()) @db.Timestamp(0)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum WidgetType {
+  ALERTBOX
+  TIPJAR
+  GOALBAR
+}
+
+enum AlertEventType {
+  TIP
+  MEMBERSHIP
+  MERCH
+  FOLLOW
 }

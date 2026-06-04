@@ -41,7 +41,7 @@ const endpoint = new Elysia({ prefix: "/device" })
         return "Unauthorized";
       }
       
-      const success = await user.devices.destroy(BigInt(String(params.id)));
+      const success = await user.devices.destroy(params.id);
       if (!success) {
         set.status = "Bad Request";
         return "Bad Request";

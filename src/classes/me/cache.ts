@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 /**
  * Get a user from Redis cache and validate it has all requested fields.
  */
-export async function getCachedUser(uid: bigint, select: Prisma.accountsSelect): Promise<any | null> {
+export async function getCachedUser(uid: string, select: Prisma.UserSelect): Promise<any | null> {
   const c = await redis.redis.get("user:" + uid + ":info");
   if (!c) return null;
   if (c === "deleted") return "deleted";
@@ -22,7 +22,7 @@ export async function getCachedUser(uid: bigint, select: Prisma.accountsSelect):
  * Update the user "Master Cache" in Redis.
  * Always excludes sensitive auth secret.
  */
-export async function setCachedUser(uid: bigint, user: any) {
+export async function setCachedUser(uid: string, user: any) {
   const { secret, ...cacheableUser } = user;
   await redis.redis.setex(
     "user:" + uid + ":info",
@@ -30,13 +30,14 @@ export async function setCachedUser(uid: bigint, user: any) {
     JSON.stringify(cacheableUser),
   );
 
-  if (user?.uri)
-    await redis.redis.setex("user:" + uid + ":uri", day, user?.uri);
-  if (user?.uri_cooldown)
+  const profile = user.profile;
+  if (profile?.uri)
+    await redis.redis.setex("user:" + uid + ":uri", day, profile.uri);
+  if (profile?.uriCooldownEnd)
     await redis.redis.setex(
       "user:" + uid + ":uri_cooldown",
       day,
-      String(user?.uri_cooldown.getTime ? user.uri_cooldown.getTime() : user.uri_cooldown),
+      String(profile.uriCooldownEnd.getTime ? profile.uriCooldownEnd.getTime() : profile.uriCooldownEnd),
     );
   
   return cacheableUser;
@@ -46,7 +47,7 @@ export async function setCachedUser(uid: bigint, user: any) {
  * Helper to filter user data based on a Prisma select object.
  * Always ensures the ID is included.
  */
-export function filterUserSelection(user: any, select: Prisma.accountsSelect) {
+export function filterUserSelection(user: any, select: Prisma.UserSelect) {
   const filtered = Object.keys(select).reduce((acc, key) => {
     if ((select as any)[key]) acc[key] = (user as any)[key];
     return acc;

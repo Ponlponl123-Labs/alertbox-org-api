@@ -1,10 +1,10 @@
 import { Connections } from "@/types/account.types";
-import { Me } from "@/classes/me";
 import { resolveProvider } from "@/classes/me/connections";
 import { isBearerToken } from "@/utils/bearer-token";
 import Elysia, { t } from "elysia";
+import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
-import { connectionSecretSelect } from "@/consts/session";
+import { integrationSelect } from "@/consts/session";
 
 const endpoint = new Elysia({ prefix: "/connection" })
   .use(ip())
@@ -19,23 +19,25 @@ const endpoint = new Elysia({ prefix: "/connection" })
       const user = await new Me({ cache: false }).use(
         auth,
         ip,
-        connectionSecretSelect,
+        integrationSelect,
       );
       if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
 
+      const integration = user.data.integration;
+
       return {
-        stripe: user.data.stripe_secret ?? null,
-        bmac: user.data.bmac_secret ?? null,
-        kofi: user.data.kofi_secret ?? null,
-        ffp: user.data.ffp_secret ?? null,
+        stripe: integration?.stripeSecret ?? null,
+        bmac: integration?.bmacSecret ?? null,
+        kofi: integration?.kofiSecret ?? null,
+        ffp: integration?.ffpSecret ?? null,
         youtube: null,
         facebook: null,
         twitch: null,
         patreon: null,
-        streamlabs: user.data.streamlabs_secret ?? null,
+        streamlabs: integration?.streamlabsSecret ?? null,
       } as Connections;
     },
     {

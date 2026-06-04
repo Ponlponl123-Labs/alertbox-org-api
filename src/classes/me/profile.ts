@@ -11,17 +11,17 @@ import betterConsole, { tsflag } from "ts-better-console";
  * Update user profile data and/or images.
  */
 export async function updateProfile(
-  uid: bigint,
+  uid: string,
   currentData: { avatar?: string | null; banner?: string | null },
   payload: {
     displayname?: string;
     bio?: string | null;
-    social_discord?: string | null;
-    social_facebook?: string | null;
-    social_reddit?: string | null;
-    social_twitchtv?: string | null;
-    social_twitter?: string | null;
-    social_youtube?: string | null;
+    socialDiscord?: string | null;
+    socialFacebook?: string | null;
+    socialReddit?: string | null;
+    socialTwitch?: string | null;
+    socialTwitter?: string | null;
+    socialYoutube?: string | null;
     avatar?: File;
     banner?: File;
   },
@@ -29,21 +29,21 @@ export async function updateProfile(
   const data: any = {};
 
   // Text Fields
-  if (payload.displayname) data.displayname = payload.displayname.trim().slice(0, 64);
+  if (payload.displayname) data.displayName = payload.displayname.trim().slice(0, 64);
   if (payload.bio !== undefined) data.bio = payload.bio ? payload.bio.trim().slice(0, 1000) : null;
   
-  const socialFields = [
-    "social_discord",
-    "social_facebook",
-    "social_reddit",
-    "social_twitchtv",
-    "social_twitter",
-    "social_youtube",
-  ];
+  const socialMap: Record<string, string> = {
+    socialDiscord: "discord",
+    socialFacebook: "facebook",
+    socialReddit: "reddit",
+    socialTwitch: "twitch",
+    socialTwitter: "twitter",
+    socialYoutube: "youtube",
+  };
   
-  for (const field of socialFields) {
-    if ((payload as any)[field] !== undefined) {
-      data[field] = (payload as any)[field] ? (payload as any)[field].trim().slice(0, 512) : null;
+  for (const [key, field] of Object.entries(socialMap)) {
+    if ((payload as any)[key] !== undefined) {
+      data[field] = (payload as any)[key] ? (payload as any)[key].trim().slice(0, 512) : null;
     }
   }
 
@@ -51,7 +51,7 @@ export async function updateProfile(
   if (payload.avatar) {
     const buffer = Buffer.from(await payload.avatar.arrayBuffer());
     const processed = await processAvatar(buffer);
-    const { url } = await saveProfileImage(String(uid), "avatar", nanoid(), processed.buffer);
+    const { url } = await saveProfileImage(uid, "avatar", nanoid(), processed.buffer);
     if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old avatar: ${err}`)));
     data.avatar = url;
   }
@@ -59,51 +59,61 @@ export async function updateProfile(
   if (payload.banner) {
     const buffer = Buffer.from(await payload.banner.arrayBuffer());
     const processed = await processBanner(buffer);
-    const { url } = await saveProfileImage(String(uid), "banner", nanoid(), processed.buffer);
+    const { url } = await saveProfileImage(uid, "banner", nanoid(), processed.buffer);
     if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
     data.banner = url;
   }
 
   if (Object.keys(data).length === 0) return null;
 
-  const updated = await prisma.client.accounts.update({
+  const updated = await prisma.client.profile.update({
     data,
-    where: { id: uid },
+    where: { userId: uid },
   });
 
-  // Sync Cache
-  await setCachedUser(uid, updated);
+  // Sync Cache - note: we might need to fetch the full user for the cache
+  const fullUser = await prisma.client.user.findUnique({
+    where: { id: uid },
+    include: {
+      profile: true,
+      widgets: {
+        include: {
+          alertbox: {
+            include: {
+              events: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (fullUser) await setCachedUser(uid, fullUser);
 
   return updated;
 }
 
 /**
  * Register a new URI for a user.
- * Performs validation, availability checks, and atomic database updates.
  */
 export async function registerURI(
-  uid: bigint,
+  uid: string,
   uri: string,
   token: string,
 ): Promise<boolean> {
   const parsedUri = uri.trim().toLowerCase();
   if (!isValidUri(parsedUri)) return false;
 
-  // 1. Fast Cache Check
   const cachedOwner = await redis.redis.get(`uri:${parsedUri}:owner`);
-  if (cachedOwner && cachedOwner !== "noone") {
-    return false;
-  }
+  if (cachedOwner && cachedOwner !== "noone") return false;
 
-  // 2. Database Check (Ensure it hasn't been taken since cache was set)
-  const existingRecord = await prisma.client.reserved_uri.findFirst({
-    select: { uid: true, disabled: true },
+  const existingRecord = await prisma.client.reservedUri.findFirst({
+    select: { userId: true, disabledAt: true },
     where: { uri: parsedUri },
-    orderBy: { id: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 
   if (existingRecord) {
-    const status = existingRecord.disabled ? "disabled" : String(existingRecord.uid);
+    const status = existingRecord.disabledAt ? "disabled" : existingRecord.userId;
     void redis.redis.setex(`uri:${parsedUri}:owner`, week, status);
     return false;
   }
@@ -111,33 +121,31 @@ export async function registerURI(
   const cooldownDate = new Date(Date.now() + week);
 
   try {
-    // 3. Atomic Transaction
     await prisma.client.$transaction(async (tx) => {
-      await tx.reserved_uri.create({
+      await tx.reservedUri.create({
         data: {
           uri: parsedUri,
-          uid,
-          by: token,
+          userId: uid,
+          reservedByToken: token,
         },
       });
 
-      await tx.accounts.update({
+      await tx.profile.update({
         data: {
           uri: parsedUri,
-          uri_cooldown: cooldownDate,
+          uriCooldownEnd: cooldownDate,
         },
-        where: { id: uid },
+        where: { userId: uid },
       });
     });
 
-    // 4. Update Cache
     const now = Date.now();
     await Promise.all([
-      redis.redis.setex(`uri:${parsedUri}:owner`, week, String(uid)),
+      redis.redis.setex(`uri:${parsedUri}:owner`, week, uid),
       redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(now)),
       redis.redis.setex(`user:${uid}:uri`, week, parsedUri),
       redis.redis.setex(`user:${uid}:uri_cooldown`, week, String(cooldownDate.getTime())),
-      redis.redis.del(`user:${uid}:info`), // Invalidate master cache
+      redis.redis.del(`user:${uid}:info`), 
     ]);
 
     return true;
@@ -150,25 +158,17 @@ export async function registerURI(
 /**
  * Find the owner UID of a given URI.
  */
-export async function getURIOwner(uri: string): Promise<bigint | false> {
+export async function getURIOwner(uri: string): Promise<string | false> {
   const parsedUri = uri.trim().toLowerCase();
   
-  // 1. Cache Lookup
   const cached = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cached === "noone" || cached === "disabled") return false;
-  if (cached) {
-    try {
-      return BigInt(cached);
-    } catch {
-      // Corrupted cache, fallback to DB
-    }
-  }
+  if (cached) return cached;
 
-  // 2. Database Lookup
-  const lastRecord = await prisma.client.reserved_uri.findFirst({
-    select: { time: true, uid: true, disabled: true },
+  const lastRecord = await prisma.client.reservedUri.findFirst({
+    select: { createdAt: true, userId: true, disabledAt: true },
     where: { uri: parsedUri },
-    orderBy: { id: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 
   if (!lastRecord) {
@@ -176,13 +176,12 @@ export async function getURIOwner(uri: string): Promise<bigint | false> {
     return false;
   }
 
-  const status = lastRecord.disabled ? "disabled" : String(lastRecord.uid);
+  const status = lastRecord.disabledAt ? "disabled" : lastRecord.userId;
   
-  // Update cache with fresh DB info
   await Promise.all([
     redis.redis.setex(`uri:${parsedUri}:owner`, week, status),
-    redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(lastRecord.time.getTime())),
+    redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(lastRecord.createdAt.getTime())),
   ]);
 
-  return lastRecord.disabled ? false : lastRecord.uid;
+  return lastRecord.disabledAt ? false : lastRecord.userId;
 }

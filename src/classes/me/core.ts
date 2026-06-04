@@ -15,13 +15,13 @@ import {
 } from "./connections";
 import { listUserDevices, destroyUserDevice } from "./device";
 
-export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
+export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   public data:
-    | (Prisma.accountsGetPayload<{ select: T }> & { id: bigint })
+    | (Prisma.UserGetPayload<{ select: T }> & { id: string })
     | null = null;
   private options: MeOptions;
   private currentSession: string | null = null;
-  private lastSelect: Prisma.accountsSelect = basicUserSelect;
+  private lastSelect: any = basicUserSelect;
 
   constructor(options: MeOptions = { cache: true }) {
     this.options = options;
@@ -30,7 +30,7 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
   /**
    * Authenticate and load user data using a session token.
    */
-  public async use<S extends Prisma.accountsSelect>(
+  public async use<S extends Prisma.UserSelect>(
     session: string,
     ip: string,
     select: S,
@@ -43,104 +43,124 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
   ): Promise<any> {
     this.currentSession = session;
     this.lastSelect = select;
-    const session_info = await prisma.client.sessions.findFirst({
+
+    // Fetch session and include user to verify secret matching automatically
+    const session_info = await prisma.client.session.findFirst({
       where: {
         token: session,
-        disabled: null,
-        expire: {
+        disabledAt: null,
+        expiresAt: {
           gt: new Date(),
         },
       },
+      include: {
+        user: true, // This will only resolve if userSecret matches user.secret due to schema relation
+      }
     });
 
-    if (!session_info) return false;
+    if (!session_info || !session_info.user) {
+      // If session exists but user is null, it means User.secret has changed
+      if (session_info) void destroySession(session);
+      return false;
+    }
 
     // Track session usage in background
-    void trackSessionUsage(session_info.uid, session_info.secret, session, ip);
+    void trackSessionUsage(session_info.userId, session_info.id, ip);
 
-    if (session_info.ip_addr !== ip) {
+    if (session_info.ipAddress !== ip) {
       void destroySession(session);
       return false;
     }
 
     if (this.options.cache) {
-      const cached = await getCachedUser(session_info.uid, select);
+      const cached = await getCachedUser(session_info.userId, select);
       if (cached === "deleted") return false;
       if (cached) {
-        this.data = filterUserSelection(cached, select);
+        this.data = filterUserSelection(cached, select) as any;
         return this;
       }
     }
 
-    const user = await prisma.client.accounts.findFirst({
+    // Re-fetch with full select if not cached
+    const user = await prisma.client.user.findFirst({
       where: {
-        id: session_info.uid,
+        id: session_info.userId,
       },
+      select: {
+        ...select,
+        id: true,
+        deletedAt: true,
+      } as any
     });
 
     if (!user) return null;
 
-    if (user.deleted) {
-      redis.redis.setex("user:" + session_info.uid + ":info", day, "deleted");
+    if (user.deletedAt) {
+      await redis.redis.setex("user:" + session_info.userId + ":info", day, "deleted");
       return false;
     }
 
-    const cacheableUser = await setCachedUser(session_info.uid, user);
-    this.data = filterUserSelection(cacheableUser, select);
+    const cacheableUser = await setCachedUser(session_info.userId, user);
+    this.data = filterUserSelection(cacheableUser, select) as any;
     return this;
   }
 
   /**
    * Load user data by UID.
    */
-  public async load<S extends Prisma.accountsSelect>(
-    uid: bigint,
+  public async load<S extends Prisma.UserSelect>(
+    uid: string,
     select: S,
   ): Promise<Me<S> | false | null>;
-  public async load(uid: bigint): Promise<Me<T> | false | null>;
-  public async load(uid: bigint, select: any = basicUserSelect): Promise<any> {
+  public async load(uid: string): Promise<Me<T> | false | null>;
+  public async load(uid: string, select: any = basicUserSelect): Promise<any> {
     this.lastSelect = select;
     if (this.options.cache) {
       const cached = await getCachedUser(uid, select);
       if (cached === "deleted") return false;
       if (cached) {
-        this.data = filterUserSelection(cached, select);
+        this.data = filterUserSelection(cached, select) as any;
         return this;
       }
     }
 
-    const user = await prisma.client.accounts.findFirst({
+    const user = await prisma.client.user.findFirst({
       where: {
         id: uid,
       },
+      select: {
+        ...select,
+        id: true,
+        deletedAt: true,
+      } as any
     });
 
     if (!user) return null;
 
-    if (user.deleted) {
-      redis.redis.setex("user:" + uid + ":info", day, "deleted");
+    if (user.deletedAt) {
+      await redis.redis.setex("user:" + uid + ":info", day, "deleted");
       return false;
     }
 
     const cacheableUser = await setCachedUser(uid, user);
-    this.data = filterUserSelection(cacheableUser, select);
+    this.data = filterUserSelection(cacheableUser, select) as any;
     return this;
   }
 
   /**
    * Create a new account.
    */
-  public async create<S extends Prisma.accountsSelect>(
-    data: { name: string; email: string; create_with: string },
+  public async create<S extends Prisma.UserSelect>(
+    data: { name: string; email: string; createWith: string },
     select: S,
   ): Promise<Me<S> | false>;
   public async create(data: {
     name: string;
     email: string;
-    create_with: string;
+    createWith: string;
   }): Promise<Me<T> | false>;
   public async create(
-    data: { name: string; email: string; create_with: string },
+    data: { name: string; email: string; createWith: string },
     select: any = basicUserSelect,
   ): Promise<any> {
     this.lastSelect = select;
@@ -148,7 +168,7 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
     if (!user) return false;
 
     const cacheableUser = await setCachedUser(user.id, user);
-    this.data = filterUserSelection(cacheableUser, select);
+    this.data = filterUserSelection(cacheableUser, select) as any;
     return this;
   }
 
@@ -193,12 +213,12 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
       update: async (payload: {
         displayname?: string;
         bio?: string | null;
-        social_discord?: string | null;
-        social_facebook?: string | null;
-        social_reddit?: string | null;
-        social_twitchtv?: string | null;
-        social_twitter?: string | null;
-        social_youtube?: string | null;
+        socialDiscord?: string | null;
+        socialFacebook?: string | null;
+        socialReddit?: string | null;
+        socialTwitch?: string | null;
+        socialTwitter?: string | null;
+        socialYoutube?: string | null;
         avatar?: File;
         banner?: File;
       }) => {
@@ -213,7 +233,11 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
           payload,
         );
         if (updated) {
-          this.data = filterUserSelection(updated, this.lastSelect);
+          // Re-load with exactly T to maintain internal type consistency
+          const reloaded = await this.load<T>(this.data.id, this.lastSelect as T);
+          if (reloaded && reloaded.data) {
+            this.data = reloaded.data as any;
+          }
         }
         return updated;
       },
@@ -262,7 +286,7 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
         }
         return listUserDevices(this.data.id, this.currentSession);
       },
-      destroy: async (deviceId: bigint) => {
+      destroy: async (deviceId: string) => {
         if (!this.data) {
           throw new Error(
             "User data not loaded. Use .use(), .load(), or .create() first.",
@@ -280,18 +304,32 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
     if (!this.data) {
       throw new Error("User data not loaded. Load full data first.");
     }
-    // Attempt to get email from current data, if not present we might need to reload or just use ID
-    // Soft-delete handled by helper
     const result = await deleteAccount(this.data.id, (this.data as any).email);
 
-    // Cleanup specific connection caches
     if (result) {
-      supported_providers.forEach(async (provider) => {
-        await redis.redis.del(`user:${this.data!.id}:connections:${provider}`);
-      });
+      await Promise.all(supported_providers.map(provider => 
+        redis.redis.del(`user:${this.data!.id}:connections:${provider}`)
+      ));
     }
 
     return result;
+  }
+
+  /**
+   * Invalidate all sessions by changing the user secret.
+   */
+  public async invalidateAllSessions() {
+    if (!this.data) {
+      throw new Error("User data not loaded.");
+    }
+    const newSecret = `${nanoid(32)}.${Date.now()}.${nanoid(32)}`;
+    await prisma.client.user.update({
+      data: { secret: newSecret },
+      where: { id: this.data.id }
+    });
+    // Since Sessions reference the secret, they are now effectively invalid for relations.
+    // They will also be cleaned up or marked as disabled if we want more explicit handling.
+    return true;
   }
 
   /**
@@ -302,7 +340,7 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
   }
 
   /**
-   * Check if an account exists by email.
+   * Check if a user exists by email.
    */
   public static async isExist(email: string) {
     return isExist(email);
@@ -311,7 +349,7 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
   /**
    * Standalone static methods for session management.
    */
-  public static async createSession(uid: bigint, metadata: SessionMetadata) {
+  public static async createSession(uid: string, metadata: SessionMetadata) {
     return createSession(uid, metadata);
   }
 
@@ -326,3 +364,5 @@ export class Me<T extends Prisma.accountsSelect = typeof basicUserSelect> {
     return getURIOwner(uri);
   }
 }
+
+import { nanoid } from "nanoid";

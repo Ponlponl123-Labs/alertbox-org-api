@@ -5,9 +5,13 @@ import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 
 /**
- * Create a new account in the database.
+ * Create a new user in the database with associated profile and highly customized modular widgets.
  */
-export async function createAccount(data: { name: string; email: string; create_with: string }) {
+export async function createAccount(data: {
+  name: string;
+  email: string;
+  createWith: string;
+}) {
   const isAccountExist = await isExist(data.email);
   if (isAccountExist) return false;
 
@@ -16,15 +20,79 @@ export async function createAccount(data: { name: string; email: string; create_
 
   while (attempts < maxAttempts) {
     const timestamp = Date.now();
-    const combinedToken = `${nanoid(32)}.${timestamp}.${nanoid(32)}`;
-    const widgetId = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
+    const internalSecret = `${nanoid(32)}.${timestamp}.${nanoid(32)}`;
+    const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
+
     try {
-      const user = await prisma.client.accounts.create({
+      const user = await prisma.client.user.create({
         data: {
-          ...data,
-          displayname: data.name,
-          secret: combinedToken,
-          widget_id: widgetId,
+          email: data.email,
+          createWith: data.createWith,
+          secret: internalSecret,
+          profile: {
+            create: {
+              name: data.name,
+              displayName: data.name,
+            },
+          },
+          widgets: {
+            create: {
+              type: "ALERTBOX",
+              token: widgetToken,
+              alertbox: {
+                create: {
+                  events: {
+                    createMany: {
+                      data: [
+                        {
+                          eventType: "TIP",
+                          prefix: "{{user}} just donated ",
+                          subfix: "{{amount}}{{currency}}!",
+                          ttsEnabled: true,
+                          messageLayout: "image-above",
+                          animIn: "fade_in_up",
+                          animOut: "fade_out_up",
+                        },
+                        {
+                          eventType: "MEMBERSHIP",
+                          prefix: "{{user}} is now a",
+                          subfix: "member!",
+                          messageLayout: "image-above",
+                          animIn: "bounce_in",
+                          animOut: "bounce_out",
+                        },
+                        {
+                          eventType: "MERCH",
+                          prefix: "{{user}} bought",
+                          subfix: "from the shop!",
+                          messageLayout: "image-beside",
+                        },
+                        {
+                          eventType: "FOLLOW",
+                          prefix: "{{user}} is now",
+                          subfix: "following!",
+                          animIn: "slide_in_left",
+                          animOut: "slide_out_right",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        include: {
+          profile: true,
+          widgets: {
+            include: {
+              alertbox: {
+                include: {
+                  events: true,
+                },
+              },
+            },
+          },
         },
       });
       return user;
@@ -32,7 +100,11 @@ export async function createAccount(data: { name: string; email: string; create_
       if (error?.code === "P2002") {
         attempts++;
         betterConsole.warn(
-          tsflag("warn", true, `[Prisma > createAccount] Collision for ${combinedToken}. Retrying...`),
+          tsflag(
+            "warn",
+            true,
+            `[Prisma > createAccount] Collision for secret/widget token. Retrying...`,
+          ),
         );
       } else {
         throw error;
@@ -40,45 +112,51 @@ export async function createAccount(data: { name: string; email: string; create_
     }
   }
 
-  throw new Error("Failed to generate a unique token after multiple attempts.");
+  throw new Error("Failed to create user after multiple attempts.");
 }
 
 /**
- * Check if an account exists by email, with caching.
+ * Check if a user exists by email, with caching.
  */
 export async function isExist(email: string): Promise<MinimalUser | null> {
-  const c = await redis.redis.get("email:" + email);
-  if (c) {
-    if (c === "deleted") return null;
-    return JSON.parse(c);
+  const cacheKey = `email:${email}`;
+  const cached = await redis.redis.get(cacheKey);
+
+  if (cached) {
+    if (cached === "deleted") return null;
+    return JSON.parse(cached);
   }
-  const exist_user = await prisma.client.accounts.findFirst({
+
+  const user = await prisma.client.user.findFirst({
     select: {
       id: true,
-      disabled: true,
-      deleted: true,
+      disabledAt: true,
+      deletedAt: true,
     },
     where: {
       email,
     },
   });
-  if (exist_user?.deleted) {
-    redis.redis.setex("email:" + email, day, "deleted");
+
+  if (user?.deletedAt) {
+    await redis.redis.setex(cacheKey, day, "deleted");
     return null;
   }
-  if (exist_user) {
-    redis.redis.setex("email:" + email, day, JSON.stringify(exist_user));
+
+  if (user) {
+    await redis.redis.setex(cacheKey, day, JSON.stringify(user));
   }
-  return exist_user;
+
+  return user;
 }
 
 /**
- * Mark an account as deleted and clean up caches.
+ * Mark a user as deleted and clean up caches.
  */
-export async function deleteAccount(uid: bigint, email: string) {
-  const updated = await prisma.client.accounts.update({
+export async function deleteAccount(uid: string, email: string) {
+  const updated = await prisma.client.user.update({
     data: {
-      deleted: new Date(),
+      deletedAt: new Date(),
     },
     where: {
       id: uid,

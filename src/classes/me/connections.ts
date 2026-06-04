@@ -27,16 +27,21 @@ export function resolveProvider(name: string): SupportedProvider | null {
 /**
  * Update a connection secret for a user.
  */
-export async function setConnection(uid: bigint, provider: SupportedProvider, secret: string) {
-  const updated = await prisma.client.accounts.update({
-    data: {
-      stripe_secret: provider === "stripe" ? secret : undefined,
-      bmac_secret: provider === "buymeacoffee" ? secret : undefined,
-      kofi_secret: provider === "kofi" ? secret : undefined,
-      ffp_secret: provider === "feelfreepay" ? secret : undefined,
-      streamlabs_secret: provider === "streamlabs" ? secret : undefined,
+export async function setConnection(uid: string, provider: SupportedProvider, secret: string) {
+  const data: any = {};
+  if (provider === "stripe") data.stripeSecret = secret;
+  if (provider === "buymeacoffee") data.bmacSecret = secret;
+  if (provider === "kofi") data.kofiSecret = secret;
+  if (provider === "feelfreepay") data.ffpSecret = secret;
+  if (provider === "streamlabs") data.streamlabsSecret = secret;
+
+  const updated = await prisma.client.integration.upsert({
+    where: { userId: uid },
+    update: data,
+    create: {
+      userId: uid,
+      ...data,
     },
-    where: { id: uid },
   });
 
   void redis.redis.setex(
@@ -51,16 +56,17 @@ export async function setConnection(uid: bigint, provider: SupportedProvider, se
 /**
  * Remove a connection secret for a user.
  */
-export async function removeConnection(uid: bigint, provider: SupportedProvider) {
-  const updated = await prisma.client.accounts.update({
-    data: {
-      stripe_secret: provider === "stripe" ? null : undefined,
-      bmac_secret: provider === "buymeacoffee" ? null : undefined,
-      kofi_secret: provider === "kofi" ? null : undefined,
-      ffp_secret: provider === "feelfreepay" ? null : undefined,
-      streamlabs_secret: provider === "streamlabs" ? null : undefined,
-    },
-    where: { id: uid },
+export async function removeConnection(uid: string, provider: SupportedProvider) {
+  const data: any = {};
+  if (provider === "stripe") data.stripeSecret = null;
+  if (provider === "buymeacoffee") data.bmacSecret = null;
+  if (provider === "kofi") data.kofiSecret = null;
+  if (provider === "feelfreepay") data.ffpSecret = null;
+  if (provider === "streamlabs") data.streamlabsSecret = null;
+
+  const updated = await prisma.client.integration.update({
+    data,
+    where: { userId: uid },
   });
 
   void redis.redis.del(`user:${uid}:connections:${provider}`);
