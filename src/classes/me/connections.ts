@@ -8,6 +8,13 @@ export const supported_providers = [
   "streamlabs",
 ] as const;
 
+export const allowed_user_update_providers: SupportedProvider[] = [
+  "stripe",
+  "buymeacoffee",
+  "kofi",
+  "feelfreepay",
+] as const;
+
 export type SupportedProvider = (typeof supported_providers)[number];
 
 export const providerAliases: Record<string, string> = {
@@ -27,7 +34,11 @@ export function resolveProvider(name: string): SupportedProvider | null {
 /**
  * Update a connection secret for a user.
  */
-export async function setConnection(uid: string, provider: SupportedProvider, secret: string) {
+export async function setConnection(
+  uid: string,
+  provider: SupportedProvider,
+  secret: string,
+) {
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = secret;
   if (provider === "buymeacoffee") data.bmacSecret = secret;
@@ -56,7 +67,10 @@ export async function setConnection(uid: string, provider: SupportedProvider, se
 /**
  * Remove a connection secret for a user.
  */
-export async function removeConnection(uid: string, provider: SupportedProvider) {
+export async function removeConnection(
+  uid: string,
+  provider: SupportedProvider,
+) {
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = null;
   if (provider === "buymeacoffee") data.bmacSecret = null;

@@ -28,5 +28,5 @@ export interface Connections {
   facebook: string | null;
   twitch: string | null;
   patreon: string | null;
-  streamlabs: string | null;
+  streamlabs: boolean;
 }
