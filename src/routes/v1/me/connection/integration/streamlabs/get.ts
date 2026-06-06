@@ -3,6 +3,7 @@ import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
+import { streamlabs_redirect_uri } from "@/consts/integration";
 
 export const endpoint = new Elysia()
   .use(ip())
@@ -46,21 +47,13 @@ export const endpoint = new Elysia()
         set.status = "Bad Request";
         return "Bad Request";
       }
-      const user = await new Me({ cache: false }).use(
-        auth,
-        ip,
-        basicUserSelect,
-      );
+      const user = await new Me().use(auth, ip, basicUserSelect);
       if (!user || !user.data) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
 
-      const redirect_uri =
-        process.env.NODE_ENV === "production"
-          ? "https://alertbox.org/app/connections/streamlabs"
-          : "http://localhost:3000/app/connections/streamlabs";
-      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${redirect_uri}&scope=donations.create&response_type=code&state=${user.data.id}`;
+      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${streamlabs_redirect_uri}&scope=donations.create&response_type=code&state=${user.data.id}`;
 
       return oauth2Url;
     },

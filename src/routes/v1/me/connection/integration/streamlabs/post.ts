@@ -4,6 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
 import { setConnection } from "@/classes/me/connections";
+import { streamlabs_redirect_uri } from "@/consts/integration";
 
 export const endpoint = new Elysia().use(ip()).post(
   "/",
@@ -19,7 +20,29 @@ export const endpoint = new Elysia().use(ip()).post(
       return "Unauthorized";
     }
 
-    await setConnection(user.data.id, "streamlabs", body);
+    const r = await fetch("https://streamlabs.com/api/v2.0/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        client_id: process.env.STREAMLABS_CLIENT_ID!,
+        client_secret: process.env.STREAMLABS_CLIENT_SECRET!,
+        redirect_uri: streamlabs_redirect_uri,
+        code: body,
+      } as any),
+    });
+
+    const data = await r.json();
+
+    if (!r.ok || !data.access_token) {
+      set.status = "Bad Request";
+      return "Bad Request";
+    }
+
+    await setConnection(user.data.id, "streamlabs", data.access_token);
 
     return "OK";
   },
