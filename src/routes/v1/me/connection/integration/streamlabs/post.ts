@@ -3,11 +3,11 @@ import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
-import { removeConnection } from "@/classes/me/connections";
+import { setConnection } from "@/classes/me/connections";
 
-export const endpoint = new Elysia().use(ip()).delete(
+export const endpoint = new Elysia().use(ip()).post(
   "/",
-  async ({ headers, set, ip }) => {
+  async ({ headers, set, ip, body }) => {
     const auth = isBearerToken(headers.authorization);
     if (!auth) {
       set.status = "Bad Request";
@@ -19,7 +19,7 @@ export const endpoint = new Elysia().use(ip()).delete(
       return "Unauthorized";
     }
 
-    await removeConnection(user.data.id, "streamlabs");
+    await setConnection(user.data.id, "streamlabs", body);
 
     return "OK";
   },
@@ -27,6 +27,7 @@ export const endpoint = new Elysia().use(ip()).delete(
     headers: t.Object({
       authorization: t.String(),
     }),
+    body: t.String(),
   },
 );
 

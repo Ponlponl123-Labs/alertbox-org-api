@@ -137,7 +137,7 @@ model Integration {
   kofiOptions       Int       @default(0) @db.UnsignedInt
   ffpSecret         String?   @db.VarChar(512)
   ffpOptions        Int       @default(0) @db.UnsignedInt
-  streamlabsSecret  String?   @db.VarChar(512)
+  streamlabsSecret  String?   @db.VarChar(2048)
   streamlabsOptions Int       @default(0) @db.UnsignedInt
   deletedAt         DateTime? @db.Timestamp(0)
   updatedAt         DateTime  @updatedAt @db.Timestamp(0)
