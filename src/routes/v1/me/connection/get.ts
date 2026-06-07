@@ -32,6 +32,7 @@ export const endpoint = new Elysia().use(ip()).get(
       stripe: integration?.stripeSecret ?? null,
       bmac: integration?.bmacSecret ?? null,
       kofi: integration?.kofiSecret ?? null,
+      xendit: integration?.xenditSecret ?? null,
       ffp: integration?.ffpSecret ?? null,
       youtube: null,
       facebook: null,

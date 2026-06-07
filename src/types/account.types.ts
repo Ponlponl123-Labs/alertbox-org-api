@@ -23,6 +23,7 @@ export interface Connections {
   stripe: string | null;
   bmac: string | null;
   kofi: string | null;
+  xendit: string | null;
   ffp: string | null;
   youtube: string | null;
   facebook: string | null;

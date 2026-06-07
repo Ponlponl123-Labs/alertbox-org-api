@@ -8,20 +8,21 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique @db.VarChar(256)
-  createWith    String         @db.VarChar(50)
-  secret        String         @unique @db.VarChar(255)
-  disabledAt    DateTime?      @db.Timestamp(0)
-  deletedAt     DateTime?      @db.Timestamp(0)
-  createdAt     DateTime       @default(now()) @db.Timestamp(0)
-  updatedAt     DateTime       @updatedAt @db.Timestamp(0)
-  integration   Integration?
-  profile       Profile?
-  reservedUris  ReservedUri[]
-  sessions      Session[]      @relation("UserSessions")
-  sessionUsages SessionUsage[]
-  widgets       Widget[]
+  id              String           @id @default(cuid())
+  email           String           @unique @db.VarChar(256)
+  createWith      String           @db.VarChar(50)
+  secret          String           @unique @db.VarChar(255)
+  disabledAt      DateTime?        @db.Timestamp(0)
+  deletedAt       DateTime?        @db.Timestamp(0)
+  createdAt       DateTime         @default(now()) @db.Timestamp(0)
+  updatedAt       DateTime         @updatedAt @db.Timestamp(0)
+  integration     Integration?
+  profile         Profile?
+  reservedUris    ReservedUri[]
+  sessions        Session[]        @relation("UserSessions")
+  sessionUsages   SessionUsage[]
+  widgets         Widget[]
+  transactionLogs TransactionLog[]
 
   @@unique([id, secret])
   @@index([email])
@@ -135,6 +136,8 @@ model Integration {
   bmacOptions       Int       @default(0) @db.UnsignedInt
   kofiSecret        String?   @db.VarChar(512)
   kofiOptions       Int       @default(0) @db.UnsignedInt
+  xenditSecret      String?   @db.VarChar(512)
+  xenditOptions     Int       @default(0) @db.UnsignedInt
   ffpSecret         String?   @db.VarChar(512)
   ffpOptions        Int       @default(0) @db.UnsignedInt
   streamlabsSecret  String?   @db.VarChar(2048)
@@ -222,4 +225,33 @@ enum AlertEventType {
   MEMBERSHIP
   MERCH
   FOLLOW
+}
+
+model TransactionLog {
+  id           String            @id @default(cuid())
+  userId       String
+  provider     String            @db.VarChar(50)
+  providerTxId String?           @db.VarChar(255)
+  type         AlertEventType
+  status       TransactionStatus @default(PENDING)
+  amount       Int               @db.UnsignedInt
+  currency     String            @db.VarChar(10)
+  senderName   String            @default("Anonymous") @db.VarChar(64)
+  senderEmail  String?           @db.VarChar(256)
+  message      String?           @db.Text
+  rawPayload   Json?
+  createdAt    DateTime          @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime          @updatedAt @db.Timestamp(0)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerTxId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }

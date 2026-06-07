@@ -4,6 +4,7 @@ export const supported_providers = [
   "stripe",
   "buymeacoffee",
   "kofi",
+  "xendit",
   "feelfreepay",
   "streamlabs",
 ] as const;
@@ -43,6 +44,7 @@ export async function setConnection(
   if (provider === "stripe") data.stripeSecret = secret;
   if (provider === "buymeacoffee") data.bmacSecret = secret;
   if (provider === "kofi") data.kofiSecret = secret;
+  if (provider === "xendit") data.xenditSecret = secret;
   if (provider === "feelfreepay") data.ffpSecret = secret;
   if (provider === "streamlabs") data.streamlabsSecret = secret;
 
@@ -75,6 +77,7 @@ export async function removeConnection(
   if (provider === "stripe") data.stripeSecret = null;
   if (provider === "buymeacoffee") data.bmacSecret = null;
   if (provider === "kofi") data.kofiSecret = null;
+  if (provider === "xendit") data.xenditSecret = null;
   if (provider === "feelfreepay") data.ffpSecret = null;
   if (provider === "streamlabs") data.streamlabsSecret = null;
 
