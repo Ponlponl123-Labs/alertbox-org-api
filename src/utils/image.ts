@@ -24,7 +24,7 @@ export async function processAvatar(buffer: Buffer): Promise<ProcessedImage> {
 
 export async function processBanner(buffer: Buffer): Promise<ProcessedImage> {
   const processed = await sharp(buffer)
-    .resize(1200, 400, {
+    .resize(2400, 800, {
       fit: "cover",
       position: "center",
     })
