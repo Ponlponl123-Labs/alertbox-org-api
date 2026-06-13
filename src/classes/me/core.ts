@@ -1,6 +1,7 @@
-import { prisma, redis } from "@/index";
+import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 import { Prisma } from "@/generated/prisma/client";
-import { basicUserSelect } from "@/consts/session";
+import { basicUserSelect, fullUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
 import { MeOptions, SessionMetadata } from "@/types/me.types";
 import { createSession, destroySession, trackSessionUsage } from "./session";
@@ -73,7 +74,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     }
 
     if (this.options.cache) {
-      const cached = await getCachedUser(session_info.userId, select);
+      const cached = await getCachedUser(session_info.userId);
       if (cached === "deleted") return false;
       if (cached) {
         this.data = filterUserSelection(cached, select) as any;
@@ -81,15 +82,13 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       }
     }
 
-    // Re-fetch with full select if not cached
+    // Re-fetch with full user selection if not cached
     const user = await prisma.client.user.findFirst({
       where: {
         id: session_info.userId,
       },
       select: {
-        ...select,
-        id: true,
-        deletedAt: true,
+        ...fullUserSelect,
       } as any
     });
 
@@ -116,7 +115,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   public async load(uid: string, select: any = basicUserSelect): Promise<any> {
     this.lastSelect = select;
     if (this.options.cache) {
-      const cached = await getCachedUser(uid, select);
+      const cached = await getCachedUser(uid);
       if (cached === "deleted") return false;
       if (cached) {
         this.data = filterUserSelection(cached, select) as any;
@@ -129,9 +128,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
         id: uid,
       },
       select: {
-        ...select,
-        id: true,
-        deletedAt: true,
+        ...fullUserSelect,
       } as any
     });
 

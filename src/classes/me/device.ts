@@ -1,4 +1,4 @@
-import { prisma } from "@/index";
+import { prisma } from "@/core/prisma";
 
 /**
  * List all active sessions/devices for a user.

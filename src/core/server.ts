@@ -1,13 +1,14 @@
 import Elysia, { file } from "elysia";
 import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import router, { availableVersions } from "../routes";
+import { UnauthorizedError, BadRequestError } from "./auth";
 
 class Server {
   public app: Elysia;
   public port: number;
 
   constructor(port: number = 3000) {
-    this.app = new Elysia();
+    this.app = new Elysia({ serve: { reusePort: false } });
     this.port = port;
     this.routes();
     this.favicon();
@@ -16,16 +17,15 @@ class Server {
   }
 
   private routes() {
-    this.app.get("/", () => {
-      const body = [
-        "Welcome to the AlertBox.org API!",
-        "Read the documentation at https://alertbox.org/docs",
-        "",
-        "Latest version: " + availableVersions[availableVersions.length - 1],
-        "Available versions: " + availableVersions.join(", "),
-      ];
-      return body.join("\n");
-    });
+    const welcomeMessage = [
+      "Welcome to the AlertBox.org API!",
+      "Read the documentation at https://alertbox.org/docs",
+      "",
+      "Latest version: " + availableVersions[availableVersions.length - 1],
+      "Available versions: " + availableVersions.join(", "),
+    ].join("\n");
+
+    this.app.get("/", () => welcomeMessage);
 
     this.app.use(router);
   }
@@ -56,8 +56,23 @@ class Server {
       );
     });
 
-    this.app.on("error", ({ code, error }) => {
-      if (code === "NOT_FOUND") return;
+    this.app.error({
+      UNAUTHORIZED: UnauthorizedError,
+      BAD_REQUEST: BadRequestError,
+    });
+
+    this.app.onError(({ error, set, code }) => {
+      if (error instanceof UnauthorizedError) {
+        set.status = 401;
+        return error.message;
+      }
+      if (error instanceof BadRequestError) {
+        set.status = 400;
+        return error.message;
+      }
+      if (code === "NOT_FOUND") {
+        return;
+      }
       betterConsole.log(
         tsflag("error", true, s("An error occurred:", { color: "red" }), error),
       );

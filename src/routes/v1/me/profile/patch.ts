@@ -1,18 +1,16 @@
 import Elysia, { t } from "elysia";
-import { Me } from "@/classes/me";
 import { isValidUri } from "@/utils/regex";
-import { isBearerToken } from "@/utils/bearer-token";
-import { ip } from "elysia-ip";
+import { auth } from "@/core/auth";
 
 /**
  * PATCH endpoint to update/register the custom URI for the profile.
  * Subject to cooldown and availability checks.
  */
 export const endpoint = new Elysia()
-  .use(ip())
+  .use(auth)
   .patch(
     "/",
-    async ({ headers, set, ip, body }) => {
+    async ({ getAuthenticatedUser, body, set }) => {
       const parsedUri = String(body ?? "")
         .trim()
         .toLowerCase();
@@ -21,23 +19,13 @@ export const endpoint = new Elysia()
         return "Bad Request";
       }
 
-      const authToken = isBearerToken(headers.authorization);
-      if (!authToken) {
-        set.status = "Bad Request";
-        return "Bad Request";
-      }
-
-      const user = await new Me().use(authToken, ip, {
+      const user = await getAuthenticatedUser({
         profile: {
           select: {
             uriCooldownEnd: true,
           }
         }
       });
-      if (!user || !user.data) {
-        set.status = "Unauthorized";
-        return "Unauthorized";
-      }
 
       const now = Date.now();
       const cooldown =
@@ -57,9 +45,6 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
-      headers: t.Object({
-        authorization: t.String(),
-      }),
       body: t.String(),
     },
   );

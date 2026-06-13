@@ -1,30 +1,18 @@
-import Elysia, { t } from "elysia";
-import { day } from "@/consts/time";
-import { prisma, redis } from "@/index";
-import { Me } from "@/classes/me";
-import { isBearerToken } from "@/utils/bearer-token";
-import { ip } from "elysia-ip";
-import { sessionUserSelect } from "@/consts/session";
+import Elysia from "elysia";
+import { prisma } from "@/core/prisma";
+import { auth } from "@/core/auth";
+import { sessionUserSelect, fullUserSelect } from "@/consts/session";
+import { setCachedUser } from "@/classes/me/cache";
 
 /**
  * POST endpoint to publish/activate the user profile.
  */
 export const endpoint = new Elysia()
-  .use(ip())
+  .use(auth)
   .post(
     "/",
-    async ({ headers, set, ip }) => {
-      const auth = isBearerToken(headers.authorization);
-      if (!auth) {
-        set.status = "Bad Request";
-        return "Bad Request";
-      }
-
-      const user = await new Me().use(auth, ip, sessionUserSelect);
-      if (!user || !user.data) {
-        set.status = "Unauthorized";
-        return "Unauthorized";
-      }
+    async ({ getAuthenticatedUser }) => {
+      const user = await getAuthenticatedUser(sessionUserSelect);
 
       await prisma.client.profile.update({
         data: {
@@ -35,38 +23,18 @@ export const endpoint = new Elysia()
         },
       });
 
-      // Fetch full user for cache sync
+      // Fetch full user for cache sync (must select fullUserSelect to maintain cache completeness)
       const fullUser = await prisma.client.user.findUnique({
         where: { id: user.data.id },
-        include: {
-          profile: true,
-          widgets: {
-            include: {
-              alertbox: {
-                include: {
-                  events: true,
-                },
-              },
-            },
-          },
-        },
+        select: fullUserSelect,
       });
 
       if (fullUser) {
-        void redis.redis.setex(
-          "user:" + user.data.id + ":info",
-          day,
-          JSON.stringify(fullUser),
-        );
+        await setCachedUser(user.data.id, fullUser);
       }
 
       return "OK";
-    },
-    {
-      headers: t.Object({
-        authorization: t.String(),
-      }),
-    },
+    }
   );
 
 export default endpoint;

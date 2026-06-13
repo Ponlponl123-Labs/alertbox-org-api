@@ -1,5 +1,5 @@
 import Redis, { type SentinelAddress } from "ioredis";
-import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
+import betterConsole, { Card, cs, link, s, tsflag, rgb } from "ts-better-console";
 import tomlConfig from "../config/toml";
 
 export class RedisClient {
@@ -218,5 +218,21 @@ export class RedisClient {
     return sentinels;
   }
 }
+
+// Print startup card for Redis client
+new Card("· Starting the Redis client...", undefined, {
+  border: {
+    style: { color: rgb(216, 44, 32) },
+    symbols: { style: "round" },
+  },
+})
+  .render()
+  .split("\n")
+  .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+
+/**
+ * Singleton instance of the RedisClient.
+ */
+export const redis = new RedisClient();
 
 export default RedisClient;

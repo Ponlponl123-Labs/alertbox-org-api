@@ -1,4 +1,5 @@
-import { prisma, redis } from "@/index";
+import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 
 export const supported_providers = [
   "stripe",
@@ -57,17 +58,24 @@ export async function setConnection(
     },
   });
 
-  void redis.redis.setex(
-    `user:${uid}:connections:${provider}`,
-    24 * 60 * 60 * 1000,
-    secret,
-  );
+  await Promise.all([
+    redis.redis.setex(
+      `user:${uid}:connections:${provider}`,
+      24 * 60 * 60 * 1000,
+      secret,
+    ),
+    redis.redis.del(`user:${uid}:info`),
+  ]);
 
   return updated;
 }
 
 /**
  * Remove a connection secret for a user.
+ * 
+ * @param uid - The unique user identifier.
+ * @param provider - The connection provider.
+ * @returns The updated integration record.
  */
 export async function removeConnection(
   uid: string,
@@ -86,7 +94,10 @@ export async function removeConnection(
     where: { userId: uid },
   });
 
-  void redis.redis.del(`user:${uid}:connections:${provider}`);
+  await Promise.all([
+    redis.redis.del(`user:${uid}:connections:${provider}`),
+    redis.redis.del(`user:${uid}:info`),
+  ]);
 
   return updated;
 }

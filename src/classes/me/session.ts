@@ -1,4 +1,4 @@
-import { prisma } from "@/index";
+import { prisma } from "@/core/prisma";
 import { nanoid } from "nanoid";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "@/utils/ip";

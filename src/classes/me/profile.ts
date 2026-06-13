@@ -1,4 +1,5 @@
-import { prisma, redis } from "@/index";
+import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 import { isValidUri } from "@/utils/regex";
 import { week } from "@/consts/time";
 import { processAvatar, processBanner } from "@/utils/image";
@@ -71,11 +72,12 @@ export async function updateProfile(
     where: { userId: uid },
   });
 
-  // Sync Cache - note: we might need to fetch the full user for the cache
+  // Sync Cache - fetch the full user (including integration) to maintain cache completeness
   const fullUser = await prisma.client.user.findUnique({
     where: { id: uid },
     include: {
       profile: true,
+      integration: true,
       widgets: {
         include: {
           alertbox: {

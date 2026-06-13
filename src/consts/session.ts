@@ -36,3 +36,26 @@ export const integrationSelect = {
   id: true,
   integration: true,
 } as const satisfies Prisma.UserSelect;
+
+/**
+ * Full user selection containing all details and nested relations for master caching.
+ */
+export const fullUserSelect = {
+  id: true,
+  email: true,
+  createWith: true,
+  createdAt: true,
+  disabledAt: true,
+  deletedAt: true,
+  profile: true,
+  integration: true,
+  widgets: {
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.UserSelect;

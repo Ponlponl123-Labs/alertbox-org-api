@@ -1,6 +1,6 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
-import betterConsole, { Card, cs, s, tsflag } from "ts-better-console";
+import betterConsole, { Card, cs, s, tsflag, rgb } from "ts-better-console";
 import { dbConfig } from "@/config/env";
 
 class PrismaORM {
@@ -100,5 +100,21 @@ class PrismaORM {
       .forEach((line) => betterConsole.log(tsflag("info", true, line)));
   }
 }
+
+// Print startup card for Prisma ORM
+new Card("· Starting the Prisma ORM...", undefined, {
+  border: {
+    style: { color: rgb(90, 103, 216) },
+    symbols: { style: "round" },
+  },
+})
+  .render()
+  .split("\n")
+  .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+
+/**
+ * Singleton instance of the PrismaORM.
+ */
+export const prisma = new PrismaORM();
 
 export default PrismaORM;

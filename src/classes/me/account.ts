@@ -1,4 +1,5 @@
-import { prisma, redis } from "@/index";
+import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 import { MinimalUser } from "@/types/account.types";
 import { nanoid } from "nanoid";

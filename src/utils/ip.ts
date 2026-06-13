@@ -1,5 +1,5 @@
 import { IPGeolocation } from "@/types/ip.types";
-import { redis } from "..";
+import { redis } from "@/core/redis";
 
 export const reserved_IPs = ["::1", "127.0.0.1", "0.0.0.0"];
 
