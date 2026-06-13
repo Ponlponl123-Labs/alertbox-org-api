@@ -27,6 +27,8 @@ class Server {
 
     this.app.get("/", () => welcomeMessage);
 
+    this.app.get("/health", () => ({ status: "ok" }));
+
     this.app.use(router);
   }
 
