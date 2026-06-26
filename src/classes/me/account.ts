@@ -99,6 +99,17 @@ export async function createAccount(data: {
       return user;
     } catch (error: any) {
       if (error?.code === "P2002") {
+        const target = error?.meta?.target;
+        const isEmailCollision = Array.isArray(target)
+          ? target.includes("email")
+          : typeof target === "string"
+          ? target.includes("email")
+          : false;
+
+        if (isEmailCollision) {
+          return false;
+        }
+
         attempts++;
         betterConsole.warn(
           tsflag(
@@ -152,23 +163,79 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
 }
 
 /**
- * Mark a user as deleted and clean up caches.
+ * Mark a user as deleted, release unique fields (email, secret, profile URI, reserved URIs), and clean up caches.
  */
 export async function deleteAccount(uid: string, email: string) {
-  const updated = await prisma.client.user.update({
-    data: {
-      deletedAt: new Date(),
-    },
-    where: {
-      id: uid,
+  const timestamp = Date.now();
+
+  const user = await prisma.client.user.findUnique({
+    where: { id: uid },
+    include: {
+      profile: true,
+      reservedUris: {
+        where: { deletedAt: null },
+      },
     },
   });
 
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const deletedEmail = `deleted-${timestamp}-${email}`.slice(0, 256);
+  const deletedSecret = `deleted-${timestamp}-${user.secret}`.slice(0, 255);
+
+  const profileUpdate: any = {
+    deletedAt: new Date(),
+  };
+  if (user.profile?.uri) {
+    profileUpdate.uri = `deleted-${timestamp}-${user.profile.uri}`.slice(0, 64);
+  }
+
+  const updated = await prisma.client.$transaction(async (tx) => {
+    // Release active reserved URIs by suffixing them and marking as deleted
+    for (const reserved of user.reservedUris) {
+      await tx.reservedUri.update({
+        where: { id: reserved.id },
+        data: {
+          uri: `deleted-${timestamp}-${reserved.uri}`.slice(0, 50),
+          deletedAt: new Date(),
+        },
+      });
+    }
+
+    const userData: any = {
+      email: deletedEmail,
+      secret: deletedSecret,
+      deletedAt: new Date(),
+    };
+
+    if (user.profile) {
+      userData.profile = {
+        update: profileUpdate,
+      };
+    }
+
+    return await tx.user.update({
+      where: { id: uid },
+      data: userData,
+    });
+  });
+
   // Cleanup Caches
-  await Promise.all([
+  const cacheCleanup: Promise<any>[] = [
     redis.redis.del(`user:${uid}:info`),
     redis.redis.del(`email:${email}`),
-  ]);
+  ];
+
+  if (user.profile?.uri) {
+    cacheCleanup.push(redis.redis.del(`uri:${user.profile.uri.toLowerCase()}:owner`));
+  }
+  for (const reserved of user.reservedUris) {
+    cacheCleanup.push(redis.redis.del(`uri:${reserved.uri.toLowerCase()}:owner`));
+  }
+
+  await Promise.all(cacheCleanup);
 
   return updated;
 }
