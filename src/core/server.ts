@@ -10,9 +10,9 @@ class Server {
   constructor(port: number = 3000) {
     this.app = new Elysia({ serve: { reusePort: false } });
     this.port = port;
+    this.setupEvents();
     this.routes();
     this.favicon();
-    this.setupEvents();
     this.listen();
   }
 
@@ -64,14 +64,24 @@ class Server {
     });
 
     this.app.onError(({ error, set, code }) => {
-      if (error instanceof UnauthorizedError) {
+      const isUnauthorized =
+        (code as string) === "UNAUTHORIZED" ||
+        (error instanceof Error && (error.name === "UnauthorizedError" || error instanceof UnauthorizedError));
+
+      if (isUnauthorized) {
         set.status = 401;
-        return error.message;
+        return error instanceof Error ? error.message : "Unauthorized";
       }
-      if (error instanceof BadRequestError) {
+
+      const isBadRequest =
+        (code as string) === "BAD_REQUEST" ||
+        (error instanceof Error && (error.name === "BadRequestError" || error instanceof BadRequestError));
+
+      if (isBadRequest) {
         set.status = 400;
-        return error.message;
+        return error instanceof Error ? error.message : "Bad Request";
       }
+
       if (code === "NOT_FOUND") {
         return;
       }

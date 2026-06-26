@@ -210,6 +210,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       update: async (payload: {
         displayname?: string;
         bio?: string | null;
+        accentColor?: string | null;
         socialDiscord?: string | null;
         socialFacebook?: string | null;
         socialReddit?: string | null;

@@ -7,6 +7,8 @@ import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { nanoid } from "nanoid";
 import { setCachedUser } from "./cache";
 import betterConsole, { tsflag } from "ts-better-console";
+import { inflateSync } from "zlib";
+import { hexColorToNumber } from "@/utils/color";
 
 /**
  * Update user profile data and/or images.
@@ -17,6 +19,7 @@ export async function updateProfile(
   payload: {
     displayname?: string;
     bio?: string | null;
+    accentColor?: string | null;
     socialDiscord?: string | null;
     socialFacebook?: string | null;
     socialReddit?: string | null;
@@ -32,6 +35,9 @@ export async function updateProfile(
   // Text Fields
   if (payload.displayname) data.displayName = payload.displayname.trim().slice(0, 64);
   if (payload.bio !== undefined) data.bio = payload.bio ? payload.bio.trim().slice(0, 1000) : null;
+  if (payload.accentColor !== undefined) {
+    data.accentColor = payload.accentColor ? hexColorToNumber(payload.accentColor) : 0;
+  }
   
   const socialMap: Record<string, string> = {
     socialDiscord: "discord",
@@ -63,6 +69,43 @@ export async function updateProfile(
     const { url } = await saveProfileImage(uid, "banner", nanoid(), processed.buffer);
     if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
     data.banner = url;
+
+    // Automatically extract dominant/average color from the banner as the accent color
+    try {
+      const onePixelPng = await new Bun.Image(processed.buffer)
+        .resize(1, 1)
+        .png()
+        .bytes();
+
+      // Find the IDAT chunk
+      let idatOffset = -1;
+      for (let i = 0; i < onePixelPng.length - 4; i++) {
+        if (
+          onePixelPng[i] === 0x49 && // I
+          onePixelPng[i + 1] === 0x44 && // D
+          onePixelPng[i + 2] === 0x41 && // A
+          onePixelPng[i + 3] === 0x54    // T
+        ) {
+          idatOffset = i;
+          break;
+        }
+      }
+
+      if (idatOffset !== -1) {
+        const view = new DataView(onePixelPng.buffer, onePixelPng.byteOffset, onePixelPng.byteLength);
+        const idatLength = view.getUint32(idatOffset - 4, false);
+        const compressedData = onePixelPng.subarray(idatOffset + 4, idatOffset + 4 + idatLength);
+        const decompressed = inflateSync(compressedData);
+        if (decompressed.length >= 4) {
+          const r = decompressed[1];
+          const g = decompressed[2];
+          const b = decompressed[3];
+          data.accentColor = (r << 16) + (g << 8) + b;
+        }
+      }
+    } catch (e) {
+      betterConsole.error(tsflag("error", true, `Failed to extract banner accent color: ${e}`));
+    }
   }
 
   if (Object.keys(data).length === 0) return null;

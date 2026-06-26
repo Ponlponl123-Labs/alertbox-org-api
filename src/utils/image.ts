@@ -1,5 +1,3 @@
-import sharp from "sharp";
-
 export interface ProcessedImage {
   buffer: Buffer;
   mime: string;
@@ -7,32 +5,26 @@ export interface ProcessedImage {
 }
 
 export async function processAvatar(buffer: Buffer): Promise<ProcessedImage> {
-  const processed = await sharp(buffer)
-    .resize(256, 256, {
-      fit: "cover",
-      position: "center",
-    })
-    .webp({ quality: 100, effort: 0 })
-    .toBuffer();
+  const processed = await new Bun.Image(buffer)
+    .resize(256, 256)
+    .webp({ quality: 100 })
+    .bytes();
 
   return {
-    buffer: processed,
+    buffer: Buffer.from(processed),
     mime: "image/webp",
     extension: "webp",
   };
 }
 
 export async function processBanner(buffer: Buffer): Promise<ProcessedImage> {
-  const processed = await sharp(buffer)
-    .resize(2400, 800, {
-      fit: "cover",
-      position: "center",
-    })
-    .webp({ quality: 100, effort: 0 })
-    .toBuffer();
+  const processed = await new Bun.Image(buffer)
+    .resize(2400, 800)
+    .webp({ quality: 100 })
+    .bytes();
 
   return {
-    buffer: processed,
+    buffer: Buffer.from(processed),
     mime: "image/webp",
     extension: "webp",
   };

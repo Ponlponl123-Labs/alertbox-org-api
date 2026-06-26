@@ -19,6 +19,7 @@ export const endpoint = new Elysia()
       body: t.Object({
         displayname: t.Optional(t.String()),
         bio: t.Optional(t.String()),
+        accentColor: t.Optional(t.String()),
         socialDiscord: t.Optional(t.String()),
         socialFacebook: t.Optional(t.String()),
         socialReddit: t.Optional(t.String()),
