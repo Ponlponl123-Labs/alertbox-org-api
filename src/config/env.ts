@@ -67,4 +67,12 @@ export const dbConfig = {
   },
 };
 
+/**
+ * Redis Configuration
+ */
+export const redisConfig = {
+  password: process.env.REDIS_PASSWORD || undefined,
+  sentinelPassword: process.env.REDIS_SENTINEL_PASSWORD || undefined,
+};
+
 export { nodeEnv, isDev, loadedFile };

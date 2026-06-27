@@ -1,6 +1,7 @@
 import Redis, { type SentinelAddress } from "ioredis";
 import betterConsole, { Card, cs, link, s, tsflag, rgb } from "ts-better-console";
 import tomlConfig from "../config/toml";
+import { redisConfig } from "../config/env";
 
 export class RedisClient {
   public redis: Redis;
@@ -39,10 +40,10 @@ export class RedisClient {
       name: tomlConfig.redis?.name || "mymaster",
       host: tomlConfig.redis?.host || "localhost",
       port: tomlConfig.redis?.port || 6379,
-      password: tomlConfig.redis?.password || undefined,
+      password: redisConfig.password || tomlConfig.redis?.password || undefined,
       natMap: this.natMap,
       sentinels: this.redisSentinels,
-      sentinelPassword: tomlConfig.redis?.sentinel?.password || undefined,
+      sentinelPassword: redisConfig.sentinelPassword || tomlConfig.redis?.sentinel?.password || undefined,
       lazyConnect: true,
       enableReadyCheck: true,
       keyPrefix: "alertbox-org:",
