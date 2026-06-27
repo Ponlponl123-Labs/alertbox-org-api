@@ -22,6 +22,7 @@ model User {
   sessions        Session[]        @relation("UserSessions")
   sessionUsages   SessionUsage[]
   transactionLogs TransactionLog[]
+  streamlabsRelayLogs StreamlabsRelayLog[]
   widgets         Widget[]
 
   @@unique([id, secret])
@@ -75,6 +76,7 @@ model Widget {
   updatedAt DateTime         @updatedAt @db.Timestamp(0)
   alertbox  AlertboxSetting?
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenLogs WidgetTokenLog[]
 
   @@index([userId])
 }
@@ -259,4 +261,40 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+model WidgetTokenLog {
+  id        String   @id @default(cuid())
+  widgetId  String
+  oldToken  String   @db.VarChar(255)
+  newToken  String   @db.VarChar(255)
+  ipAddress String   @db.VarChar(50)
+  userAgent String   @db.LongText
+  createdAt DateTime @default(now()) @db.Timestamp(0)
+  widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId])
+  @@index([createdAt])
+}
+
+model StreamlabsRelayLog {
+  id           String            @id @default(cuid())
+  userId       String
+  provider     String            @db.VarChar(50)
+  providerTxId String?           @db.VarChar(255)
+  type         AlertEventType
+  status       TransactionStatus @default(PENDING)
+  amount       Int               @db.UnsignedInt
+  currency     String            @db.VarChar(10)
+  senderName   String            @default("Anonymous") @db.VarChar(64)
+  senderEmail  String?           @db.VarChar(256)
+  message      String?           @db.Text
+  errorMessage String?           @db.Text
+  createdAt    DateTime          @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime          @updatedAt @db.Timestamp(0)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerTxId])
+  @@index([userId])
+  @@index([createdAt])
 }

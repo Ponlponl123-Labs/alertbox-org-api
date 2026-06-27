@@ -64,3 +64,28 @@ export const MonthlySupportStarted = t.Object({
  * TypeScript type representing a Buy Me a Coffee "Monthly Support Started" webhook payload.
  */
 export type MonthlySupportStartedType = Static<typeof MonthlySupportStarted>;
+
+/**
+ * Elysia / TypeBox schema for a Buy Me a Coffee webhook payload (union of event types).
+ */
+export const webhookBodySchema = t.Union([
+  t.Object({
+    type: t.Literal("donation.created"),
+    live_mode: t.Boolean(),
+    attempt: t.Number(),
+    created: t.Number(),
+    event_id: t.Number(),
+    data: DonationCreated,
+  }),
+  t.Object({
+    type: t.Literal("recurring_donation.started"),
+    live_mode: t.Boolean(),
+    attempt: t.Number(),
+    created: t.Number(),
+    event_id: t.Number(),
+    data: MonthlySupportStarted,
+  }),
+]);
+
+export type WebhookBodySchemaType = Static<typeof webhookBodySchema>;
+

@@ -2,6 +2,7 @@ import Elysia, { file } from "elysia";
 import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import router, { availableVersions } from "../routes";
 import { UnauthorizedError, BadRequestError } from "./auth";
+import { setBunServer } from "./bun-server";
 
 class Server {
   public app: Elysia;
@@ -38,6 +39,9 @@ class Server {
 
   private setupEvents() {
     this.app.on("start", ({ server }) => {
+      if (server) {
+        setBunServer(server);
+      }
       betterConsole.log(
         tsflag(
           "info",

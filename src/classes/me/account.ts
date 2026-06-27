@@ -4,6 +4,7 @@ import { day } from "@/consts/time";
 import { MinimalUser } from "@/types/account.types";
 import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
+import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 
 /**
  * Create a new user in the database with associated profile and highly customized modular widgets.
@@ -44,38 +45,7 @@ export async function createAccount(data: {
                 create: {
                   events: {
                     createMany: {
-                      data: [
-                        {
-                          eventType: "TIP",
-                          prefix: "{{user}} just donated ",
-                          subfix: "{{amount}}{{currency}}!",
-                          ttsEnabled: true,
-                          messageLayout: "image-above",
-                          animIn: "fade_in_up",
-                          animOut: "fade_out_up",
-                        },
-                        {
-                          eventType: "MEMBERSHIP",
-                          prefix: "{{user}} is now a",
-                          subfix: "member!",
-                          messageLayout: "image-above",
-                          animIn: "bounce_in",
-                          animOut: "bounce_out",
-                        },
-                        {
-                          eventType: "MERCH",
-                          prefix: "{{user}} bought",
-                          subfix: "from the shop!",
-                          messageLayout: "image-beside",
-                        },
-                        {
-                          eventType: "FOLLOW",
-                          prefix: "{{user}} is now",
-                          subfix: "following!",
-                          animIn: "slide_in_left",
-                          animOut: "slide_out_right",
-                        },
-                      ],
+                      data: DEFAULT_ALERTBOX_EVENTS,
                     },
                   },
                 },
@@ -238,4 +208,46 @@ export async function deleteAccount(uid: string, email: string) {
   await Promise.all(cacheCleanup);
 
   return updated;
+}
+
+/**
+ * Safely self-heals/provisions a default ALERTBOX widget for a user if they don't have one.
+ * 
+ * @param userId - The ID of the user.
+ * @param currentWidgets - The current list of widgets.
+ * @returns Array of widgets including the created one.
+ */
+export async function ensureUserWidgets(userId: string, currentWidgets: any[]): Promise<any[]> {
+  if (currentWidgets && currentWidgets.length > 0) {
+    return currentWidgets;
+  }
+
+  const timestamp = Date.now();
+  const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
+
+  const createdWidget = await prisma.client.widget.create({
+    data: {
+      userId,
+      type: "ALERTBOX",
+      token: widgetToken,
+      alertbox: {
+        create: {
+          events: {
+            createMany: {
+              data: DEFAULT_ALERTBOX_EVENTS,
+            },
+          },
+        },
+      },
+    },
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
+  });
+
+  return [createdWidget];
 }

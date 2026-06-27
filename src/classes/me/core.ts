@@ -5,7 +5,7 @@ import { basicUserSelect, fullUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
 import { MeOptions, SessionMetadata } from "@/types/me.types";
 import { createSession, destroySession, trackSessionUsage } from "./session";
-import { createAccount, isExist, deleteAccount } from "./account";
+import { createAccount, isExist, deleteAccount, ensureUserWidgets } from "./account";
 import { getCachedUser, setCachedUser, filterUserSelection } from "./cache";
 import { registerURI, getURIOwner, updateProfile } from "./profile";
 import {
@@ -76,7 +76,8 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     if (this.options.cache) {
       const cached = await getCachedUser(session_info.userId);
       if (cached === "deleted") return false;
-      if (cached) {
+      const anyCached = cached as any;
+      if (anyCached && anyCached.widgets && anyCached.widgets.length > 0) {
         this.data = filterUserSelection(cached, select) as any;
         return this;
       }
@@ -99,7 +100,10 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       return false;
     }
 
-    const cacheableUser = await setCachedUser(session_info.userId, user);
+    // Run dynamic self-healing/migration checks on loaded user data
+    const healedUser = await this.selfHeal(user);
+
+    const cacheableUser = await setCachedUser(session_info.userId, healedUser);
     this.data = filterUserSelection(cacheableUser, select) as any;
     return this;
   }
@@ -117,7 +121,8 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     if (this.options.cache) {
       const cached = await getCachedUser(uid);
       if (cached === "deleted") return false;
-      if (cached) {
+      const anyCached = cached as any;
+      if (anyCached && anyCached.widgets && anyCached.widgets.length > 0) {
         this.data = filterUserSelection(cached, select) as any;
         return this;
       }
@@ -139,7 +144,10 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       return false;
     }
 
-    const cacheableUser = await setCachedUser(uid, user);
+    // Run dynamic self-healing/migration checks on loaded user data
+    const healedUser = await this.selfHeal(user);
+
+    const cacheableUser = await setCachedUser(uid, healedUser);
     this.data = filterUserSelection(cacheableUser, select) as any;
     return this;
   }
@@ -363,6 +371,21 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
    */
   public static async getURIOwner(uri: string) {
     return getURIOwner(uri);
+  }
+
+  /**
+   * Run dynamic self-healing/migration checks on loaded user data.
+   * Can be extended in the future for other lazy data updates.
+   */
+  private async selfHeal(user: any): Promise<any> {
+    if (!user) return user;
+
+    const anyUser = user as any;
+    if (!anyUser.widgets || anyUser.widgets.length === 0) {
+      anyUser.widgets = await ensureUserWidgets(anyUser.id, anyUser.widgets);
+    }
+
+    return user;
   }
 }
 
