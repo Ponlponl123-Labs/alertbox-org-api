@@ -5,6 +5,7 @@ export const PROFILE_BADGES = {
   VERIFIED: 1 << 0,   // 1
   STAFF: 1 << 1,      // 2
   EARLY_USER: 1 << 2, // 4
+  PARTNER: 1 << 3,    // 8
 } as const;
 
 /**

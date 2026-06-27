@@ -23,6 +23,7 @@ export const endpoint = new Elysia().get(
 
     const user = await new Me().load(owner, {
       profile: true,
+      integration: true,
       disabledAt: true,
       deletedAt: true,
     });
@@ -39,7 +40,25 @@ export const endpoint = new Elysia().get(
 
     // Exclude userId from the returned profile data
     const { userId: _, ...publicProfile } = user.data.profile;
-    return publicProfile;
+
+    // Build safe public integrations — NEVER expose secrets
+    const integration = user.data.integration;
+    const integrations = {
+      stripe: !!integration?.stripeSecret,
+      xendit: !!integration?.xenditSecret,
+      omise: false,
+      "2c2p": false,
+      feelfreepay: !!integration?.ffpSecret,
+      kofi: !!integration?.kofiSecret,
+      bmac: !!integration?.bmacSecret,
+    };
+
+    return {
+      ...publicProfile,
+      kofiUsername: integration?.kofiUsername ?? null,
+      bmacUsername: integration?.bmacUsername ?? null,
+      integrations,
+    };
   },
   {
     params: t.Object({

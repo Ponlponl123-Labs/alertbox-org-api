@@ -19,6 +19,13 @@ export const endpoint = new Elysia()
         return "Not supported provider";
       }
 
+      if (provider === "kofi" || provider === "buymeacoffee") {
+        if (typeof body === "string" || !body.username || !body.secret) {
+          set.status = "Bad Request";
+          return "Username and secret are required for this provider";
+        }
+      }
+
       const user = await getAuthenticatedUser();
       await user.connections.set(provider, body);
       return "OK";
@@ -27,7 +34,13 @@ export const endpoint = new Elysia()
       params: t.Object({
         provider: t.String(),
       }),
-      body: t.String(),
+      body: t.Union([
+        t.String(),
+        t.Object({
+          username: t.String(),
+          secret: t.String(),
+        }),
+      ]),
     },
   );
 

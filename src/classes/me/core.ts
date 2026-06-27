@@ -247,7 +247,10 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
    */
   public get connections() {
     return {
-      set: async (provider: SupportedProvider, secret: string) => {
+      set: async (
+        provider: SupportedProvider,
+        secret: string | { username: string; secret: string },
+      ) => {
         if (!this.data) {
           throw new Error(
             "User data not loaded. Use .use(), .load(), or .create() first.",

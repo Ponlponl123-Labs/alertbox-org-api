@@ -33,18 +33,24 @@ export function resolveProvider(name: string): SupportedProvider | null {
   return supported_providers.includes(target) ? target : null;
 }
 
-/**
- * Update a connection secret for a user.
- */
 export async function setConnection(
   uid: string,
   provider: SupportedProvider,
-  secret: string,
+  payload: string | { username: string; secret: string },
 ) {
+  const secret = typeof payload === "string" ? payload : payload.secret;
+  const username = typeof payload === "string" ? null : payload.username;
+
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = secret;
-  if (provider === "buymeacoffee") data.bmacSecret = secret;
-  if (provider === "kofi") data.kofiSecret = secret;
+  if (provider === "buymeacoffee") {
+    data.bmacSecret = secret;
+    if (username) data.bmacUsername = username;
+  }
+  if (provider === "kofi") {
+    data.kofiSecret = secret;
+    if (username) data.kofiUsername = username;
+  }
   if (provider === "xendit") data.xenditSecret = secret;
   if (provider === "feelfreepay") data.ffpSecret = secret;
   if (provider === "streamlabs") data.streamlabsSecret = secret;
@@ -83,8 +89,14 @@ export async function removeConnection(
 ) {
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = null;
-  if (provider === "buymeacoffee") data.bmacSecret = null;
-  if (provider === "kofi") data.kofiSecret = null;
+  if (provider === "buymeacoffee") {
+    data.bmacSecret = null;
+    data.bmacUsername = null;
+  }
+  if (provider === "kofi") {
+    data.kofiSecret = null;
+    data.kofiUsername = null;
+  }
   if (provider === "xendit") data.xenditSecret = null;
   if (provider === "feelfreepay") data.ffpSecret = null;
   if (provider === "streamlabs") data.streamlabsSecret = null;

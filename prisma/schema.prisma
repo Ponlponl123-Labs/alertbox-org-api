@@ -37,7 +37,7 @@ model Profile {
   avatar                 String?   @db.VarChar(512)
   banner                 String?   @db.VarChar(512)
   options                Int       @default(0) @db.UnsignedInt
-  badges                Int       @default(0) @db.UnsignedInt
+  badges                 Int       @default(0) @db.UnsignedInt
   accentColor            Int       @default(0) @db.UnsignedInt
   uri                    String?   @unique @db.VarChar(64)
   uriCooldownEnd         DateTime? @db.Timestamp(0)
@@ -146,6 +146,8 @@ model Integration {
   streamlabsOptions Int       @default(0) @db.UnsignedInt
   deletedAt         DateTime? @db.Timestamp(0)
   updatedAt         DateTime  @updatedAt @db.Timestamp(0)
+  bmacUsername      String?   @db.VarChar(64)
+  kofiUsername      String?   @db.VarChar(64)
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -223,6 +225,7 @@ model TransactionLog {
   providerTxId String?           @db.VarChar(255)
   type         AlertEventType
   status       TransactionStatus @default(PENDING)
+  isTest       Boolean           @default(false)
   amount       Int               @db.UnsignedInt
   currency     String            @db.VarChar(10)
   senderName   String            @default("Anonymous") @db.VarChar(64)

@@ -16,8 +16,18 @@ export const endpoint = new Elysia()
 
       return {
         stripe: integration?.stripeSecret ?? null,
-        bmac: integration?.bmacSecret ?? null,
-        kofi: integration?.kofiSecret ?? null,
+        bmac: integration?.bmacSecret
+          ? {
+              username: integration.bmacUsername ?? "",
+              secret: integration.bmacSecret,
+            }
+          : null,
+        kofi: integration?.kofiSecret
+          ? {
+              username: integration.kofiUsername ?? "",
+              secret: integration.kofiSecret,
+            }
+          : null,
         xendit: integration?.xenditSecret ?? null,
         ffp: integration?.ffpSecret ?? null,
         youtube: null,
@@ -25,7 +35,7 @@ export const endpoint = new Elysia()
         twitch: null,
         patreon: null,
         streamlabs: integration?.streamlabsSecret ? true : false,
-      } as Connections;
+      } as any;
     }
   );
 
