@@ -7,4 +7,7 @@ standardAppPipelineManaged_Defaulted(
   deploymentFilePath: 'api/alertbox-org/',
   branchName: 'main', 
   imageRepo: 'alertbox-org-api',
+
+  gitopsProtocol: 'git@',
+  gitopsCreds: 'github-ponlponl123-ssh-gitops'
 )
