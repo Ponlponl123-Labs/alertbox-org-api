@@ -8,6 +8,8 @@ import { isValidUri } from "@/utils/regex";
 export const endpoint = new Elysia().get(
   "/:uri/details",
   async ({ params, set }) => {
+    set.headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+
     const parsedUri = String(params.uri ?? "")
       .trim()
       .toLowerCase();

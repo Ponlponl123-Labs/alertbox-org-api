@@ -115,6 +115,9 @@ export async function updateProfile(
     where: { userId: uid },
   });
 
+  // Invalidate Redis cache
+  await redis.redis.del(`user:${uid}:info`);
+
   // Sync Cache - fetch the full user (including integration) to maintain cache completeness
   const fullUser = await prisma.client.user.findUnique({
     where: { id: uid },
