@@ -35,15 +35,25 @@ export class RedisClient {
     this.natMap = this.buildNatMap();
     this.redisSentinels = this.buildSentinels();
 
+    const isSentinelEnabled = !!tomlConfig.redis?.sentinel?.enabled;
+
     this.redis = new Redis({
       db: tomlConfig.redis?.db || 0,
       name: tomlConfig.redis?.name || "mymaster",
-      host: tomlConfig.redis?.host || "localhost",
-      port: tomlConfig.redis?.port || 6379,
+      ...(isSentinelEnabled
+        ? {
+            sentinels: this.redisSentinels,
+            sentinelPassword:
+              redisConfig.sentinelPassword ||
+              tomlConfig.redis?.sentinel?.password ||
+              undefined,
+          }
+        : {
+            host: tomlConfig.redis?.host || "localhost",
+            port: tomlConfig.redis?.port || 6379,
+          }),
       password: redisConfig.password || tomlConfig.redis?.password || undefined,
       natMap: this.natMap,
-      sentinels: this.redisSentinels,
-      sentinelPassword: redisConfig.sentinelPassword || tomlConfig.redis?.sentinel?.password || undefined,
       lazyConnect: true,
       enableReadyCheck: true,
       keyPrefix: "alertbox-org:",
