@@ -16,7 +16,8 @@ class Server {
       cors({
         origin: [
           /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
-          /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/
+          /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/,
+          /^https?:\/\/([a-z0-9-]+\.)*tip-to\.me$/
         ],
       }),
     );
