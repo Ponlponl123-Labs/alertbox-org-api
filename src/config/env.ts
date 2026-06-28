@@ -1,6 +1,6 @@
 import betterConsole, { s, tsflag } from "ts-better-console";
 
-const nodeEnv = process.env.NODE_ENV || "development";
+const nodeEnv = Bun.env.NODE_ENV || "development";
 const isDev = nodeEnv === "development";
 
 // Priority list for environment files to check for logging purposes
