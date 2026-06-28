@@ -14,9 +14,10 @@ class Server {
     this.app = new Elysia({ serve: { reusePort: false } });
     this.app.use(
       cors({
-        origin: isDev
-          ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
-          : /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/,
+        origin: [
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+          /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/
+        ],
       }),
     );
     this.port = port;
