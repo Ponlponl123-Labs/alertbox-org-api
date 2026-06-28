@@ -8,6 +8,7 @@
     "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
   },
   "dependencies": {
+    "@elysiajs/cors": "^1.4.2",
     "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",

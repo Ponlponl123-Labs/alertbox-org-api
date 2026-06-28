@@ -1,8 +1,10 @@
 import Elysia, { file } from "elysia";
+import { cors } from "@elysiajs/cors";
 import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import router, { availableVersions } from "../routes";
 import { UnauthorizedError, BadRequestError } from "./auth";
 import { setBunServer } from "./bun-server";
+import { isDev } from "../config/env";
 
 class Server {
   public app: Elysia;
@@ -10,6 +12,13 @@ class Server {
 
   constructor(port: number = 3000) {
     this.app = new Elysia({ serve: { reusePort: false } });
+    this.app.use(
+      cors({
+        origin: isDev
+          ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+          : /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/,
+      }),
+    );
     this.port = port;
     this.setupEvents();
     this.routes();
