@@ -40,7 +40,7 @@ const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
     }
 
     const session = await user.session.create({
-      ipAddress: server?.requestIP(request)?.address || ip,
+      ipAddress: ip,
       method: request.method,
       userAgent: request.headers.get("user-agent") || "Unknown",
     });
