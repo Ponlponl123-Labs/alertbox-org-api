@@ -7,40 +7,41 @@ import { streamlabs_redirect_uri } from "@/consts/integration";
 import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";
 
+const getHandler = async ({ headers, set, ip }: any) => {
+  const auth = isBearerToken(headers.authorization);
+  if (!auth) {
+    set.status = "Bad Request";
+    return "Bad Request";
+  }
+  const user = await new Me({ cache: false }).use(auth, ip, {
+    integration: {
+      select: {
+        streamlabsSecret: true,
+        streamlabsOptions: true,
+      },
+    },
+  });
+  if (!user || !user.data) {
+    set.status = "Unauthorized";
+    return "Unauthorized";
+  }
+
+  return {
+    isConnected: !!user.data.integration?.streamlabsSecret,
+    options: user.data.integration?.streamlabsOptions ?? null,
+  };
+};
+
+const getValidation = {
+  headers: t.Object({
+    authorization: t.String(),
+  }),
+};
+
 export const endpoint = new Elysia()
   .use(ip({ headersFirst: true }))
-  .get(
-    "/",
-    async ({ headers, set, ip }) => {
-      const auth = isBearerToken(headers.authorization);
-      if (!auth) {
-        set.status = "Bad Request";
-        return "Bad Request";
-      }
-      const user = await new Me({ cache: false }).use(auth, ip, {
-        integration: {
-          select: {
-            streamlabsSecret: true,
-            streamlabsOptions: true,
-          },
-        },
-      });
-      if (!user || !user.data) {
-        set.status = "Unauthorized";
-        return "Unauthorized";
-      }
-
-      return {
-        isConnected: !!user.data.integration?.streamlabsSecret,
-        options: user.data.integration?.streamlabsOptions ?? null,
-      };
-    },
-    {
-      headers: t.Object({
-        authorization: t.String(),
-      }),
-    },
-  )
+  .get("/", getHandler, getValidation)
+  .get("", getHandler, getValidation)
   .get(
     "/oauth2",
     async ({ headers, set, ip }) => {
