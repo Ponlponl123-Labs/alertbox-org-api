@@ -2,7 +2,7 @@
 
 standardAppPipelineManaged_Defaulted(
   appName: 'alertbox-org-api',
-  orgName: 'ponlponl123-labs',
+  orgName: 'Ponlponl123-Labs',
   gitOpsRepo: 'Ponlponl123-Labs/.gitops',
   deploymentFilePath: 'api/alertbox-org/',
   branchName: 'main', 
