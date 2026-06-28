@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { prisma } from "@/core/prisma";
 
-export const endpoint = new Elysia().use(ip()).patch(
+export const endpoint = new Elysia().use(ip({ headersFirst: true })).patch(
   "/",
   async ({ headers, set, ip, body }) => {
     const auth = isBearerToken(headers.authorization);

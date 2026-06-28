@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 
-const endpoint = new Elysia().use(ip()).post(
+const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
   "/discord",
   async ({ body, set, server, request, ip }) => {
     const access_token = await exchange_code(body.code, body.redirect_uri);

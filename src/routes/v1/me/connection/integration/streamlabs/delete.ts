@@ -5,7 +5,7 @@ import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
 import { removeConnection } from "@/classes/me/connections";
 
-export const endpoint = new Elysia().use(ip()).delete(
+export const endpoint = new Elysia().use(ip({ headersFirst: true })).delete(
   "/",
   async ({ headers, set, ip }) => {
     const auth = isBearerToken(headers.authorization);

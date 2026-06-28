@@ -30,7 +30,7 @@ export class BadRequestError extends Error {
  * Derives a helper function `getAuthenticatedUser(select?)` in the request context.
  */
 export const auth = new Elysia({ name: "auth" })
-  .use(ip())
+  .use(ip({ headersFirst: true }))
   .derive({ as: "global" }, ({ headers, ip }) => {
     return {
       /**

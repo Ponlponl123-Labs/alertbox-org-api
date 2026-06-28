@@ -8,7 +8,7 @@ import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";
 
 export const endpoint = new Elysia()
-  .use(ip())
+  .use(ip({ headersFirst: true }))
   .get(
     "/",
     async ({ headers, set, ip }) => {

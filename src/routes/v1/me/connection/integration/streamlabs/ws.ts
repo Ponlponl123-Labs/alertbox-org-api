@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 
 export const endpoint = new Elysia()
-  .use(ip())
+  .use(ip({ headersFirst: true }))
   .ws("/ws", {
     async open(ws) {
       try {

@@ -40,6 +40,26 @@ class Server {
 
     this.app.get("/health", () => ({ status: "ok" }));
 
+    this.app.ws("/health/ws", {
+      open(ws) {
+        ws.send(JSON.stringify({ status: "ok" }));
+      },
+      message(ws, message) {
+        if (message === "ping") {
+          ws.send("pong");
+        } else if (typeof message === "string" && message.includes("ping")) {
+          try {
+            const parsed = JSON.parse(message);
+            if (parsed.type === "ping") {
+              ws.send(JSON.stringify({ type: "pong" }));
+            }
+          } catch {
+            // Ignore invalid JSON messages
+          }
+        }
+      }
+    });
+
     this.app.use(router);
   }
 

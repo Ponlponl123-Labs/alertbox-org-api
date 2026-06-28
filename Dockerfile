@@ -1,7 +1,7 @@
 # ---------------------------------------------------
 # Stage 1: Build
 # ---------------------------------------------------
-FROM oven/bun:1.2-alpine AS build
+FROM oven/bun:1.3-alpine AS build
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN bun build ./src/index.ts --outdir ./dist --target bun --minify --sourcemap=n
 # ---------------------------------------------------
 # Stage 2: Runtime
 # ---------------------------------------------------
-FROM oven/bun:1.2-alpine AS release
+FROM oven/bun:1.3-alpine AS release
 
 # Set production environment
 ENV NODE_ENV=production

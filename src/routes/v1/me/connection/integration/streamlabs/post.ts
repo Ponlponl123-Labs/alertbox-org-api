@@ -6,7 +6,7 @@ import { basicUserSelect } from "@/consts/session";
 import { setConnection } from "@/classes/me/connections";
 import { streamlabs_redirect_uri } from "@/consts/integration";
 
-export const endpoint = new Elysia().use(ip()).post(
+export const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
   "/",
   async ({ headers, set, ip, body }) => {
     const auth = isBearerToken(headers.authorization);
