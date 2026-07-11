@@ -4,8 +4,6 @@ import { redis } from "@/core/redis";
 import { getBunServer } from "@/core/bun-server";
 import betterConsole, { tsflag, s } from "ts-better-console";
 
-// Create a dedicated Redis subscriber connection
-// We use the same configuration as the main redis client
 const subRedis = redis.redis.duplicate();
 
 subRedis.on("error", (err) => {
@@ -15,7 +13,6 @@ subRedis.on("error", (err) => {
   );
 });
 
-// Connect to Redis and subscribe to target channel pattern
 subRedis.connect().then(() => {
   betterConsole.log(
     tsflag("info", true, s("✓ Redis Subscriber connected successfully!", { color: "green" }))
@@ -36,9 +33,6 @@ subRedis.connect().then(() => {
   );
 });
 
-/**
- * WebSocket endpoint to safely stream alerts only to target widgets.
- */
 export const widgetSocket = new Elysia()
   .ws("/widget/:token", {
     async open(ws) {
@@ -50,7 +44,6 @@ export const widgetSocket = new Elysia()
           return;
         }
 
-        // Validate the token and ensure widget is not deleted
         const widget = await prisma.client.widget.findFirst({
           where: {
             token,
@@ -67,10 +60,8 @@ export const widgetSocket = new Elysia()
           return;
         }
 
-        // Subscribe socket client to the globally unique widget ID topic
         ws.subscribe("widget:" + widget.id);
 
-        // Acknowledge connection
         ws.send(JSON.stringify({ type: "connected", widgetId: widget.id }));
       } catch (err) {
         betterConsole.error(
@@ -83,11 +74,9 @@ export const widgetSocket = new Elysia()
     },
 
     close(ws) {
-      // Elysia automatically handles unsubscribing when WS connection closes
     },
   });
 
-// Listen to incoming pub/sub messages and forward them locally using Elysia's publish topic
 subRedis.on("pmessage", (pattern, channel, message) => {
   const alertsPrefix = "alertbox-org:alerts:";
   const logsPrefix = "alertbox-org:streamlabs-relay-logs:";
