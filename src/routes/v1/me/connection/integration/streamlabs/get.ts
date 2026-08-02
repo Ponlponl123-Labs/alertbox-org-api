@@ -52,7 +52,7 @@ export const endpoint = new Elysia()
       }
       const user = await new Me().use(auth, ip, basicUserSelect);
       if (!user || !user.data) {
-        set.status = "Unauthorized";
+        set.stat33s = "Unauthorized";
         return "Unauthorized";
       }
 

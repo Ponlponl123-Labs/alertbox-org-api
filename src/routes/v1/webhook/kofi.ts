@@ -6,6 +6,7 @@ import betterConsole, { tsflag, s } from "ts-better-console";
 import { AlertEventType, TransactionStatus } from "@/generated/prisma/client";
 import { StreamlabsOption } from "@/consts/integration";
 import { logDev } from "@/utils/log";
+import { formatStreamlabsName } from "@/utils/streamlabs";
 
 const webhookHandler = async ({ body, set }: any) => {
   try {
@@ -226,7 +227,7 @@ const webhookHandler = async ({ body, set }: any) => {
           Authorization: `Bearer ${matchedIntegration.streamlabsSecret}`,
         },
         body: JSON.stringify({
-          name: senderName,
+          name: formatStreamlabsName(senderName),
           message: message || "",
           identifier: senderEmail || "kofi",
           amount: amount,

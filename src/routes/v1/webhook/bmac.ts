@@ -9,6 +9,7 @@ import { StreamlabsOption } from "@/consts/integration";
 import { verifySignature } from "@/utils/signature";
 import { webhookParser } from "@/utils/webhook";
 import { logDev } from "@/utils/log";
+import { formatStreamlabsName } from "@/utils/streamlabs";
 
 const webhookHandler = async ({ body, headers, request, set }: any) => {
   try {
@@ -293,7 +294,7 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
           Authorization: `Bearer ${matchedIntegration.streamlabsSecret}`,
         },
         body: JSON.stringify({
-          name: senderName,
+          name: formatStreamlabsName(senderName),
           message: message || "",
           identifier: senderEmail || "buymeacoffee",
           amount: amount,
