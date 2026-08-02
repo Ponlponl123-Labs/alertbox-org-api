@@ -26,10 +26,17 @@ describe("formatStreamlabsName", () => {
     expect(formatStreamlabsName("✨Sparkles✨")).toBe("Sparkles");
   });
 
+  test("falls back to Anonymous when all characters are invalid", () => {
+    expect(formatStreamlabsName("@!")).toBe("Anonymous");
+    expect(formatStreamlabsName("!@#$%^&*()")).toBe("Anonymous");
+    expect(formatStreamlabsName("🎉🎉🎉")).toBe("Anonymous");
+    expect(formatStreamlabsName("💩🔥")).toBe("Anonymous");
+  });
+
   test("falls back to Anonymous if sanitized result is under 2 characters", () => {
     expect(formatStreamlabsName("A")).toBe("Anonymous");
-    expect(formatStreamlabsName("@!")).toBe("Anonymous");
-    expect(formatStreamlabsName("🎉🎉🎉")).toBe("Anonymous");
+    expect(formatStreamlabsName("A                      ")).toBe("Anonymous");
+    expect(formatStreamlabsName("A !@#$%^&*()")).toBe("Anonymous");
   });
 
   test("truncates names longer than 25 code points", () => {
