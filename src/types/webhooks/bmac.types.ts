@@ -93,5 +93,6 @@ export interface BmacIntegrationRecord {
   userId: string;
   bmacSecret: string | null;
   streamlabsSecret: string | null;
+  streamlabsRefreshToken?: string | null;
   streamlabsOptions: number;
 }

@@ -13,7 +13,7 @@ import { StreamlabsOption } from "@/consts/integration";
 import { verifySignature } from "@/utils/signature";
 import { webhookParser } from "@/utils/webhook";
 import { logDev } from "@/utils/log";
-import { formatStreamlabsName } from "@/utils/streamlabs";
+import { formatStreamlabsName, relayStreamlabsDonation } from "@/utils/streamlabs";
 
 
 let cachedIntegrations: BmacIntegrationRecord[] | null = null;
@@ -35,6 +35,7 @@ export async function getBmacIntegrations(forceRefresh = false): Promise<BmacInt
       userId: true,
       bmacSecret: true,
       streamlabsSecret: true,
+      streamlabsRefreshToken: true,
       streamlabsOptions: true,
     },
   });
@@ -88,6 +89,7 @@ const webhookHandler = async ({
             userId: true,
             bmacSecret: true,
             streamlabsSecret: true,
+            streamlabsRefreshToken: true,
             streamlabsOptions: true,
           },
         });
@@ -199,97 +201,23 @@ const webhookHandler = async ({
       (matchedIntegration.streamlabsOptions & optionFlag) !== 0;
 
     if (matchedIntegration.streamlabsSecret && isStreamlabsEnabled) {
-      let relayLogId: string | null = null;
-      try {
-        const relayLog = await prisma.client.streamlabsRelayLog.create({
-          data: {
-            userId: matchedIntegration.userId,
-            provider: "buymeacoffee",
-            providerTxId,
-            type: alertType,
-            status: TransactionStatus.PENDING,
-            amount: Math.round(amount * 100),
-            currency,
-            senderName,
-            senderEmail,
-            message,
-          },
-        });
-        relayLogId = relayLog.id;
-        await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-        await redis.redis.publish(
-          `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-          JSON.stringify({ event: "created", log: relayLog }),
-        );
-      } catch (dbErr) {
-        betterConsole.error(
-          tsflag("error", true, s("Failed to create pending StreamlabsRelayLog:", { color: "red" })),
-          dbErr,
-        );
-      }
+      logDev(
+        tsflag("info", true, s("Relaying BMAC donation to Streamlabs API...", { color: "blue" })),
+      );
 
-      fetch("https://streamlabs.com/api/v2.0/donations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${matchedIntegration.streamlabsSecret}`,
-        },
-        body: JSON.stringify({
-          name: formatStreamlabsName(senderName),
-          message: message || "",
-          identifier: senderEmail || "buymeacoffee",
-          amount,
-          currency,
-          skip_alert: false,
-        }),
-      })
-        .then(async (res) => {
-          const isOk = res.ok;
-          const errText = isOk ? null : await res.text();
-
-          if (!isOk) {
-            betterConsole.error(
-              tsflag("error", true, s("Streamlabs Donation Relay Failed:", { color: "red" })),
-              errText,
-            );
-          }
-
-          if (relayLogId) {
-            const updated = await prisma.client.streamlabsRelayLog.update({
-              where: { id: relayLogId },
-              data: {
-                status: isOk ? TransactionStatus.COMPLETED : TransactionStatus.FAILED,
-                errorMessage: errText,
-              },
-            });
-            await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-            await redis.redis.publish(
-              `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-              JSON.stringify({ event: "updated", log: updated }),
-            );
-          }
-        })
-        .catch(async (err: unknown) => {
-          betterConsole.error(
-            tsflag("error", true, s("Streamlabs Donation Relay Error:", { color: "red" })),
-            err,
-          );
-
-          if (relayLogId) {
-            const updated = await prisma.client.streamlabsRelayLog.update({
-              where: { id: relayLogId },
-              data: {
-                status: TransactionStatus.FAILED,
-                errorMessage: String(err),
-              },
-            });
-            await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-            await redis.redis.publish(
-              `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-              JSON.stringify({ event: "updated", log: updated }),
-            );
-          }
-        });
+      relayStreamlabsDonation({
+        userId: matchedIntegration.userId,
+        accessToken: matchedIntegration.streamlabsSecret,
+        refreshToken: matchedIntegration.streamlabsRefreshToken,
+        name: senderName,
+        message,
+        identifier: senderEmail || "buymeacoffee",
+        amount,
+        currency,
+        provider: "buymeacoffee",
+        providerTxId,
+        alertType,
+      });
     }
 
     const widgets = await prisma.client.widget.findMany({

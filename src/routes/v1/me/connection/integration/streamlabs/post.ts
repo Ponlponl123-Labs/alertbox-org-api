@@ -40,7 +40,10 @@ const postHandler = async ({ headers, set, ip, body }: any) => {
     return "Bad Request";
   }
 
-  await setConnection(user.data.id, "streamlabs", data.access_token);
+  await setConnection(user.data.id, "streamlabs", {
+    secret: data.access_token,
+    refreshToken: data.refresh_token || null,
+  });
 
   return "OK";
 };

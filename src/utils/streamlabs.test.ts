@@ -52,3 +52,11 @@ describe("formatStreamlabsName", () => {
     expect(Array.from(result).length).toBeLessThanOrEqual(25);
   });
 });
+
+describe("refreshStreamlabsToken", () => {
+  test("returns null if refresh fails", async () => {
+    const { refreshStreamlabsToken } = await import("./streamlabs");
+    const res = await refreshStreamlabsToken("fake-user-id", "invalid-token");
+    expect(res).toBeNull();
+  });
+});

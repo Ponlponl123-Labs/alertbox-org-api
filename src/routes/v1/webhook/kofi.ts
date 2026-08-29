@@ -6,7 +6,7 @@ import betterConsole, { tsflag, s } from "ts-better-console";
 import { AlertEventType, TransactionStatus } from "@/generated/prisma/client";
 import { StreamlabsOption } from "@/consts/integration";
 import { logDev } from "@/utils/log";
-import { formatStreamlabsName } from "@/utils/streamlabs";
+import { formatStreamlabsName, relayStreamlabsDonation } from "@/utils/streamlabs";
 
 const webhookHandler = async ({ body, set }: any) => {
   try {
@@ -28,8 +28,17 @@ const webhookHandler = async ({ body, set }: any) => {
     }
 
     if (!payload || !payload.verification_token) {
-      set.status = 400;
-      return "Missing verification_token";
+      betterConsole.warn(
+        tsflag(
+          "warn",
+          true,
+          s("✗ Authentication failed: Missing Ko-fi verification token.", {
+            color: "yellow",
+          }),
+        ),
+      );
+      set.status = "Unauthorized";
+      return "Unauthorized";
     }
 
     const verificationToken = payload.verification_token;
@@ -44,6 +53,7 @@ const webhookHandler = async ({ body, set }: any) => {
         userId: true,
         kofiSecret: true,
         streamlabsSecret: true,
+        streamlabsRefreshToken: true,
         streamlabsOptions: true,
       },
     });
@@ -185,133 +195,19 @@ const webhookHandler = async ({ body, set }: any) => {
         ),
       );
 
-      // Create a pending relay log in DB
-      let relayLog: any = null;
-      try {
-        relayLog = await prisma.client.streamlabsRelayLog.create({
-          data: {
-            userId: matchedIntegration.userId,
-            provider: "kofi",
-            providerTxId,
-            type: alertType,
-            status: TransactionStatus.PENDING,
-            amount: Math.round(amount * 100), // store in cents
-            currency,
-            senderName,
-            senderEmail,
-            message,
-          },
-        });
-        await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-        
-        // Publish real-time pending log event
-        await redis.redis.publish(
-          `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-          JSON.stringify({ event: "created", log: relayLog })
-        );
-      } catch (dbErr) {
-        betterConsole.error(
-          tsflag(
-            "error",
-            true,
-            s("Failed to create pending StreamlabsRelayLog:", { color: "red" }),
-          ),
-          dbErr,
-        );
-      }
-
-      fetch("https://streamlabs.com/api/v2.0/donations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${matchedIntegration.streamlabsSecret}`,
-        },
-        body: JSON.stringify({
-          name: formatStreamlabsName(senderName),
-          message: message || "",
-          identifier: senderEmail || "kofi",
-          amount: amount,
-          currency: currency,
-          skip_alert: false,
-        }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const errText = await res.text();
-            betterConsole.error(
-              tsflag(
-                "error",
-                true,
-                s("Streamlabs Donation Relay Failed:", { color: "red" }),
-              ),
-              errText,
-            );
-
-            if (relayLog) {
-              const updated = await prisma.client.streamlabsRelayLog.update({
-                where: { id: relayLog.id },
-                data: {
-                  status: TransactionStatus.FAILED,
-                  errorMessage: errText,
-                },
-              });
-              await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-              await redis.redis.publish(
-                `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-                JSON.stringify({ event: "updated", log: updated })
-              );
-            }
-          } else {
-            logDev(
-              tsflag(
-                "info",
-                true,
-                s("✓ Successfully relayed Ko-fi donation to Streamlabs", {
-                  color: "green",
-                }),
-              ),
-            );
-
-            if (relayLog) {
-              const updated = await prisma.client.streamlabsRelayLog.update({
-                where: { id: relayLog.id },
-                data: {
-                  status: TransactionStatus.COMPLETED,
-                },
-              });
-              await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-              await redis.redis.publish(
-                `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-                JSON.stringify({ event: "updated", log: updated })
-              );
-            }
-          }
-        })
-        .catch(async (err) => {
-          betterConsole.error(
-            tsflag(
-              "error",
-              true,
-              s("Streamlabs Donation Relay Error:", { color: "red" }),
-            ),
-            err,
-          );
-
-          if (relayLog) {
-            const updated = await prisma.client.streamlabsRelayLog.update({
-              where: { id: relayLog.id },
-              data: {
-                status: TransactionStatus.FAILED,
-                errorMessage: String(err),
-              },
-            });
-            await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-            await redis.redis.publish(
-              `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-              JSON.stringify({ event: "updated", log: updated })
-            );
-          }
-        });
+      relayStreamlabsDonation({
+        userId: matchedIntegration.userId,
+        accessToken: matchedIntegration.streamlabsSecret,
+        refreshToken: matchedIntegration.streamlabsRefreshToken,
+        name: senderName,
+        message,
+        identifier: senderEmail || "kofi",
+        amount,
+        currency,
+        provider: "kofi",
+        providerTxId,
+        alertType,
+      });
     }
 
     // Fetch active widgets of type ALERTBOX for the user

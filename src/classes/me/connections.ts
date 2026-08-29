@@ -37,10 +37,11 @@ export function resolveProvider(name: string): SupportedProvider | null {
 export async function setConnection(
   uid: string,
   provider: SupportedProvider,
-  payload: string | { username: string; secret: string },
+  payload: string | { username?: string | null; secret: string; refreshToken?: string | null },
 ) {
   const secret = typeof payload === "string" ? payload : payload.secret;
-  const username = typeof payload === "string" ? null : payload.username;
+  const username = typeof payload === "string" ? null : (payload.username ?? null);
+  const refreshToken = typeof payload === "string" ? undefined : payload.refreshToken;
 
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = secret;
@@ -54,7 +55,10 @@ export async function setConnection(
   }
   if (provider === "xendit") data.xenditSecret = secret;
   if (provider === "feelfreepay") data.ffpSecret = secret;
-  if (provider === "streamlabs") data.streamlabsSecret = secret;
+  if (provider === "streamlabs") {
+    data.streamlabsSecret = secret;
+    if (refreshToken !== undefined) data.streamlabsRefreshToken = refreshToken;
+  }
 
   const updated = await prisma.client.integration.upsert({
     where: { userId: uid },
@@ -97,7 +101,10 @@ export async function removeConnection(
   }
   if (provider === "xendit") data.xenditSecret = null;
   if (provider === "feelfreepay") data.ffpSecret = null;
-  if (provider === "streamlabs") data.streamlabsSecret = null;
+  if (provider === "streamlabs") {
+    data.streamlabsSecret = null;
+    data.streamlabsRefreshToken = null;
+  }
 
   const updated = await prisma.client.integration.update({
     data,
