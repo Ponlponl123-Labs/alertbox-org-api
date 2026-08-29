@@ -82,11 +82,27 @@ const webhookHandler = async ({ body, set }: any) => {
       ),
     );
 
-    const providerTxId = payload.kofi_transaction_id || payload.message_id;
-    if (!providerTxId) {
+    const rawTxId = payload.kofi_transaction_id || payload.message_id;
+    if (!rawTxId) {
       set.status = 400;
       return "Missing transaction identifier";
     }
+
+    const isTest =
+      rawTxId === "00000000-1111-2222-3333-444444444444" ||
+      rawTxId === "12345678-1234-1234-1234-1234567890ab" ||
+      rawTxId.startsWith("00000000-1111") ||
+      rawTxId.startsWith("12345678-1234") ||
+      rawTxId.toLowerCase().includes("test") ||
+      payload.from_name === "Ko-fi Team" ||
+      payload.from_name === "Test Supporter" ||
+      payload.from_name === "Jo Example" ||
+      (typeof payload.email === "string" && payload.email.includes("example.com")) ||
+      (payload.is_public === false && typeof payload.from_name === "string" && payload.from_name.toLowerCase().includes("test"));
+
+    const providerTxId = isTest
+      ? `${rawTxId}_test_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`
+      : rawTxId;
 
     const amount = Number(payload.amount || 0);
     const currency = payload.currency || "USD";
@@ -94,7 +110,6 @@ const webhookHandler = async ({ body, set }: any) => {
     const senderEmail = payload.email || null;
     const message = payload.message || null;
 
-    // Determine alert type based on Ko-fi payload properties
     let alertType: AlertEventType = AlertEventType.TIP;
     let optionFlag = StreamlabsOption.KOFI_DONATION_SUCCESS;
 
@@ -106,27 +121,28 @@ const webhookHandler = async ({ body, set }: any) => {
       optionFlag = StreamlabsOption.KOFI_PURCHASE_SUCCESS;
     }
 
-    // Check for duplicate webhook events
-    const existingTx = await prisma.client.transactionLog.findUnique({
-      where: {
-        provider_providerTxId: {
-          provider: "kofi",
-          providerTxId,
+    if (!isTest) {
+      const existingTx = await prisma.client.transactionLog.findUnique({
+        where: {
+          provider_providerTxId: {
+            provider: "kofi",
+            providerTxId,
+          },
         },
-      },
-    });
+      });
 
-    if (existingTx) {
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s(`Duplicate event ignored for Ko-fi transaction ID: ${providerTxId}`, {
-            color: "yellow",
-          }),
-        ),
-      );
-      return "Duplicate event ignored";
+      if (existingTx) {
+        logDev(
+          tsflag(
+            "info",
+            true,
+            s(`Duplicate event ignored for Ko-fi transaction ID: ${providerTxId}`, {
+              color: "yellow",
+            }),
+          ),
+        );
+        return "Duplicate event ignored";
+      }
     }
 
     logDev(
@@ -140,7 +156,6 @@ const webhookHandler = async ({ body, set }: any) => {
       ),
     );
 
-    // Store transaction log in database
     await prisma.client.transactionLog.create({
       data: {
         userId: matchedIntegration.userId,
@@ -148,8 +163,8 @@ const webhookHandler = async ({ body, set }: any) => {
         providerTxId,
         type: alertType,
         status: TransactionStatus.COMPLETED,
-        isTest: false,
-        amount: Math.round(amount * 100), // Store in cents
+        isTest,
+        amount: Math.round(amount * 100),
         currency,
         senderName,
         senderEmail,

@@ -153,26 +153,40 @@ const webhookHandler = async ({
     const { type, live_mode, data } = body;
     const isDonation = type === "donation.created";
     const alertType = isDonation ? AlertEventType.TIP : AlertEventType.MEMBERSHIP;
-    const providerTxId = isDonation && "transaction_id" in data && data.transaction_id
+    const rawTxId = isDonation && "transaction_id" in data && data.transaction_id
       ? String(data.transaction_id)
       : String(data.id);
+
+    const isTest =
+      !live_mode ||
+      rawTxId === "1" ||
+      rawTxId === "0" ||
+      rawTxId.toLowerCase().includes("test") ||
+      (typeof data.supporter_name === "string" && data.supporter_name.toLowerCase().includes("test"));
+
+    const providerTxId = isTest
+      ? `${rawTxId}_test_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`
+      : rawTxId;
+
     const amount = Number(data.amount || 0);
     const currency = data.currency || "USD";
     const senderName = data.supporter_name || "Anonymous";
     const senderEmail = data.supporter_email ?? null;
     const message = data.support_note ?? null;
 
-    const existingTx = await prisma.client.transactionLog.findUnique({
-      where: {
-        provider_providerTxId: {
-          provider: "buymeacoffee",
-          providerTxId,
+    if (!isTest) {
+      const existingTx = await prisma.client.transactionLog.findUnique({
+        where: {
+          provider_providerTxId: {
+            provider: "buymeacoffee",
+            providerTxId,
+          },
         },
-      },
-    });
+      });
 
-    if (existingTx) {
-      return "Duplicate event ignored";
+      if (existingTx) {
+        return "Duplicate event ignored";
+      }
     }
 
     await prisma.client.transactionLog.create({
@@ -182,7 +196,7 @@ const webhookHandler = async ({
         providerTxId,
         type: alertType,
         status: TransactionStatus.COMPLETED,
-        isTest: !live_mode,
+        isTest,
         amount: Math.round(amount * 100),
         currency,
         senderName,
