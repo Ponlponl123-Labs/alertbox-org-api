@@ -1,5 +1,8 @@
 export function isBearerToken(auth: string): string | false {
-  const split = auth.split(" ");
-  if (split[0] === "Bearer") return split[1];
+  if (!auth || typeof auth !== "string") return false;
+  const parts = auth.trim().split(/\s+/);
+  if (parts.length === 2 && parts[0].toLowerCase() === "bearer" && parts[1]) {
+    return parts[1];
+  }
   return false;
 }

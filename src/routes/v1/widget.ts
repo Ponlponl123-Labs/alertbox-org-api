@@ -79,6 +79,10 @@ subRedis.on("pmessage", (_pattern: string, channel: string, message: string) => 
  * Resolve widget ID and full Alertbox settings with Redis caching.
  */
 export async function resolveWidgetWithSettings(token: string): Promise<CachedWidgetSettings | null> {
+  if (!token || typeof token !== "string" || token.length > 255 || !/^[a-zA-Z0-9_.-]+$/.test(token)) {
+    return null;
+  }
+
   const cacheKey = `widget:settings:token:${token}`;
   const cached = await redis.redis.get(cacheKey);
   if (cached) {

@@ -12,13 +12,34 @@ class Server {
 
   constructor(port: number = 3000) {
     this.app = new Elysia({ serve: { reusePort: false } });
+    this.app.onRequest(({ set }) => {
+      set.headers["X-Content-Type-Options"] = "nosniff";
+      set.headers["X-Frame-Options"] = "SAMEORIGIN";
+      set.headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+      set.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+      if (!isDev) {
+        set.headers["Strict-Transport-Security"] =
+          "max-age=31536000; includeSubDomains; preload";
+      }
+    });
     this.app.use(
       cors({
-        origin: [
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
-          /^https?:\/\/([a-z0-9-]+\.)*alertbox\.org$/,
-          /^https?:\/\/([a-z0-9-]+\.)*tip-to\.me$/
+        origin: (request: Request): boolean => {
+          const origin = request.headers.get("origin");
+          if (!origin) return true;
+          if (isDev && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            return true;
+          }
+          return /^https:\/\/([a-z0-9-]+\.)*(alertbox\.org|tip-to\.me)$/i.test(origin);
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Signature-SHA256",
+          "X-Requested-With",
         ],
+        credentials: true,
       }),
     );
     this.port = port;

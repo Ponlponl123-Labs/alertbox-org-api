@@ -7,6 +7,25 @@ import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
   "/discord",
   async ({ body, set, server, request, ip }) => {
+    const redirectUrl = (() => {
+      try {
+        return new URL(body.redirect_uri);
+      } catch {
+        return null;
+      }
+    })();
+
+    const isAllowedRedirect =
+      redirectUrl &&
+      ((process.env.NODE_ENV === "development" &&
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(redirectUrl.origin)) ||
+        /^https:\/\/([a-z0-9-]+\.)*(alertbox\.org|tip-to\.me)$/i.test(redirectUrl.origin));
+
+    if (!isAllowedRedirect) {
+      set.status = "Bad Request";
+      return "Invalid or unauthorized redirect_uri";
+    }
+
     const access_token = await exchange_code(body.code, body.redirect_uri);
     if (!access_token) {
       set.status = "Unauthorized";
