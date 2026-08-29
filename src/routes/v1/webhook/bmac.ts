@@ -298,66 +298,21 @@ const webhookHandler = async ({
         type: "ALERTBOX",
         deletedAt: null,
       },
-      include: {
-        alertbox: {
-          include: {
-            events: true,
-          },
-        },
+      select: {
+        id: true,
       },
     });
 
     for (const widget of widgets) {
-      const eventSetting = widget.alertbox?.events.find(
-        (e) => e.eventType === alertType && e.isEnabled,
-      );
-
-      if (!eventSetting) continue;
-
-      const formatTemplate = (tpl?: string | null) =>
-        (tpl || "")
-          .replace("{{user}}", senderName)
-          .replace("{{amount}}", String(amount))
-          .replace("{{currency}}", currency);
-
       const alertPayload = {
         type: "alert",
         id: crypto.randomUUID(),
-        eventType: alertType,
-        prefix: formatTemplate(eventSetting.prefix),
-        subfix: formatTemplate(eventSetting.subfix),
-        messageLayout: eventSetting.messageLayout,
-        minVisibleDuration: eventSetting.minVisibleDuration,
-        animIn: eventSetting.animIn,
-        animOut: eventSetting.animOut,
-        animInDuration: eventSetting.animInDuration,
-        animOutDuration: eventSetting.animOutDuration,
-        image: eventSetting.image,
-        sound: eventSetting.sound,
-        soundVolume: eventSetting.soundVolume,
-        fontFamily: eventSetting.fontFamily,
-        fontSize: eventSetting.fontSize,
-        fontWeight: eventSetting.fontWeight,
-        textColor: eventSetting.textColor,
-        accentColor: eventSetting.accentColor,
-        subfixColor: eventSetting.subfixColor,
-        donorColor: eventSetting.donorColor,
-        amountColor: eventSetting.amountColor,
-        textShadowColor: eventSetting.textShadowColor,
-        textShadowSize: eventSetting.textShadowSize,
-        outlineColor: eventSetting.outlineColor,
-        outlineSize: eventSetting.outlineSize,
-        ttsEnabled: eventSetting.ttsEnabled && amount >= eventSetting.ttsMinTip,
-        ttsVoice: eventSetting.ttsVoice,
-        ttsVolume: eventSetting.ttsVolume,
-        ttsSpeed: eventSetting.ttsSpeed,
-        ttsPitch: eventSetting.ttsPitch,
-        ttsDelay: eventSetting.ttsDelay,
-        ttsOptions: eventSetting.ttsOptions,
-        message: message || "",
-        senderName,
+        event: alertType,
+        name: senderName,
         amount,
         currency,
+        message: message || "",
+        createdAt: Date.now(),
       };
 
       await redis.redis.publish(

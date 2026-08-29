@@ -10,6 +10,12 @@ const TOKEN_CACHE_TTL_SEC = 300;
 
 export const subRedis = redis.redis.duplicate();
 
+export interface CachedWidgetSettings {
+  widgetId: string;
+  type: string;
+  alertbox: any;
+}
+
 subRedis.on("error", (err: Error) => {
   betterConsole.error(
     tsflag("error", true, s("Redis Subscriber Error:", { color: "red" })),
@@ -69,54 +75,144 @@ subRedis.on("pmessage", (_pattern: string, channel: string, message: string) => 
   }
 });
 
-async function resolveWidgetId(token: string): Promise<string | null> {
-  const cacheKey = `widget:token:${token}`;
-  const cachedId = await redis.redis.get(cacheKey);
-  if (cachedId) return cachedId;
+/**
+ * Resolve widget ID and full Alertbox settings with Redis caching.
+ */
+export async function resolveWidgetWithSettings(token: string): Promise<CachedWidgetSettings | null> {
+  const cacheKey = `widget:settings:token:${token}`;
+  const cached = await redis.redis.get(cacheKey);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      // ignore parse error and fallback to DB
+    }
+  }
 
   const widget = await prisma.client.widget.findFirst({
     where: { token, deletedAt: null },
-    select: { id: true },
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
   });
 
   if (!widget) return null;
 
-  await redis.redis.setex(cacheKey, TOKEN_CACHE_TTL_SEC, widget.id);
-  return widget.id;
+  const result: CachedWidgetSettings = {
+    widgetId: widget.id,
+    type: widget.type,
+    alertbox: widget.alertbox,
+  };
+
+  await redis.redis.setex(cacheKey, TOKEN_CACHE_TTL_SEC, JSON.stringify(result));
+  await redis.redis.setex(`widget:token:${token}`, TOKEN_CACHE_TTL_SEC, widget.id);
+
+  return result;
 }
 
-export const widgetSocket = new Elysia().ws("/widget/:token", {
-  params: t.Object({
-    token: t.String(),
-  }),
-  async open(ws) {
-    try {
-      const { token } = ws.data.params;
-      if (!token) {
-        ws.send(JSON.stringify({ type: "error", message: "Token is required" }));
-        ws.close();
-        return;
+/**
+ * Broadcast reactive settings updates to all connected widget overlays and invalidate cache.
+ */
+export async function broadcastWidgetSettingsUpdate(
+  widgetId: string,
+  alertboxSettings: any,
+): Promise<void> {
+  const payload = {
+    type: "settings:update",
+    widgetId,
+    updatedAt: Date.now(),
+    settings: alertboxSettings,
+  };
+
+  // Find token to invalidate token-based cache
+  const widget = await prisma.client.widget.findUnique({
+    where: { id: widgetId },
+    select: { token: true },
+  });
+
+  if (widget?.token) {
+    await redis.redis.del(`widget:settings:token:${widget.token}`);
+  }
+
+  // Publish to Redis channel so all instances broadcast to connected WebSockets
+  await redis.redis.publish(`${ALERTS_PREFIX}${widgetId}`, JSON.stringify(payload));
+}
+
+export const widgetRouter = new Elysia()
+  .get(
+    "/widget/:token/settings",
+    async ({ params: { token }, set }) => {
+      const widgetData = await resolveWidgetWithSettings(token);
+      if (!widgetData) {
+        set.status = 401;
+        return { error: "Unauthorized or invalid widget token" };
       }
-
-      const widgetId = await resolveWidgetId(token);
-      if (!widgetId) {
-        ws.send(JSON.stringify({ type: "error", message: "Unauthorized token" }));
-        ws.close();
-        return;
+      return widgetData;
+    },
+    {
+      params: t.Object({
+        token: t.String(),
+      }),
+    },
+  )
+  .get(
+    "/widget/:token",
+    async ({ params: { token }, set }) => {
+      const widgetData = await resolveWidgetWithSettings(token);
+      if (!widgetData) {
+        set.status = 401;
+        return { error: "Unauthorized or invalid widget token" };
       }
+      return widgetData;
+    },
+    {
+      params: t.Object({
+        token: t.String(),
+      }),
+    },
+  )
+  .ws("/widget/:token", {
+    params: t.Object({
+      token: t.String(),
+    }),
+    async open(ws) {
+      try {
+        const { token } = ws.data.params;
+        if (!token) {
+          ws.send(JSON.stringify({ type: "error", message: "Token is required" }));
+          ws.close();
+          return;
+        }
 
-      ws.subscribe(`widget:${widgetId}`);
-      ws.send(JSON.stringify({ type: "connected", widgetId }));
-    } catch (err) {
-      betterConsole.error(
-        tsflag("error", true, s("WebSocket Handshake Error:", { color: "red" })),
-        err,
-      );
-      ws.send(JSON.stringify({ type: "error", message: "Internal Server Error" }));
-      ws.close();
-    }
-  },
-  close() {},
-});
+        const widgetData = await resolveWidgetWithSettings(token);
+        if (!widgetData) {
+          ws.send(JSON.stringify({ type: "error", message: "Unauthorized token" }));
+          ws.close();
+          return;
+        }
 
-export default widgetSocket;
+        ws.subscribe(`widget:${widgetData.widgetId}`);
+        ws.send(
+          JSON.stringify({
+            type: "settings:init",
+            widgetId: widgetData.widgetId,
+            settings: widgetData.alertbox,
+          }),
+        );
+      } catch (err) {
+        betterConsole.error(
+          tsflag("error", true, s("WebSocket Handshake Error:", { color: "red" })),
+          err,
+        );
+        ws.send(JSON.stringify({ type: "error", message: "Internal Server Error" }));
+        ws.close();
+      }
+    },
+    close() {},
+  });
+
+export default widgetRouter;
