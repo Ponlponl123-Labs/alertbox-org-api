@@ -1,6 +1,10 @@
-import { webhookBodySchema } from "@/types/webhooks/bmac.types";
 import Elysia from "elysia";
 import crypto from "crypto";
+import {
+  webhookBodySchema,
+  type WebhookBodySchemaType,
+  type BmacIntegrationRecord,
+} from "@/types/webhooks/bmac.types";
 import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";
 import betterConsole, { tsflag, s } from "ts-better-console";
@@ -11,60 +15,89 @@ import { webhookParser } from "@/utils/webhook";
 import { logDev } from "@/utils/log";
 import { formatStreamlabsName } from "@/utils/streamlabs";
 
-const webhookHandler = async ({ body, headers, request, set }: any) => {
+
+let cachedIntegrations: BmacIntegrationRecord[] | null = null;
+let lastCacheSync = 0;
+const CACHE_TTL_MS = 60_000;
+
+export async function getBmacIntegrations(forceRefresh = false): Promise<BmacIntegrationRecord[]> {
+  const now = Date.now();
+  if (!forceRefresh && cachedIntegrations && now - lastCacheSync < CACHE_TTL_MS) {
+    return cachedIntegrations;
+  }
+
+  const integrations = await prisma.client.integration.findMany({
+    where: {
+      bmacSecret: { not: null },
+      deletedAt: null,
+    },
+    select: {
+      userId: true,
+      bmacSecret: true,
+      streamlabsSecret: true,
+      streamlabsOptions: true,
+    },
+  });
+
+  cachedIntegrations = integrations;
+  lastCacheSync = now;
+  return integrations;
+}
+
+export function invalidateBmacIntegrations(): void {
+  cachedIntegrations = null;
+  lastCacheSync = 0;
+}
+
+const webhookHandler = async ({
+  body,
+  headers,
+  request,
+  set,
+}: {
+  body: WebhookBodySchemaType;
+  headers: Record<string, string | undefined>;
+  request: Request;
+  set: { status?: number | string };
+}) => {
   try {
     logDev(
       tsflag(
         "info",
         true,
-        s("Buy Me a Coffee webhook received!", { color: "blue" }),
+        s("Buy Me a Coffee webhook received", { color: "blue" }),
       ),
     );
 
-    let matchedIntegration: {
-      userId: string;
-      bmacSecret: string | null;
-      streamlabsSecret: string | null;
-      streamlabsOptions: number;
-    } | null = null;
+    let matchedIntegration: BmacIntegrationRecord | null = null;
     const authHeader = headers["authorization"];
-    const rawBody = (request as any).rawBody;
+    const rawBody = (request as unknown as { rawBody?: string }).rawBody;
+
+    const integrations = await getBmacIntegrations();
 
     if (authHeader) {
-      // Extract bearer token
       const token = authHeader.startsWith("Bearer ")
-        ? authHeader.substring(7)
+        ? authHeader.slice(7)
         : authHeader;
 
-      // Find integration in database with this bmacSecret
-      const matched = await prisma.client.integration.findFirst({
-        where: {
-          bmacSecret: token,
-          deletedAt: null,
-        },
-        select: {
-          userId: true,
-          bmacSecret: true,
-          streamlabsSecret: true,
-          streamlabsOptions: true,
-        },
-      });
-
-      if (matched) {
-        matchedIntegration = matched;
-        logDev(
-          tsflag(
-            "info",
-            true,
-            s("✓ Authenticated webhook via Bearer token (testing/fake).", {
-              color: "green",
-            }),
-          ),
-        );
+      matchedIntegration = integrations.find((i) => i.bmacSecret === token) ?? null;
+      if (!matchedIntegration) {
+        const dbMatched = await prisma.client.integration.findFirst({
+          where: { bmacSecret: token, deletedAt: null },
+          select: {
+            userId: true,
+            bmacSecret: true,
+            streamlabsSecret: true,
+            streamlabsOptions: true,
+          },
+        });
+        if (dbMatched) {
+          matchedIntegration = dbMatched;
+          invalidateBmacIntegrations();
+        }
       }
     }
 
-    // Fallback to signature verification if not authorized via Bearer token
     if (!matchedIntegration) {
       const signature = headers["x-signature-sha256"];
       if (!signature) {
@@ -77,38 +110,26 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
         return "Raw body was not captured correctly";
       }
 
-      // Retrieve all integrations with BMAC configuration (select only necessary fields)
-      const integrations = await prisma.client.integration.findMany({
-        where: {
-          bmacSecret: {
-            not: null,
-          },
-        },
-        select: {
-          userId: true,
-          bmacSecret: true,
-          streamlabsSecret: true,
-          streamlabsOptions: true,
-        },
-      });
-
-      // Find the integration that matches the computed signature
       for (const integration of integrations) {
         if (
           integration.bmacSecret &&
           verifySignature(rawBody, integration.bmacSecret, signature)
         ) {
           matchedIntegration = integration;
-          logDev(
-            tsflag(
-              "info",
-              true,
-              s("✓ Authenticated webhook via HMAC signature verification.", {
-                color: "green",
-              }),
-            ),
-          );
           break;
+        }
+      }
+
+      if (!matchedIntegration) {
+        const freshIntegrations = await getBmacIntegrations(true);
+        for (const integration of freshIntegrations) {
+          if (
+            integration.bmacSecret &&
+            verifySignature(rawBody, integration.bmacSecret, signature)
+          ) {
+            matchedIntegration = integration;
+            break;
+          }
         }
       }
     }
@@ -118,7 +139,7 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
         tsflag(
           "warn",
           true,
-          s("✗ Authentication failed: Invalid signature or token.", {
+          s("Authentication failed: Invalid signature or token", {
             color: "yellow",
           }),
         ),
@@ -128,35 +149,17 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
     }
 
     const { type, live_mode, data } = body;
+    const isDonation = type === "donation.created";
+    const alertType = isDonation ? AlertEventType.TIP : AlertEventType.MEMBERSHIP;
+    const providerTxId = isDonation && "transaction_id" in data && data.transaction_id
+      ? String(data.transaction_id)
+      : String(data.id);
+    const amount = Number(data.amount || 0);
+    const currency = data.currency || "USD";
+    const senderName = data.supporter_name || "Anonymous";
+    const senderEmail = data.supporter_email ?? null;
+    const message = data.support_note ?? null;
 
-    // Extract transaction detail based on event type
-    let providerTxId: string;
-    let amount: number;
-    let currency: string;
-    let senderName: string;
-    let senderEmail: string | null = null;
-    let message: string | null = null;
-    let alertType: AlertEventType;
-
-    if (type === "donation.created") {
-      providerTxId = String(data.transaction_id);
-      amount = data.amount;
-      currency = data.currency;
-      senderName = data.supporter_name || "Anonymous";
-      senderEmail = data.supporter_email;
-      message = data.support_note;
-      alertType = AlertEventType.TIP;
-    } else {
-      providerTxId = String(data.transaction_id);
-      amount = data.amount;
-      currency = data.currency;
-      senderName = data.supporter_name || "Anonymous";
-      senderEmail = data.supporter_email;
-      message = data.support_note;
-      alertType = AlertEventType.MEMBERSHIP;
-    }
-
-    // Check for duplicate webhook events
     const existingTx = await prisma.client.transactionLog.findUnique({
       where: {
         provider_providerTxId: {
@@ -167,30 +170,9 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
     });
 
     if (existingTx) {
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s(`Duplicate event ignored for transaction ID: ${providerTxId}`, {
-            color: "yellow",
-          }),
-        ),
-      );
       return "Duplicate event ignored";
     }
 
-    logDev(
-      tsflag(
-        "info",
-        true,
-        s(
-          `Processing event ${type} (Tx: ${providerTxId}) for user ${matchedIntegration.userId}`,
-          { color: "blue" },
-        ),
-      ),
-    );
-
-    // Log the transaction in database
     await prisma.client.transactionLog.create({
       data: {
         userId: matchedIntegration.userId,
@@ -199,90 +181,49 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
         type: alertType,
         status: TransactionStatus.COMPLETED,
         isTest: !live_mode,
-        amount: Math.round(amount * 100), // Store in cents
+        amount: Math.round(amount * 100),
         currency,
         senderName,
         senderEmail,
         message,
-        rawPayload: rawBody,
+        rawPayload: rawBody ?? JSON.stringify(body),
       },
     });
 
-    // Differentiate options depending on event type
-    const optionFlag =
-      alertType === AlertEventType.MEMBERSHIP
-        ? StreamlabsOption.BMAC_MEMBERSHIP_SUCCESS
-        : StreamlabsOption.BMAC_DONATION_SUCCESS;
+    const optionFlag = isDonation
+      ? StreamlabsOption.BMAC_DONATION_SUCCESS
+      : StreamlabsOption.BMAC_MEMBERSHIP_SUCCESS;
 
-    // Relay to Streamlabs if connected and enabled
     const isStreamlabsEnabled =
       matchedIntegration.streamlabsOptions === 0 ||
       (matchedIntegration.streamlabsOptions & optionFlag) !== 0;
 
-    if (!matchedIntegration.streamlabsSecret) {
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s(
-            "Streamlabs relay skipped: User has no active Streamlabs connection.",
-            { color: "yellow" },
-          ),
-        ),
-      );
-    } else if (!isStreamlabsEnabled) {
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s(
-            `Streamlabs relay skipped: Option flag ${optionFlag} is disabled (Options: ${matchedIntegration.streamlabsOptions}).`,
-            { color: "yellow" },
-          ),
-        ),
-      );
-    }
-
     if (matchedIntegration.streamlabsSecret && isStreamlabsEnabled) {
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s("Relaying donation to Streamlabs API...", { color: "blue" }),
-        ),
-      );
-
-      // Create a pending relay log in DB
-      let relayLog: any = null;
+      let relayLogId: string | null = null;
       try {
-        relayLog = await prisma.client.streamlabsRelayLog.create({
+        const relayLog = await prisma.client.streamlabsRelayLog.create({
           data: {
             userId: matchedIntegration.userId,
             provider: "buymeacoffee",
             providerTxId,
             type: alertType,
             status: TransactionStatus.PENDING,
-            amount: Math.round(amount * 100), // store in cents
+            amount: Math.round(amount * 100),
             currency,
             senderName,
             senderEmail,
             message,
           },
         });
+        relayLogId = relayLog.id;
         await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-        
-        // Publish real-time pending log event
         await redis.redis.publish(
           `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-          JSON.stringify({ event: "created", log: relayLog })
+          JSON.stringify({ event: "created", log: relayLog }),
         );
       } catch (dbErr) {
         betterConsole.error(
-          tsflag(
-            "error",
-            true,
-            s("Failed to create pending StreamlabsRelayLog:", { color: "red" }),
-          ),
+          tsflag("error", true, s("Failed to create pending StreamlabsRelayLog:", { color: "red" })),
           dbErr,
         );
       }
@@ -297,76 +238,46 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
           name: formatStreamlabsName(senderName),
           message: message || "",
           identifier: senderEmail || "buymeacoffee",
-          amount: amount,
-          currency: currency,
+          amount,
+          currency,
           skip_alert: false,
         }),
       })
         .then(async (res) => {
-          if (!res.ok) {
-            const errText = await res.text();
+          const isOk = res.ok;
+          const errText = isOk ? null : await res.text();
+
+          if (!isOk) {
             betterConsole.error(
-              tsflag(
-                "error",
-                true,
-                s("Streamlabs Donation Relay Failed:", { color: "red" }),
-              ),
+              tsflag("error", true, s("Streamlabs Donation Relay Failed:", { color: "red" })),
               errText,
             );
+          }
 
-            if (relayLog) {
-              const updated = await prisma.client.streamlabsRelayLog.update({
-                where: { id: relayLog.id },
-                data: {
-                  status: TransactionStatus.FAILED,
-                  errorMessage: errText,
-                },
-              });
-              await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-              await redis.redis.publish(
-                `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-                JSON.stringify({ event: "updated", log: updated })
-              );
-            }
-          } else {
-            logDev(
-              tsflag(
-                "info",
-                true,
-                s("✓ Successfully relayed donation to Streamlabs", {
-                  color: "green",
-                }),
-              ),
+          if (relayLogId) {
+            const updated = await prisma.client.streamlabsRelayLog.update({
+              where: { id: relayLogId },
+              data: {
+                status: isOk ? TransactionStatus.COMPLETED : TransactionStatus.FAILED,
+                errorMessage: errText,
+              },
+            });
+            await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
+            await redis.redis.publish(
+              `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
+              JSON.stringify({ event: "updated", log: updated }),
             );
-
-            if (relayLog) {
-              const updated = await prisma.client.streamlabsRelayLog.update({
-                where: { id: relayLog.id },
-                data: {
-                  status: TransactionStatus.COMPLETED,
-                },
-              });
-              await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
-              await redis.redis.publish(
-                `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-                JSON.stringify({ event: "updated", log: updated })
-              );
-            }
           }
         })
-        .catch(async (err) => {
+        .catch(async (err: unknown) => {
           betterConsole.error(
-            tsflag(
-              "error",
-              true,
-              s("Streamlabs Donation Relay Error:", { color: "red" }),
-            ),
+            tsflag("error", true, s("Streamlabs Donation Relay Error:", { color: "red" })),
             err,
           );
 
-          if (relayLog) {
+          if (relayLogId) {
             const updated = await prisma.client.streamlabsRelayLog.update({
-              where: { id: relayLog.id },
+              where: { id: relayLogId },
               data: {
                 status: TransactionStatus.FAILED,
                 errorMessage: String(err),
@@ -375,13 +286,12 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
             await redis.redis.del(`redis:streamlabs-relay-logs:${matchedIntegration.userId}`);
             await redis.redis.publish(
               `alertbox-org:streamlabs-relay-logs:${matchedIntegration.userId}`,
-              JSON.stringify({ event: "updated", log: updated })
+              JSON.stringify({ event: "updated", log: updated }),
             );
           }
         });
     }
 
-    // Fetch active widgets of type ALERTBOX for the user
     const widgets = await prisma.client.widget.findMany({
       where: {
         userId: matchedIntegration.userId,
@@ -397,51 +307,25 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
       },
     });
 
-    logDev(
-      tsflag(
-        "info",
-        true,
-        s(`Fetched ${widgets.length} active ALERTBOX widgets for user.`, {
-          color: "blue",
-        }),
-      ),
-    );
-
     for (const widget of widgets) {
       const eventSetting = widget.alertbox?.events.find(
         (e) => e.eventType === alertType && e.isEnabled,
       );
 
-      if (!eventSetting) {
-        logDev(
-          tsflag(
-            "info",
-            true,
-            s(
-              `Skipping widget ${widget.id}: event setting for ${alertType} is missing or disabled.`,
-              { color: "yellow" },
-            ),
-          ),
-        );
-        continue;
-      }
+      if (!eventSetting) continue;
 
-      const prefix = (eventSetting.prefix || "")
-        .replace("{{user}}", senderName)
-        .replace("{{amount}}", String(amount))
-        .replace("{{currency}}", currency);
-
-      const subfix = (eventSetting.subfix || "")
-        .replace("{{user}}", senderName)
-        .replace("{{amount}}", String(amount))
-        .replace("{{currency}}", currency);
+      const formatTemplate = (tpl?: string | null) =>
+        (tpl || "")
+          .replace("{{user}}", senderName)
+          .replace("{{amount}}", String(amount))
+          .replace("{{currency}}", currency);
 
       const alertPayload = {
         type: "alert",
         id: crypto.randomUUID(),
         eventType: alertType,
-        prefix,
-        subfix,
+        prefix: formatTemplate(eventSetting.prefix),
+        subfix: formatTemplate(eventSetting.subfix),
         messageLayout: eventSetting.messageLayout,
         minVisibleDuration: eventSetting.minVisibleDuration,
         animIn: eventSetting.animIn,
@@ -476,20 +360,8 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
         currency,
       };
 
-      logDev(
-        tsflag(
-          "info",
-          true,
-          s(
-            `Publishing alert payload to Redis channel: alertbox-org:alerts:${widget.id}`,
-            { color: "blue" },
-          ),
-        ),
-      );
-
-      // Publish to Redis channel so all subscribers on all servers receive it
       await redis.redis.publish(
-        "alertbox-org:alerts:" + widget.id,
+        `alertbox-org:alerts:${widget.id}`,
         JSON.stringify(alertPayload),
       );
     }
@@ -497,11 +369,7 @@ const webhookHandler = async ({ body, headers, request, set }: any) => {
     return "OK";
   } catch (error) {
     betterConsole.error(
-      tsflag(
-        "error",
-        true,
-        s("Buy Me a Coffee Webhook Error:", { color: "red" }),
-      ),
+      tsflag("error", true, s("Buy Me a Coffee Webhook Error:", { color: "red" })),
       error,
     );
     set.status = 500;

@@ -1,8 +1,36 @@
+# Dependencies & Build Output
 node_modules
 dist
-.env*
-*.log
+build
+coverage
+.nyc_output
+
+# Git & GitHub
 .git
+.github
 .gitignore
-Dockerfile
+.dockerignore
+
+# Docker & CI
+Dockerfile*
+docker-compose*
+Jenkinsfile
+
+# Environment & Secrets
+.env*
+*.pem
+
+# Editor & System
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Documentation & Logs
+*.log
 README.md
+*.md
+*.tsbuildinfo
+*.js.map
+*.zip
+*.tar.gz

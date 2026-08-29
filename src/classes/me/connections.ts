@@ -1,5 +1,6 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
+import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
 
 export const supported_providers = [
   "stripe",
@@ -73,16 +74,13 @@ export async function setConnection(
     redis.redis.del(`user:${uid}:info`),
   ]);
 
+  if (provider === "buymeacoffee") {
+    invalidateBmacIntegrations();
+  }
+
   return updated;
 }
 
-/**
- * Remove a connection secret for a user.
- * 
- * @param uid - The unique user identifier.
- * @param provider - The connection provider.
- * @returns The updated integration record.
- */
 export async function removeConnection(
   uid: string,
   provider: SupportedProvider,
@@ -110,6 +108,10 @@ export async function removeConnection(
     redis.redis.del(`user:${uid}:connections:${provider}`),
     redis.redis.del(`user:${uid}:info`),
   ]);
+
+  if (provider === "buymeacoffee") {
+    invalidateBmacIntegrations();
+  }
 
   return updated;
 }

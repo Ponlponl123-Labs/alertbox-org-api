@@ -1,20 +1,21 @@
 import betterConsole, { s, tsflag } from "ts-better-console";
 
-const nodeEnv = Bun.env.NODE_ENV || "production";
+const nodeEnv = (typeof Bun !== "undefined" ? Bun.env.NODE_ENV : process.env.NODE_ENV) || "production";
 const isDev = nodeEnv === "development";
 
-// Priority list for environment files to check for logging purposes
 const envFiles = isDev
   ? [".env.development", ".env.dev", ".env.local", ".env"]
   : [".env.production", ".env.prod", ".env"];
 
 let loadedFile: string | null = null;
 
-for (const file of envFiles) {
-  const f = Bun.file(file);
-  if (f.size > 0) {
-    loadedFile = file;
-    break;
+if (typeof Bun !== "undefined") {
+  for (const file of envFiles) {
+    const f = Bun.file(file);
+    if (f.size > 0) {
+      loadedFile = file;
+      break;
+    }
   }
 }
 

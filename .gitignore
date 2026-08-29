@@ -1,49 +1,57 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# Package manager locks (using bun.lockb)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
-# testing
-/coverage
+# Build & Compilation
+dist/
+build/
+*.tsbuildinfo
+*.js.map
+*.exe
 
-# next.js
-/.next/
-/out/
+# Database & Generated
+/src/generated/prisma
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
 
-# production
-/build
-
-# misc
-.DS_Store
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
 *.pem
 
-# debug
+# Logs & Diagnostics
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# local env files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-*development*
-*.local
-
-# vercel
-.vercel
-
 **/*.trace
-**/*.zip
-**/*.tar.gz
-**/*.tgz
-**/*.log
-package-lock.json
-**/*.bun
-/src/generated/prisma
 
-*.exe
-*.js.map
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Archives & Temp
+*.zip
+*.tar.gz
+*.tgz
+*.tmp
+*.temp

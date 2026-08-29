@@ -2,7 +2,7 @@
   "name": "alertbox-org-api",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
     "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
@@ -21,6 +21,7 @@
     "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.0",
     "bun-types": "latest",
     "prisma": "^7.8.0"
   },

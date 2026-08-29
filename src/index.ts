@@ -87,6 +87,16 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
       betterConsole.log(tsflag("info", true, "Redis connection closed."));
     }
 
+    try {
+      const { subRedis } = await import("./routes/v1/widget");
+      if (subRedis) {
+        await subRedis.quit();
+        betterConsole.log(tsflag("info", true, "Redis subscriber closed."));
+      }
+    } catch {
+      // ignore
+    }
+
     if (prisma && prisma.client) {
       await prisma.client.$disconnect();
       betterConsole.log(
