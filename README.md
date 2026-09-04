@@ -116,4 +116,4 @@ alertbox-org-api/
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Ponlponl123 Labs License (MIT) — see the [LICENSE](LICENSE) file for details.

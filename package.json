@@ -1,6 +1,7 @@
 {
   "name": "alertbox-org-api",
   "version": "1.0.50",
+  "license": "Ponlponl123 Labs License (MIT)",
   "scripts": {
     "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
