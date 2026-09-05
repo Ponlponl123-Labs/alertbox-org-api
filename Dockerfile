@@ -33,6 +33,13 @@ COPY --from=build /app/dist/index.js ./index.js
 # Copy static assets required by the server (favicon.ico is served in src/core/server.ts)
 COPY --from=build /app/favicon.ico ./favicon.ico
 
+# Copy Prisma schema, migrations, config, and CLI for runtime migration execution
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/src/config ./src/config
+
 # Kubernetes / Docker best practice: run as a non-root user
 USER bun
 

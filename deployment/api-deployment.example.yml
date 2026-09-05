@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertbox-org-config
+  namespace: ponlponl123-labs
+data:
+  config.toml: |
+    title = "AlertBox.org"
+
+    [redis]
+    enabled = true
+    host = "redis-master.redis.svc.cluster.local"
+    port = 6379
+    name = "mymaster"
+    db = 0
+    natmap = []
+
+    [redis.sentinel]
+    enabled = true
+    nodes = [
+      { host = "redis-sentinel-0.redis-sentinel.redis.svc.cluster.local", port = 26379 },
+      { host = "redis-sentinel-1.redis-sentinel.redis.svc.cluster.local", port = 26379 },
+    ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertbox-org-api
+  namespace: ponlponl123-labs
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: alertbox-org-api
+  template:
+    metadata:
+      labels:
+        app: alertbox-org-api
+    spec:
+      containers:
+        - name: alertbox-org-api
+          image: alertbox-org-api:latest
+          ports:
+            - containerPort: 3030
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3030
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3030
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: storage
+              mountPath: /mnt/foundation/alertbox.org
+              readOnly: false
+            - name: app-config
+              mountPath: /app/config.toml
+              subPath: config.toml
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DB_HOST
+              value: "mariadb-galera.mariadb.svc.cluster.local"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_USER
+              value: "user"
+            - name: DB_NAME
+              value: "database"
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: ALERTBOX_ORG_DB_PASS
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: REDIS_PASSWORD
+            - name: REDIS_SENTINEL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: REDIS_SENTINEL_PASSWORD
+            - name: DISCORD_CLIENT_ID
+              value: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            - name: DISCORD_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: ALERTBOX_ORG_DISCORD_CLIENT_SECRET
+            - name: STREAMLABS_CLIENT_ID
+              value: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            - name: STREAMLABS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: ALERTBOX_ORG_STREAMLABS_CLIENT_SECRET
+            - name: STORAGE_PATH
+              value: "/mnt/foundation/alertbox.org"
+            - name: CDN_BASE_URL
+              value: "https://static.example.com/alertbox.org"
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: foundation-pvc
+        - name: app-config
+          configMap:
+            name: alertbox-org-config

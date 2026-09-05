@@ -7,6 +7,8 @@
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
     "db:push": "bun --env-file=.env.development.local x prisma db push",
     "db:generate": "bunx prisma generate",
+    "db:migrate:dev": "bun --env-file=.env.development.local x prisma migrate dev",
+    "db:migrate:deploy": "bun run prisma migrate deploy",
     "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
     "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
   },

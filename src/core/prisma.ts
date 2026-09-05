@@ -24,7 +24,42 @@ class PrismaORM {
       password: dbConfig.password,
       database: dbConfig.database,
     });
-    this.client = new PrismaClient({ adapter: this.adapter });
+    const baseClient = new PrismaClient({ adapter: this.adapter });
+    this.client = baseClient.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ operation, args, query }) {
+            if (args && (args as any).data && ["create", "update", "upsert"].includes(operation)) {
+              const data = (args as any).data;
+              for (const key of Object.keys(data)) {
+                if (key.endsWith("_next")) {
+                  const baseKey = key.slice(0, -5);
+                  if (data[baseKey] === undefined) data[baseKey] = data[key];
+                }
+              }
+            }
+            const result = await query(args);
+            if (result && typeof result === "object") {
+              const resolveNext = (item: any) => {
+                if (!item || typeof item !== "object") return;
+                for (const key of Object.keys(item)) {
+                  if (key.endsWith("_next") && item[key] !== null && item[key] !== undefined) {
+                    const baseKey = key.slice(0, -5);
+                    item[baseKey] = item[key];
+                  }
+                }
+              };
+              if (Array.isArray(result)) {
+                result.forEach(resolveNext);
+              } else {
+                resolveNext(result);
+              }
+            }
+            return result;
+          },
+        },
+      },
+    }) as PrismaClient;
 
     this.connect();
   }

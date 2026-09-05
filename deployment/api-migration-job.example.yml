@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: alertbox-org-api-migration
+  namespace: ponlponl123-labs
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: alertbox-org-api-migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration-runner
+          image: alertbox-org-api:latest
+          command: ["bun", "run", "db:migrate:deploy"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DB_HOST
+              value: "mariadb-galera.mariadb.svc.cluster.local"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_USER
+              value: "user"
+            - name: DB_NAME
+              value: "database"
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: secret
+                  key: mariadb_root_password
