@@ -56,6 +56,10 @@ const printBanner = (): void => {
     ]),
     "\n",
   );
+  betterConsole.log(
+    cs(["Roadmap:", link("ponl.link/roadmap-alertbox.org", "https://ponl.link/roadmap-alertbox.org")]),
+    "\n",
+  );
 };
 
 printBanner();

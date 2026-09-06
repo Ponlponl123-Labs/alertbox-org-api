@@ -5,6 +5,7 @@ import router, { availableVersions } from "../routes";
 import { UnauthorizedError, BadRequestError } from "./auth";
 import { setBunServer } from "./bun-server";
 import { isDev } from "../config/env";
+import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 
 class Server {
   public app: Elysia;
@@ -56,6 +57,10 @@ class Server {
       "",
       "Latest version: " + availableVersions[availableVersions.length - 1],
       "Available versions: " + availableVersions.join(", "),
+      "",
+      "Roadmap: https://ponl.link/roadmap-alertbox.org",
+      "",
+      smallerBannerAsciiArt,
     ].join("\n");
 
     this.app.get("/", () => welcomeMessage);

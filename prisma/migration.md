@@ -8,9 +8,21 @@ This document defines the production database migration strategy, zero-downtime 
 
 ### 1.1 Dual-Role Privilege Separation (Least Privilege)
 We separate database access into two distinct accounts:
-- **Application Runtime (`alertbox.org`)**: Limited strictly to DML (`SELECT`, `INSERT`, `UPDATE`). It cannot execute `ALTER`, `CREATE`, or `DROP`.
-- **Migration Runner (`alertbox_migrator`)**: Granted DDL (`CREATE`, `ALTER`, `DROP`, `INDEX`, `REFERENCES`) and DML on `alertbox_org.*`. Used exclusively inside the temporary ArgoCD PreSync migration Job.
-- **Environment Isolation**: Production (`alertbox_migrator` on `alertbox_org`) and Development (`alertbox_migrator_dev` on `alertbox_org_dev`) are completely separate credentials.
+- **Application Runtime (`alertbox.org`)**: Limited strictly to DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`). It cannot execute `ALTER`, `CREATE`, or `DROP`.
+  - Config: `DB_USER` & `DB_PASS` in `src/core/prisma.ts`.
+- **Migration Runner (`alertbox_migrator`)**: Granted DDL (`CREATE`, `ALTER`, `DROP`, `INDEX`, `REFERENCES`) and DML on target DB.
+  - Config: `DB_MIGRATION_USER` & `DB_MIGRATION_PASS` in `prisma.config.ts` (falls back to `DB_USER`/`DB_PASS`).
+  - Prod: Used exclusively inside the temporary ArgoCD PreSync migration Job (`bun run db:migrate:deploy`).
+- **Dedicated Shadow Database (`DB_MIGRATION_SHADOW_NAME`)**:
+  - `prisma migrate dev` requires a shadow database to detect drift.
+  - To respect least privilege (avoiding `CREATE DATABASE *.*` permissions on MariaDB), create a dedicated shadow DB:
+    ```sql
+    CREATE DATABASE alertbox_org_dev_shadow;
+    GRANT ALL PRIVILEGES ON alertbox_org_dev_shadow.* TO 'alertbox_migrator_dev'@'%';
+    FLUSH PRIVILEGES;
+    ```
+  - Configured via `DB_MIGRATION_SHADOW_NAME="alertbox_org_dev_shadow"` in `.env.development.local`.
+- **Environment Isolation**: Production (`alertbox_migrator` on `alertbox_org`) and Development (`alertbox_migrator_dev` on `alertbox_org_dev`) use completely isolated credentials.
 
 ### 1.2 Automated Deployment Pipeline
 ```
@@ -113,3 +125,23 @@ Once production has run stably and the rollback window has passed:
 2. Generate migration: `bun run db:migrate:dev --name add_new_field_next`.
 3. Add backfill SQL to copy data from `old_field` to `new_field_next`.
 4. Deploy. After verification window, schedule cleanup migration to drop `old_field` and map `new_field_next`.
+
+---
+
+## 5. Migration CLI Reference & Troubleshooting
+
+| Command | Environment | Context / Safety |
+| :--- | :--- | :--- |
+| `bun run db:migrate:dev` | Local Dev | Uses shadow DB & `alertbox_migrator_dev`. Generates versioned `migration.sql`. |
+| `bun run db:migrate:deploy` | CI/CD (Prod) | **100% Prod-Safe**. Runs deterministic SQL sequentially. Zero shadow DB needed. |
+| `bun run db:migrate:resolve` | Local / Staging | **100% Data-Safe**. Marks `0_init` as applied to resolve initial baseline drift without dropping tables. |
+| `bun run db:migrate:reset` | Local Dev Only | **Destructive**. Drops all tables in development database and reapplies all migrations. Never run on shared/prod. |
+
+### Resolving "Drift detected / We need to reset"
+If Prisma reports drift on baseline migration `0_init`:
+1. **Never reset** if retaining existing dev/staging data.
+2. Mark baseline as applied:
+   ```bash
+   bun run db:migrate:resolve
+   ```
+3. If physical columns diverge from `0_init`, synchronize missing columns (`ALTER TABLE ...` or `bun run db:push`) before running `bun run db:migrate:dev`.

@@ -118,6 +118,38 @@ export const dbConfig = {
   },
 };
 
+export const migrationDbConfig = {
+  get user() {
+    return process.env.DB_MIGRATION_USER || process.env.MIGRATION_DB_USER || dbConfig.user;
+  },
+  get password() {
+    return process.env.DB_MIGRATION_PASS || process.env.MIGRATION_DB_PASS || dbConfig.password;
+  },
+  get host() {
+    return process.env.DB_MIGRATION_HOST || process.env.MIGRATION_DB_HOST || dbConfig.host;
+  },
+  get port() {
+    return parseInt(process.env.DB_MIGRATION_PORT || process.env.MIGRATION_DB_PORT || String(dbConfig.port));
+  },
+  get database() {
+    return process.env.DB_MIGRATION_NAME || process.env.MIGRATION_DB_NAME || dbConfig.database;
+  },
+  get url() {
+    return (
+      process.env.MIGRATION_DATABASE_URL ||
+      process.env.DATABASE_URL ||
+      `mysql://${this.user}:${encodeURIComponent(this.password)}@${this.host}:${this.port}/${this.database}`
+    );
+  },
+  get shadowUrl() {
+    if (process.env.SHADOW_DATABASE_URL) return process.env.SHADOW_DATABASE_URL;
+    const shadowDb = process.env.DB_MIGRATION_SHADOW_NAME || process.env.SHADOW_DB_NAME;
+    return shadowDb
+      ? `mysql://${this.user}:${encodeURIComponent(this.password)}@${this.host}:${this.port}/${shadowDb}`
+      : undefined;
+  },
+};
+
 /**
  * Redis Configuration
  */
