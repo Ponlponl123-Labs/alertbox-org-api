@@ -1,21 +1,18 @@
 @Library('ci-cd-jenkins-lib@main') _
 
-standardAppPipelineManaged_Defaulted(
-  appName: 'alertbox-org-api',
-  orgName: 'Ponlponl123-Labs',
-  gitOpsRepo: 'Ponlponl123/.gitops',
-  
-  // main deployment
-  deploymentName: 'api-deployment',
-  deploymentFilePath: 'app/alertbox-org/',
+standardAppPipelineManaged_v2(
+    appName: 'alertbox-org-api',
+    orgName: 'Ponlponl123-Labs',
+    gitOpsRepo: 'Ponlponl123/.gitops',
 
-  // additional file for CI to bump image tag
-  additionalDeploymentName: 'api-migration-job',
-  additionalDeploymentFilePath: 'app/alertbox-org/',
+    // Multi-manifest target specification:
+    bumpIncludes: [
+        [file: 'api-deployment',    path: 'app/alertbox-org/'],
+        [file: 'api-migration-job', path: 'app/alertbox-org/']
+    ],
 
-  branchName: 'main', 
-  imageRepo: 'alertbox-org-api',
-
-  gitopsProtocol: 'git@',
-  gitopsCreds: 'github-ponlponl123-ssh-gitops'
+    branchName: 'main',
+    imageRepo: 'alertbox-org-api',
+    gitopsProtocol: 'git@',
+    gitopsCreds: 'github-ponlponl123-ssh-gitops'
 )
