@@ -144,13 +144,23 @@ const buildMariaDbSsl = (cfg: {
 
   const readCert = (val?: string) => (val && fs.existsSync(val) ? fs.readFileSync(val) : val);
   const ssl: Record<string, any> = {};
-  if (mode === "verify-ca" || mode === "verify_ca") {
+  const isVerifyFull = mode === "verify-identity" || mode === "verify_identity" || mode === "verify-full";
+  const isVerifyCa = mode === "verify-ca" || mode === "verify_ca";
+
+  if (isVerifyFull) {
     ssl.rejectUnauthorized = true;
-  } else if (mode === "verify-identity" || mode === "verify_identity" || mode === "verify-full") {
+  } else if (isVerifyCa) {
     ssl.rejectUnauthorized = true;
-    ssl.checkServerIdentity = true;
+    ssl.checkServerIdentity = () => undefined;
   } else {
-    ssl.rejectUnauthorized = !!cfg.sslCa;
+    ssl.rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === "true";
+    ssl.checkServerIdentity = () => undefined;
+  }
+
+  if (process.env.DB_SSL_REJECT_UNAUTHORIZED !== undefined) {
+    ssl.rejectUnauthorized =
+      process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false" &&
+      process.env.DB_SSL_REJECT_UNAUTHORIZED !== "0";
   }
 
   if (cfg.sslCa) ssl.ca = readCert(cfg.sslCa);
