@@ -8,10 +8,12 @@ password = ""
 name = "mymaster"
 db = 0
 natmap = []
+# tls = false
 
 [redis.sentinel]
 enable = false
 password = ""
+# tls = false
 nodes = [
   { host = "localhost", port = 26379 },
   { host = "localhost", port = 26380 },

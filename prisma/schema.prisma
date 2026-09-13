@@ -290,6 +290,7 @@ model StreamlabsRelayLog {
   senderName   String            @default("Anonymous") @db.VarChar(64)
   senderEmail  String?           @db.VarChar(256)
   message      String?           @db.Text
+  rawPayload   String?           @db.LongText
   errorMessage String?           @db.Text
   createdAt    DateTime          @default(now()) @db.Timestamp(0)
   updatedAt    DateTime          @updatedAt @db.Timestamp(0)

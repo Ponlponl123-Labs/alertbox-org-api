@@ -21,8 +21,9 @@ class PrismaORM {
       host: dbConfig.host,
       port: dbConfig.port,
       user: dbConfig.user,
-      password: dbConfig.password,
+      ...(dbConfig.password ? { password: dbConfig.password } : {}),
       database: dbConfig.database,
+      ...(dbConfig.ssl ? { ssl: dbConfig.ssl } : {}),
     });
     const baseClient = new PrismaClient({ adapter: this.adapter });
     this.client = baseClient.$extends({
@@ -109,6 +110,7 @@ class PrismaORM {
           "Port: " + dbConfig.port,
           "User: " + dbConfig.user,
           "Database: " + dbConfig.database,
+          "SSL: " + (dbConfig.sslMode || (dbConfig.ssl ? "Enabled" : "Disabled")),
         ],
         "   \n",
       ),

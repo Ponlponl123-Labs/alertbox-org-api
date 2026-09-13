@@ -3,19 +3,13 @@ import path from "path";
 import betterConsole, { s, tsflag } from "ts-better-console";
 
 const explicitEnv = typeof Bun !== "undefined" ? Bun.env.NODE_ENV : process.env.NODE_ENV;
-let nodeEnv = explicitEnv;
-
-if (!nodeEnv) {
-  if (
-    fs.existsSync(".env.development.local") ||
-    fs.existsSync(".env.development") ||
-    fs.existsSync(".env.local")
-  ) {
-    nodeEnv = "development";
-  } else {
-    nodeEnv = "production";
-  }
-}
+let nodeEnv: string =
+  explicitEnv ||
+  (fs.existsSync(".env.development.local") ||
+  fs.existsSync(".env.development") ||
+  fs.existsSync(".env.local")
+    ? "development"
+    : "production");
 
 const isDev = nodeEnv === "development";
 
@@ -90,6 +84,73 @@ if (loadedFile) {
   );
 }
 
+const formatDbUrl = (cfg: {
+  user: string;
+  password?: string;
+  host: string;
+  port: number;
+  database: string;
+  sslMode?: string;
+  sslCa?: string;
+  sslCert?: string;
+}) => {
+  const auth = cfg.password ? `${cfg.user}:${encodeURIComponent(cfg.password)}` : cfg.user;
+  const base = `mysql://${auth}@${cfg.host}:${cfg.port}/${cfg.database}`;
+  const params = new URLSearchParams();
+  if (cfg.sslMode) {
+    const modeMap: Record<string, string> = {
+      required: "require",
+      require: "require",
+      verify_ca: "verify-ca",
+      "verify-ca": "verify-ca",
+      verify_identity: "verify-identity",
+      "verify-identity": "verify-identity",
+      "verify-full": "verify-identity",
+      preferred: "prefer",
+      prefer: "prefer",
+      disabled: "disable",
+      disable: "disable",
+    };
+    const mapped = modeMap[cfg.sslMode.toLowerCase()] || cfg.sslMode.toLowerCase();
+    params.set("sslmode", mapped);
+    if (mapped === "require" && !cfg.sslCa) {
+      params.set("sslaccept", "accept_invalid_certs");
+    }
+  }
+  if (cfg.sslCa) params.set("sslcert", cfg.sslCa);
+  if (cfg.sslCert) params.set("sslidentity", cfg.sslCert);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+};
+
+const buildMariaDbSsl = (cfg: {
+  sslMode?: string;
+  sslCa?: string;
+  sslCert?: string;
+  sslKey?: string;
+}) => {
+  if (!cfg.sslMode && !cfg.sslCa && !cfg.sslCert && !cfg.sslKey) return undefined;
+  const mode = cfg.sslMode?.toLowerCase();
+  if (mode === "disabled" || mode === "disable" || mode === "false") return false;
+
+  const readCert = (val?: string) => (val && fs.existsSync(val) ? fs.readFileSync(val) : val);
+  const ssl: Record<string, any> = {};
+  if (mode === "verify-ca" || mode === "verify_ca") {
+    ssl.rejectUnauthorized = true;
+  } else if (mode === "verify-identity" || mode === "verify_identity" || mode === "verify-full") {
+    ssl.rejectUnauthorized = true;
+    ssl.checkServerIdentity = true;
+  } else {
+    ssl.rejectUnauthorized = !!cfg.sslCa;
+  }
+
+  if (cfg.sslCa) ssl.ca = readCert(cfg.sslCa);
+  if (cfg.sslCert) ssl.cert = readCert(cfg.sslCert);
+  if (cfg.sslKey) ssl.key = readCert(cfg.sslKey);
+
+  return Object.keys(ssl).length > 0 ? ssl : true;
+};
+
 /**
  * Database Configuration
  * Centralized parsing of DB environment variables.
@@ -110,11 +171,27 @@ export const dbConfig = {
   get database() {
     return process.env.DB_NAME || "mydb";
   },
+  get sslMode() {
+    return process.env.DB_SSL_MODE || undefined;
+  },
+  get sslCa() {
+    return process.env.DB_SSL_CA || undefined;
+  },
+  get sslCert() {
+    return process.env.DB_SSL_CC || undefined;
+  },
+  get sslKey() {
+    return process.env.DB_SSL_CK || undefined;
+  },
+  get isSslRequired() {
+    const mode = this.sslMode?.toLowerCase();
+    return !!(mode && mode !== "disabled" && mode !== "disable" && mode !== "false") || !!this.sslCert || !!this.sslCa;
+  },
+  get ssl() {
+    return buildMariaDbSsl(this);
+  },
   get url() {
-    return (
-      process.env.DATABASE_URL ||
-      `mysql://${this.user}:${encodeURIComponent(this.password)}@${this.host}:${this.port}/${this.database}`
-    );
+    return process.env.DATABASE_URL || formatDbUrl(this);
   },
 };
 
@@ -134,19 +211,32 @@ export const migrationDbConfig = {
   get database() {
     return process.env.DB_MIGRATION_NAME || process.env.MIGRATION_DB_NAME || dbConfig.database;
   },
-  get url() {
-    return (
-      process.env.MIGRATION_DATABASE_URL ||
-      process.env.DATABASE_URL ||
-      `mysql://${this.user}:${encodeURIComponent(this.password)}@${this.host}:${this.port}/${this.database}`
-    );
+  get sslMode() {
+    return process.env.DB_MIGRATION_SSL_MODE || process.env.MIGRATION_DB_SSL_MODE || dbConfig.sslMode;
   },
-  get shadowUrl() {
+  get sslCa() {
+    return process.env.DB_MIGRATION_SSL_CA || process.env.MIGRATION_DB_SSL_CA || dbConfig.sslCa;
+  },
+  get sslCert() {
+    return process.env.DB_MIGRATION_SSL_CC || process.env.MIGRATION_DB_SSL_CC || dbConfig.sslCert;
+  },
+  get sslKey() {
+    return process.env.DB_MIGRATION_SSL_CK || process.env.MIGRATION_DB_SSL_CK || dbConfig.sslKey;
+  },
+  get isSslRequired() {
+    const mode = this.sslMode?.toLowerCase();
+    return !!(mode && mode !== "disabled" && mode !== "disable" && mode !== "false") || !!this.sslCert || !!this.sslCa;
+  },
+  get ssl() {
+    return buildMariaDbSsl(this);
+  },
+  get url() {
+    return process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL || formatDbUrl(this);
+  },
+  get shadowUrl(): string | undefined {
     if (process.env.SHADOW_DATABASE_URL) return process.env.SHADOW_DATABASE_URL;
     const shadowDb = process.env.DB_MIGRATION_SHADOW_NAME || process.env.SHADOW_DB_NAME;
-    return shadowDb
-      ? `mysql://${this.user}:${encodeURIComponent(this.password)}@${this.host}:${this.port}/${shadowDb}`
-      : undefined;
+    return shadowDb ? formatDbUrl({ ...this, database: shadowDb }) : undefined;
   },
 };
 
@@ -159,6 +249,33 @@ export const redisConfig = {
   },
   get sentinelPassword() {
     return process.env.REDIS_SENTINEL_PASSWORD || undefined;
+  },
+  get tls() {
+    return process.env.REDIS_TLS || process.env.REDIS_SSL || undefined;
+  },
+  get tlsCa() {
+    return process.env.REDIS_TLS_CA || process.env.REDIS_SSL_CA || undefined;
+  },
+  get tlsCert() {
+    return process.env.REDIS_TLS_CERT || process.env.REDIS_TLS_CC || process.env.REDIS_SSL_CC || undefined;
+  },
+  get tlsKey() {
+    return process.env.REDIS_TLS_KEY || process.env.REDIS_TLS_CK || process.env.REDIS_SSL_CK || undefined;
+  },
+  get tlsRejectUnauthorized() {
+    return process.env.REDIS_TLS_REJECT_UNAUTHORIZED || undefined;
+  },
+  get sentinelTls() {
+    return process.env.REDIS_SENTINEL_TLS || process.env.REDIS_SENTINEL_SSL || undefined;
+  },
+  get sentinelTlsCa() {
+    return process.env.REDIS_SENTINEL_TLS_CA || undefined;
+  },
+  get sentinelTlsCert() {
+    return process.env.REDIS_SENTINEL_TLS_CERT || process.env.REDIS_SENTINEL_TLS_CC || undefined;
+  },
+  get sentinelTlsKey() {
+    return process.env.REDIS_SENTINEL_TLS_KEY || process.env.REDIS_SENTINEL_TLS_CK || undefined;
   },
 };
 

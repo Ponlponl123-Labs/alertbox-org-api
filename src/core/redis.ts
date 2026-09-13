@@ -1,7 +1,55 @@
+import fs from "fs";
 import Redis, { type SentinelAddress } from "ioredis";
 import betterConsole, { Card, cs, link, s, tsflag, rgb } from "ts-better-console";
 import tomlConfig from "../config/toml";
 import { redisConfig } from "../config/env";
+
+function buildTlsOptions(
+  envTls?: string,
+  envCa?: string,
+  envCert?: string,
+  envKey?: string,
+  envRejectUnauthorized?: string,
+  tomlTls?: boolean | {
+    ca?: string;
+    cert?: string;
+    key?: string;
+    rejectUnauthorized?: boolean;
+    servername?: string;
+  },
+) {
+  const isEnabled =
+    envTls === "true" ||
+    envTls === "1" ||
+    (typeof tomlTls === "boolean" ? tomlTls : !!tomlTls) ||
+    !!envCa ||
+    !!envCert;
+
+  if (!isEnabled) return undefined;
+
+  const tomlObj = typeof tomlTls === "object" ? tomlTls : undefined;
+  const ca = envCa || tomlObj?.ca;
+  const cert = envCert || tomlObj?.cert;
+  const key = envKey || tomlObj?.key;
+
+  const readCert = (val?: string) => (val && fs.existsSync(val) ? fs.readFileSync(val) : val);
+
+  const tls: Record<string, any> = {};
+  if (envRejectUnauthorized !== undefined) {
+    tls.rejectUnauthorized = envRejectUnauthorized !== "false" && envRejectUnauthorized !== "0";
+  } else if (tomlObj?.rejectUnauthorized !== undefined) {
+    tls.rejectUnauthorized = tomlObj.rejectUnauthorized;
+  } else if (ca) {
+    tls.rejectUnauthorized = true;
+  }
+
+  if (ca) tls.ca = readCert(ca);
+  if (cert) tls.cert = readCert(cert);
+  if (key) tls.key = readCert(key);
+  if (tomlObj?.servername) tls.servername = tomlObj.servername;
+
+  return tls;
+}
 
 export class RedisClient {
   public redis: Redis;
@@ -37,6 +85,35 @@ export class RedisClient {
 
     const isSentinelEnabled = !!tomlConfig.redis?.sentinel?.enabled;
 
+    const tlsConfig = buildTlsOptions(
+      redisConfig.tls,
+      redisConfig.tlsCa,
+      redisConfig.tlsCert,
+      redisConfig.tlsKey,
+      redisConfig.tlsRejectUnauthorized,
+      tomlConfig.redis?.tls,
+    );
+
+    const sentinelTlsConfig = buildTlsOptions(
+      redisConfig.sentinelTls,
+      redisConfig.sentinelTlsCa,
+      redisConfig.sentinelTlsCert,
+      redisConfig.sentinelTlsKey,
+      undefined,
+      tomlConfig.redis?.sentinel?.tls,
+    );
+
+    if (tlsConfig) {
+      betterConsole.log(
+        tsflag("info", true, s("· Redis TLS is enabled", { color: "cyan" })),
+      );
+    }
+    if (isSentinelEnabled && sentinelTlsConfig) {
+      betterConsole.log(
+        tsflag("info", true, s("· Redis Sentinel TLS is enabled", { color: "cyan" })),
+      );
+    }
+
     this.redis = new Redis({
       db: tomlConfig.redis?.db || 0,
       name: tomlConfig.redis?.name || "mymaster",
@@ -47,12 +124,14 @@ export class RedisClient {
               redisConfig.sentinelPassword ||
               tomlConfig.redis?.sentinel?.password ||
               undefined,
+            ...(sentinelTlsConfig ? { sentinelTLS: sentinelTlsConfig } : {}),
           }
         : {
             host: tomlConfig.redis?.host || "localhost",
             port: tomlConfig.redis?.port || 6379,
           }),
       password: redisConfig.password || tomlConfig.redis?.password || undefined,
+      ...(tlsConfig ? { tls: tlsConfig } : {}),
       natMap: this.natMap,
       lazyConnect: true,
       enableReadyCheck: true,
