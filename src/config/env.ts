@@ -1,3 +1,13 @@
+import tls from "node:tls";
+if (tls?.TLSSocket?.prototype?.getPeerCertificate) {
+  const orig = tls.TLSSocket.prototype.getPeerCertificate;
+  (tls.TLSSocket.prototype as any).getPeerCertificate = function (this: any, detailed?: boolean) {
+    const cert = orig.call(this, detailed as any);
+    if (cert && typeof cert === "object" && !cert.fingerprint256) cert.fingerprint256 = "";
+    return cert;
+  };
+}
+
 import fs from "fs";
 import betterConsole, { s, tsflag } from "ts-better-console";
 

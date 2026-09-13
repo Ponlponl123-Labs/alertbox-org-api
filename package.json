@@ -28,7 +28,7 @@
     "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.0",
+    "@types/bun": "^1.4.2",
     "bun-types": "latest",
     "prisma": "^7.8.0"
   },
