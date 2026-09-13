@@ -119,17 +119,17 @@ export class RedisClient {
       name: tomlConfig.redis?.name || "mymaster",
       ...(isSentinelEnabled
         ? {
-            sentinels: this.redisSentinels,
-            sentinelPassword:
-              redisConfig.sentinelPassword ||
-              tomlConfig.redis?.sentinel?.password ||
-              undefined,
-            ...(sentinelTlsConfig ? { sentinelTLS: sentinelTlsConfig } : {}),
-          }
+          sentinels: this.redisSentinels,
+          sentinelPassword:
+            redisConfig.sentinelPassword ||
+            tomlConfig.redis?.sentinel?.password ||
+            undefined,
+          ...(sentinelTlsConfig ? { sentinelTLS: sentinelTlsConfig } : {}),
+        }
         : {
-            host: tomlConfig.redis?.host || "localhost",
-            port: tomlConfig.redis?.port || 6379,
-          }),
+          host: tomlConfig.redis?.host || "localhost",
+          port: tomlConfig.redis?.port || 6379,
+        }),
       password: redisConfig.password || tomlConfig.redis?.password || undefined,
       ...(tlsConfig ? { tls: tlsConfig } : {}),
       natMap: this.natMap,

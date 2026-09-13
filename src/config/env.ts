@@ -1,22 +1,12 @@
-import tls from "node:tls";
-if (tls?.TLSSocket?.prototype?.getPeerCertificate) {
-  const orig = tls.TLSSocket.prototype.getPeerCertificate;
-  tls.TLSSocket.prototype.getPeerCertificate = function (detailed?: boolean) {
-    const cert = orig.call(this, detailed);
-    if (cert && typeof cert === "object" && !cert.fingerprint256) cert.fingerprint256 = "";
-    return cert;
-  };
-}
 import fs from "fs";
-import path from "path";
 import betterConsole, { s, tsflag } from "ts-better-console";
 
 const explicitEnv = typeof Bun !== "undefined" ? Bun.env.NODE_ENV : process.env.NODE_ENV;
 let nodeEnv: string =
   explicitEnv ||
   (fs.existsSync(".env.development.local") ||
-  fs.existsSync(".env.development") ||
-  fs.existsSync(".env.local")
+    fs.existsSync(".env.development") ||
+    fs.existsSync(".env.local")
     ? "development"
     : "production");
 
@@ -289,4 +279,3 @@ export const redisConfig = {
 };
 
 export { nodeEnv, isDev, loadedFile };
-
