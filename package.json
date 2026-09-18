@@ -5,12 +5,12 @@
   "scripts": {
     "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
-    "db:push": "bun --env-file=.env.development.local x prisma db push",
-    "db:generate": "bunx prisma generate",
-    "db:migrate:dev": "bun --env-file=.env.development.local x prisma migrate dev",
-    "db:migrate:deploy": "bun run prisma migrate deploy",
-    "db:migrate:resolve": "bun --env-file=.env.development.local x prisma migrate resolve --applied 0_init",
-    "db:migrate:reset": "bun --env-file=.env.development.local x prisma migrate reset",
+    "db:push": "bun node_modules/prisma/build/index.js db push",
+    "db:generate": "bun node_modules/prisma/build/index.js generate",
+    "db:migrate:dev": "bun node_modules/prisma/build/index.js migrate dev",
+    "db:migrate:deploy": "bun node_modules/prisma/build/index.js migrate deploy",
+    "db:migrate:resolve": "bun node_modules/prisma/build/index.js migrate resolve --applied 0_init",
+    "db:migrate:reset": "bun node_modules/prisma/build/index.js migrate reset",
     "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
     "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
   },

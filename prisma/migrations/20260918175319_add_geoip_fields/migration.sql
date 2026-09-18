@@ -1,0 +1,17 @@
+-- AlterTable
+ALTER TABLE `Session` ADD COLUMN `continent` VARCHAR(64) NULL,
+    ADD COLUMN `ipVersion` TINYINT NULL,
+    ADD COLUMN `isAnonymous` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isAnycast` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isHosting` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isMobile` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isProxy` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isRelay` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isResProxy` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isSatellite` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isTor` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `isVpn` BOOLEAN NULL DEFAULT false,
+    ADD COLUMN `timezone` VARCHAR(128) NULL;
+
+-- AlterTable
+ALTER TABLE `StreamlabsRelayLog` ADD COLUMN `rawPayload` LONGTEXT NULL;

@@ -128,6 +128,11 @@ const formatDbUrl = (cfg: {
   }
   if (cfg.sslCa) params.set("sslcert", cfg.sslCa);
   if (cfg.sslCert) params.set("sslidentity", cfg.sslCert);
+  const connectTimeout = process.env.DB_CONNECT_TIMEOUT || "30";
+  params.set("connect_timeout", connectTimeout);
+  const socketTimeout = process.env.DB_SOCKET_TIMEOUT || "30";
+  params.set("socket_timeout", socketTimeout);
+
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 };
