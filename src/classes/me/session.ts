@@ -77,7 +77,7 @@ export async function createSession(
     country: ip_geo ? ip_geo.country?.name : null,
     countryCode: ip_geo ? ip_geo.country?.code : null,
     continent: ip_geo ? ip_geo.continent?.name : null,
-    continentCode: ip_geo ? ip_geo.continent?.name : null,
+    continentCode: ip_geo ? ip_geo.continent?.code : null,
     isp: ip_geo ? ip_geo.asn?.name : null,
     latitude: ip_geo ? ip_geo.latitude : null,
     longitude: ip_geo ? ip_geo.longitude : null,
