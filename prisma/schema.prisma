@@ -184,10 +184,10 @@ model Session {
   isVpn           Boolean?       @default(false) @db.TinyInt
   isResProxy      Boolean?       @default(false) @db.TinyInt
   timezone        String?        @db.VarChar(128)
-  country         String?        @db.VarChar(64)
+  country         String?        @db.VarChar(256)
   countryCode     String?        @db.VarChar(2)
   countryCodeIso3 String?        @db.VarChar(3)
-  continent       String?        @db.VarChar(64)
+  continent       String?        @db.VarChar(256)
   continentCode   String?        @db.VarChar(3)
   postal          String?        @db.VarChar(32)
   city            String?        @db.VarChar(512)
