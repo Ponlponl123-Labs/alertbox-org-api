@@ -255,7 +255,18 @@ export const migrationDbConfig = {
   get shadowUrl(): string | undefined {
     if (process.env.SHADOW_DATABASE_URL) return process.env.SHADOW_DATABASE_URL;
     const shadowDb = process.env.DB_MIGRATION_SHADOW_NAME || process.env.SHADOW_DB_NAME;
-    return shadowDb ? formatDbUrl({ ...this, database: shadowDb }) : undefined;
+    return shadowDb
+      ? formatDbUrl({
+          user: this.user,
+          password: this.password,
+          host: this.host,
+          port: this.port,
+          database: shadowDb,
+          sslMode: this.sslMode,
+          sslCa: this.sslCa,
+          sslCert: this.sslCert,
+        })
+      : undefined;
   },
 };
 

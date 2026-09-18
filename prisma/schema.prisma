@@ -172,9 +172,22 @@ model Session {
   deviceVendor    String?        @db.VarChar(128)
   cpuArchitecture String?        @db.VarChar(128)
   ipAddress       String         @db.VarChar(50)
+  ipVersion       Int?           @db.TinyInt
+  isMobile        Boolean?       @default(false) @db.TinyInt
+  isProxy         Boolean?       @default(false) @db.TinyInt
+  isHosting       Boolean?       @default(false) @db.TinyInt
+  isAnonymous     Boolean?       @default(false) @db.TinyInt
+  isAnycast       Boolean?       @default(false) @db.TinyInt
+  isSatellite     Boolean?       @default(false) @db.TinyInt
+  isRelay         Boolean?       @default(false) @db.TinyInt
+  isTor           Boolean?       @default(false) @db.TinyInt
+  isVpn           Boolean?       @default(false) @db.TinyInt
+  isResProxy      Boolean?       @default(false) @db.TinyInt
+  timezone        String?        @db.VarChar(128)
   country         String?        @db.VarChar(64)
   countryCode     String?        @db.VarChar(2)
   countryCodeIso3 String?        @db.VarChar(3)
+  continent       String?        @db.VarChar(64)
   continentCode   String?        @db.VarChar(3)
   postal          String?        @db.VarChar(32)
   city            String?        @db.VarChar(512)

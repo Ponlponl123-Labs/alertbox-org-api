@@ -1,5 +1,5 @@
-import { IPGeolocation } from "@/types/ip.types";
 import { redis } from "@/core/redis";
+import type { GeoIPResponse } from "@/types/geo-ip";
 
 export const reserved_IPs = ["::1", "127.0.0.1", "0.0.0.0"];
 
@@ -26,15 +26,15 @@ export function isPrivateIP(ip: string): boolean {
 
 export async function get_IPGeolocation(
   ipaddr: string,
-): Promise<IPGeolocation | false> {
+): Promise<GeoIPResponse | false> {
   if (isReservedIP(ipaddr) || isPrivateIP(ipaddr)) {
     return false;
   }
   const c = await redis.redis.get("global:ip:" + ipaddr);
   if (c) {
-    return JSON.parse(c) as IPGeolocation;
+    return JSON.parse(c) as GeoIPResponse;
   }
-  const r = await fetch(`https://ipapi.co/${ipaddr}/json/`);
+  const r = await fetch(`${process.env.EXTERNAL_GEOIP_API}/geo/${ipaddr}`);
   if (!r.ok) return false;
   const d = await r.json();
   redis.redis.setex(
@@ -42,5 +42,5 @@ export async function get_IPGeolocation(
     7 * 24 * 60 * 60 * 1000,
     JSON.stringify(d),
   );
-  return d as IPGeolocation;
+  return d as GeoIPResponse;
 }

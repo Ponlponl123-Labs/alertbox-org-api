@@ -1,3 +1,12 @@
+/**
+ * @deprecated
+ * This type is no longer used
+ * @see /src/types/geo-ip/ip.types.ts
+ * @see /src/types/geo-ip/geoip.types.ts
+ * 
+ * @todo Remove this file when all usages are migrated
+ */
+
 export interface IPGeolocation {
   ip: string;
   city: string;
