@@ -17,9 +17,9 @@
   "dependencies": {
     "@elysia/openapi": "^1.4.16",
     "@elysiajs/cors": "^1.4.2",
-    "@prisma/adapter-libsql": "^7.8.0",
-    "@prisma/adapter-mariadb": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-libsql": "7.10.0",
+    "@prisma/adapter-mariadb": "7.10.0",
+    "@prisma/client": "^7.10.0",
     "elysia": "latest",
     "elysia-ip": "^1.1.0",
     "ioredis": "^5.11.0",
@@ -31,7 +31,7 @@
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "bun-types": "latest",
-    "prisma": "^7.8.0"
+    "prisma": "7.10.0"
   },
   "module": "src/index.js"
 }
