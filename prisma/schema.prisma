@@ -84,7 +84,7 @@ model Widget {
 model AlertboxSetting {
   id           String          @id @default(cuid())
   widgetId     String          @unique
-  globalVolume Float           @default(0.5) @db.Float
+  globalVolume Int?            @default(50) @db.UnsignedTinyInt
   events       AlertboxEvent[]
   widget       Widget          @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 }
@@ -96,17 +96,17 @@ model AlertboxEvent {
   isEnabled          Boolean         @default(true)
   prefix             String?         @db.VarChar(64)
   subfix             String?         @db.VarChar(64)
-  messageLayout      String?         @default("image-above") @db.VarChar(32)
-  minVisibleDuration Float           @default(3) @db.Float
-  animIn             String?         @default("fade_in_up") @db.VarChar(64)
-  animOut            String?         @default("fade_out_up") @db.VarChar(64)
-  animInDuration     Float           @default(1) @db.Float
-  animOutDuration    Float           @default(1) @db.Float
+  messageLayout      Int?            @default(0) @db.UnsignedSmallInt
+  minVisibleDuration Int?            @default(3000) @db.UnsignedSmallInt
+  animIn             Int?            @default(0) @db.UnsignedSmallInt
+  animOut            Int?            @default(1) @db.UnsignedSmallInt
+  animInDuration     Int?            @default(1000) @db.UnsignedSmallInt
+  animOutDuration    Int?            @default(1000) @db.UnsignedSmallInt
   image              String?         @db.VarChar(512)
   sound              String?         @db.VarChar(512)
-  soundVolume        Float           @default(0.5) @db.Float
-  fontFamily         String?         @default("Open Sans") @db.VarChar(64)
-  fontSize           Int             @default(32) @db.UnsignedTinyInt
+  soundVolume        Int?            @default(50) @db.UnsignedTinyInt
+  fontFamily         Int?            @default(0) @db.UnsignedTinyInt
+  fontSize           Int             @default(20) @db.UnsignedTinyInt
   fontWeight         Int             @default(600) @db.UnsignedSmallInt
   textColor          Int             @default(16777215) @db.UnsignedInt
   accentColor        Int             @default(6723532) @db.UnsignedInt
@@ -119,11 +119,11 @@ model AlertboxEvent {
   outlineSize        Int             @default(3) @db.UnsignedTinyInt
   ttsEnabled         Boolean         @default(false)
   ttsMinTip          Int             @default(0) @db.UnsignedSmallInt
-  ttsVoice           String?         @db.VarChar(64)
-  ttsVolume          Float           @default(0.5) @db.Float
-  ttsSpeed           Float           @default(0.5) @db.Float
-  ttsPitch           Float           @default(0.5) @db.Float
-  ttsDelay           Float           @default(0) @db.Float
+  ttsVoice           Int?            @default(0) @db.UnsignedTinyInt
+  ttsVolume          Int?            @default(50) @db.UnsignedTinyInt
+  ttsSpeed           Int?            @default(50) @db.UnsignedTinyInt
+  ttsPitch           Int?            @default(50) @db.UnsignedTinyInt
+  ttsDelay           Int?            @default(0) @db.UnsignedSmallInt
   ttsOptions         Int             @default(0) @db.UnsignedInt
   updatedAt          DateTime        @updatedAt @db.Timestamp(0)
   alertbox           AlertboxSetting @relation(fields: [alertboxId], references: [id], onDelete: Cascade)
