@@ -183,6 +183,8 @@ export const widgetRouter = new Elysia()
     },
   )
   .ws("/widget/:token", {
+    maxPayloadLength: 16 * 1024,
+    idleTimeout: 60,
     params: t.Object({
       token: t.String(),
     }),

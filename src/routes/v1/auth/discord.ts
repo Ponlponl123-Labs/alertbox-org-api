@@ -3,6 +3,7 @@ import Elysia, { t } from "elysia";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
+import { isAllowedOrigin } from "@/utils/security";
 
 const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
   "/discord",
@@ -15,13 +16,7 @@ const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
       }
     })();
 
-    const isAllowedRedirect =
-      redirectUrl &&
-      ((process.env.NODE_ENV === "development" &&
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(redirectUrl.origin)) ||
-        /^https:\/\/([a-z0-9-]+\.)*(alertbox\.org|tip-to\.me)$/i.test(redirectUrl.origin));
-
-    if (!isAllowedRedirect) {
+    if (!redirectUrl || !isAllowedOrigin(redirectUrl.origin)) {
       set.status = "Bad Request";
       return "Invalid or unauthorized redirect_uri";
     }

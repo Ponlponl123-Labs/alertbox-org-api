@@ -2,20 +2,33 @@ import Elysia from "elysia";
 import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
+import { isAllowedOrigin } from "@/utils/security";
 
 export const endpoint = new Elysia()
   .use(ip({ headersFirst: true }))
   .ws("/ws", {
+    maxPayloadLength: 16 * 1024,
+    idleTimeout: 60,
     async open(ws) {
       try {
-        const token = ws.data.query.token;
+        const origin = (ws.data.headers as Record<string, string | undefined>)["origin"];
+        if (origin && !isAllowedOrigin(origin)) {
+          ws.send(JSON.stringify({ type: "error", message: "Forbidden origin" }));
+          ws.close();
+          return;
+        }
+
+        const authHeader = (ws.data.headers as Record<string, string | undefined>)["authorization"];
+        const token = ws.data.query.token || (authHeader ? isBearerToken(authHeader) : null);
         if (!token) {
           ws.send(JSON.stringify({ type: "error", message: "Token is required" }));
           ws.close();
           return;
         }
 
-        const auth = isBearerToken("Bearer " + token);
+        const auth = typeof token === "string" && !token.startsWith("Bearer ")
+          ? isBearerToken("Bearer " + token)
+          : token;
         if (!auth) {
           ws.send(JSON.stringify({ type: "error", message: "Invalid token format" }));
           ws.close();

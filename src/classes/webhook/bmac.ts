@@ -3,6 +3,7 @@ import betterConsole, { tsflag, s } from "ts-better-console";
 import { AlertEventType } from "@/generated/prisma/client";
 import { StreamlabsOption } from "@/consts/integration";
 import { verifySignature } from "@/utils/signature";
+import { timingSafeEqualString } from "@/utils/security";
 import { logDev } from "@/utils/log";
 import { isBmacTest, generateTestTransactionId } from "@/utils/webhook";
 import type { BmacIntegrationRecord } from "@/types/webhooks/bmac.types";
@@ -68,7 +69,8 @@ export class BmacWebhook {
           ? authHeader.slice(7)
           : authHeader;
 
-        matchedIntegration = integrations.find((i) => i.bmacSecret === token) ?? null;
+        matchedIntegration =
+          integrations.find((i) => timingSafeEqualString(i.bmacSecret, token)) ?? null;
         if (!matchedIntegration) {
           const dbMatched = await prisma.client.integration.findFirst({
             where: { bmacSecret: token, deletedAt: null },

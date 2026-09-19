@@ -40,8 +40,8 @@ export const endpoint = new Elysia().get(
       return "Forbidden";
     }
 
-    // Exclude userId from the returned profile data
-    const { userId: _, ...publicProfile } = user.data.profile;
+    // Exclude internal database identifiers from the returned public profile
+    const { userId: _, id: __, ...publicProfile } = user.data.profile;
 
     // Build safe public integrations — NEVER expose secrets
     const integration = user.data.integration;

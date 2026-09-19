@@ -5,6 +5,7 @@ import router, { availableVersions } from "../routes";
 import { UnauthorizedError, BadRequestError } from "./auth";
 import { setBunServer } from "./bun-server";
 import { isDev } from "../config/env";
+import { isAllowedOrigin } from "@/utils/security";
 import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 
 class Server {
@@ -18,6 +19,9 @@ class Server {
       set.headers["X-Frame-Options"] = "SAMEORIGIN";
       set.headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
       set.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+      set.headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+      set.headers["Cross-Origin-Opener-Policy"] = "same-origin";
+      set.headers["X-Permitted-Cross-Domain-Policies"] = "none";
       if (!isDev) {
         set.headers["Strict-Transport-Security"] =
           "max-age=31536000; includeSubDomains; preload";
@@ -28,10 +32,7 @@ class Server {
         origin: (request: Request): boolean => {
           const origin = request.headers.get("origin");
           if (!origin) return true;
-          if (isDev && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-            return true;
-          }
-          return /^https:\/\/([a-z0-9-]+\.)*(alertbox\.org|tip-to\.me)$/i.test(origin);
+          return isAllowedOrigin(origin);
         },
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: [
@@ -149,6 +150,8 @@ class Server {
       betterConsole.log(
         tsflag("error", true, s("An error occurred:", { color: "red" }), error),
       );
+      set.status = 500;
+      return "Internal Server Error";
     });
   }
 
