@@ -27,7 +27,7 @@ export const endpoint = new Elysia()
           displayname: t.Optional(
             t.String({
               description: "Public creator display name.",
-              examples: ["Ponlponl"],
+              examples: ["Ponlponl123"],
             }),
           ),
           bio: t.Optional(
@@ -93,11 +93,10 @@ export const endpoint = new Elysia()
           description: "Profile fields to update.",
           examples: [
             {
-              displayname: "Ponlponl",
+              displayname: "Ponlponl123",
               bio: "Fullstack dev & open source creator.",
               accentColor: "#8B5CF6",
               socialTwitter: "@ponlponl123",
-              socialDiscord: "https://discord.gg/alertbox",
             },
           ],
         },

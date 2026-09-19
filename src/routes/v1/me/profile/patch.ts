@@ -54,7 +54,7 @@ export const endpoint = new Elysia()
       body: t.String({
         description:
           "New custom URI handle (1-50 chars, lowercase alphanumeric and underscores).",
-        examples: ["ponlponl"],
+        examples: ["ponlponl123"],
       }),
       response: {
         200: t.String({

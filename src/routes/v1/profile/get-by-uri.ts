@@ -24,12 +24,12 @@ export const endpoint = new Elysia().get(
       tags: ["Public Profiles"],
       summary: "Check if a creator URI exists",
       description:
-        "Checks if a custom URI handle (e.g. `ponlponl`) exists and is claimed by an active user. Returns `200 OK` if the handle has an owner, or `404 Not Found` if it is unclaimed or available.",
+        "Checks if a custom URI handle (e.g. `ponlponl123`) exists and is claimed by an active user. Returns `200 OK` if the handle has an owner, or `404 Not Found` if it is unclaimed or available.",
     },
     params: t.Object({
       uri: t.String({
         description: "The custom handle or slug to check.",
-        examples: ["ponlponl"],
+        examples: ["ponlponl123"],
       }),
     }),
     response: {
