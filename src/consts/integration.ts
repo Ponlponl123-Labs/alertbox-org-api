@@ -1,11 +1,11 @@
 import { isDev } from "@/config/env";
 
 export enum ConnectionProvider {
-  DISCORD = 1,
-  STREAMLABS = 2,
-  TWITCH = 3,
-  YOUTUBE = 4,
-  GOOGLE = 5,
+  DISCORD = 0,
+  STREAMLABS = 1,
+  TWITCH = 2,
+  YOUTUBE = 3,
+  GOOGLE = 4,
 }
 
 export const integrationRedirectUri: Record<ConnectionProvider, string> = {
@@ -35,9 +35,9 @@ export const streamlabs_redirect_uri = !isDev
   : "http://localhost:3000/app/connections/streamlabs";
 
 export enum StreamlabsOption {
-  STRIPE_PAYMENT_SUCCESS = 0b00000001,
-  BMAC_MEMBERSHIP_SUCCESS = 0b00000010,
-  KOFI_DONATION_SUCCESS = 0b00000100,
-  KOFI_PURCHASE_SUCCESS = 0b00001000,
-  BMAC_DONATION_SUCCESS = 0b00010000,
+  STRIPE_PAYMENT_SUCCESS = 1 << 0,
+  BMAC_MEMBERSHIP_SUCCESS = 1 << 1,
+  KOFI_DONATION_SUCCESS = 1 << 2,
+  KOFI_PURCHASE_SUCCESS = 1 << 3,
+  BMAC_DONATION_SUCCESS = 1 << 4,
 }
