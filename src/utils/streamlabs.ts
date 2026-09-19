@@ -1,7 +1,7 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { setConnection } from "@/classes/me/connections";
-import { streamlabs_redirect_uri } from "@/consts/integration";
+import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import betterConsole, { tsflag, s } from "ts-better-console";
 import { TransactionStatus } from "@/generated/prisma/client";
 import { logDev } from "@/utils/log";
@@ -56,7 +56,7 @@ export async function refreshStreamlabsToken(
         grant_type: "refresh_token",
         client_id: process.env.STREAMLABS_CLIENT_ID,
         client_secret: process.env.STREAMLABS_CLIENT_SECRET,
-        redirect_uri: streamlabs_redirect_uri,
+        redirect_uri: integrationRedirectUri[ConnectionProvider.STREAMLABS],
         refresh_token: refreshToken,
       }),
     });

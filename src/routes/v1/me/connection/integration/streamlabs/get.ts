@@ -3,7 +3,7 @@ import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
-import { streamlabs_redirect_uri } from "@/consts/integration";
+import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";
 
@@ -56,7 +56,7 @@ export const endpoint = new Elysia()
         return "Unauthorized";
       }
 
-      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${streamlabs_redirect_uri}&scope=donations.create&response_type=code&state=${user.data.id}`;
+      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${integrationRedirectUri[ConnectionProvider.STREAMLABS]}&scope=donations.create&response_type=code&state=${user.data.id}`;
 
       return oauth2Url;
     },

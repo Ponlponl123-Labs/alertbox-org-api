@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
 import { setConnection } from "@/classes/me/connections";
-import { streamlabs_redirect_uri } from "@/consts/integration";
+import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 
 const postHandler = async ({ headers, set, ip, body }: any) => {
   const auth = isBearerToken(headers.authorization);
@@ -28,7 +28,7 @@ const postHandler = async ({ headers, set, ip, body }: any) => {
       grant_type: "authorization_code",
       client_id: process.env.STREAMLABS_CLIENT_ID!,
       client_secret: process.env.STREAMLABS_CLIENT_SECRET!,
-      redirect_uri: streamlabs_redirect_uri,
+      redirect_uri: integrationRedirectUri[ConnectionProvider.STREAMLABS],
       code: body,
     } as any),
   });
