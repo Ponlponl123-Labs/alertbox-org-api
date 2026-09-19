@@ -34,13 +34,18 @@ export const endpoint = new Elysia()
       params: t.Object({
         provider: t.String(),
       }),
-      body: t.Union([
-        t.String(),
-        t.Object({
-          username: t.String(),
-          secret: t.String(),
-        }),
-      ]),
+      body: t.Union(
+        [
+          t.Object({
+            secret: t.String(),
+            username: t.Optional(t.String()),
+          }),
+          t.String(),
+        ],
+        {
+          examples: [{ secret: "your-secret-key", username: "creator_name" }],
+        },
+      ),
     },
   );
 

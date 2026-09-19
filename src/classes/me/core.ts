@@ -257,7 +257,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     return {
       set: async (
         provider: SupportedProvider,
-        secret: string | { username: string; secret: string },
+        secret: Parameters<typeof setConnection>[2],
       ) => {
         if (!this.data) {
           throw new Error(

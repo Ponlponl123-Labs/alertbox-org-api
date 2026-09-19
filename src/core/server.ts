@@ -7,6 +7,7 @@ import { setBunServer } from "./bun-server";
 import { isDev } from "../config/env";
 import { isAllowedOrigin } from "@/utils/security";
 import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
+import openapi from "@elysia/openapi";
 
 class Server {
   public app: Elysia;
@@ -44,6 +45,33 @@ class Server {
         credentials: true,
       }),
     );
+    this.app.use(openapi({
+      provider: null,
+      documentation: {
+        info: {
+          title: "AlertBox.org API",
+          version: "1.0.0",
+          description: `High-performance, low-latency live streaming alert & donation engine for creators.
+
+### Key Capabilities
+- **Real-Time Overlay Engine**: Ultra-low latency WebSocket & Redis Pub/Sub alert broadcast for OBS & browser overlays.
+- **Webhook Ingestion**: Unified processing for Ko-fi, Buy Me a Coffee, and payment webhooks with deduplication & disaster recovery audit logging.
+- **Streamlabs Relay**: Automatic donation relay pipeline with OAuth2 token auto-refresh.
+- **Creator Hub**: Custom tipping pages (\`tip-to.me\`), reactive widget customization, and profile routing.`,
+          termsOfService: "https://law.ponlponl123.com/additional/alertbox.org",
+          summary: `The official API for AlertBox.org. For more information, visit https://alertbox.org/docs`,
+          contact: {
+            name: "AlertBox.org Foundation",
+            email: "foundation@alertbox.org",
+            url: "https://labs.ponlponl123.com",
+          },
+          license: {
+            name: "Ponlponl123 Labs License (MIT)",
+            url: "https://github.com/Ponlponl123-Labs/alertbox-org-api/blob/main/LICENSE",
+          },
+        },
+      },
+    }));
     this.port = port;
     this.setupEvents();
     this.routes();
