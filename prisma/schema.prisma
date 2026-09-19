@@ -234,6 +234,15 @@ model ReservedUri {
   @@index([userId])
 }
 
+model WebhookLog {
+  id          String   @id @default(cuid())
+  provider    String   @db.VarChar(100)
+  eventType   String   @db.VarChar(50)
+  rawPayload  String   @db.LongText
+  status      String   @db.VarChar(50)
+  processedAt DateTime @default(now()) @db.Timestamp(0)
+}
+
 model TransactionLog {
   id           String            @id @default(cuid())
   userId       String
