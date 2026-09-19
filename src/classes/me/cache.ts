@@ -67,14 +67,12 @@ export async function setCachedUser(uid: string, user: any): Promise<any> {
  */
 export function filterUserSelection(user: any, select: Prisma.UserSelect): any {
   if (!select) return user;
-  
-  const filtered = Object.keys(select).reduce((acc, key) => {
+
+  const filtered: Record<string, any> = { id: user.id };
+  for (const key in select) {
     if ((select as any)[key]) {
-      acc[key] = (user as any)[key];
+      filtered[key] = user[key];
     }
-    return acc;
-  }, {} as any);
-  
-  filtered.id = user.id;
+  }
   return filtered;
 }

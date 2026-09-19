@@ -2,6 +2,7 @@ import Elysia, { t } from "elysia";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { getBunServer } from "@/core/bun-server";
+import tomlConfig from "@/config/toml";
 import betterConsole, { tsflag, s } from "ts-better-console";
 
 const ALERTS_PREFIX = "alertbox-org:alerts:";
@@ -16,51 +17,53 @@ export interface CachedWidgetSettings {
   alertbox: any;
 }
 
-subRedis.on("error", (err: Error) => {
-  betterConsole.error(
-    tsflag("error", true, s("Redis Subscriber Error:", { color: "red" })),
-    err,
-  );
-});
-
-subRedis
-  .connect()
-  .then(() => {
-    betterConsole.log(
-      tsflag(
-        "info",
-        true,
-        s("Redis Subscriber connected successfully", { color: "green" }),
-      ),
-    );
-
-    subRedis.psubscribe(
-      `${ALERTS_PREFIX}*`,
-      `${LOGS_PREFIX}*`,
-      (err) => {
-        if (err) {
-          betterConsole.error(
-            tsflag(
-              "error",
-              true,
-              s("Failed to psubscribe to Redis channels:", { color: "red" }),
-            ),
-            err,
-          );
-        }
-      },
-    );
-  })
-  .catch((err: Error) => {
+if (tomlConfig.redis?.enabled) {
+  subRedis.on("error", (err: Error) => {
     betterConsole.error(
-      tsflag(
-        "error",
-        true,
-        s("Redis Subscriber Connection Failed:", { color: "red" }),
-      ),
+      tsflag("error", true, s("Redis Subscriber Error:", { color: "red" })),
       err,
     );
   });
+
+  subRedis
+    .connect()
+    .then(() => {
+      betterConsole.log(
+        tsflag(
+          "info",
+          true,
+          s("Redis Subscriber connected successfully", { color: "green" }),
+        ),
+      );
+
+      subRedis.psubscribe(
+        `${ALERTS_PREFIX}*`,
+        `${LOGS_PREFIX}*`,
+        (err) => {
+          if (err) {
+            betterConsole.error(
+              tsflag(
+                "error",
+                true,
+                s("Failed to psubscribe to Redis channels:", { color: "red" }),
+              ),
+              err,
+            );
+          }
+        },
+      );
+    })
+    .catch((err: Error) => {
+      betterConsole.error(
+        tsflag(
+          "error",
+          true,
+          s("Redis Subscriber Connection Failed:", { color: "red" }),
+        ),
+        err,
+      );
+    });
+}
 
 subRedis.on("pmessage", (_pattern: string, channel: string, message: string) => {
   const bunServer = getBunServer();

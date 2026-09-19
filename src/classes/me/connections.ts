@@ -1,5 +1,6 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
+import { day } from "@/consts/time";
 import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
 
 export const supported_providers = [
@@ -72,7 +73,7 @@ export async function setConnection(
   await Promise.all([
     redis.redis.setex(
       `user:${uid}:connections:${provider}`,
-      24 * 60 * 60 * 1000,
+      day,
       secret,
     ),
     redis.redis.del(`user:${uid}:info`),
