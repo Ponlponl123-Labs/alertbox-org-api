@@ -49,14 +49,32 @@ const postHandler = async ({ headers, set, ip, body }: any) => {
 };
 
 const postValidation = {
+  detail: {
+    tags: ["Streamlabs Relay"],
+    summary: "Connect Streamlabs account via authorization code",
+    description:
+      "Exchanges the Streamlabs OAuth2 authorization `code` with Streamlabs API for access and refresh tokens, linking Streamlabs to the creator account.",
+  },
   headers: t.Object({
-    authorization: t.String(),
+    authorization: t.String({
+      description: "Bearer session token.",
+      examples: ["Bearer ab_sess_123456"],
+    }),
   }),
-  body: t.String(),
+  body: t.String({
+    description: "Streamlabs authorization code from the OAuth redirect query.",
+    examples: ["sl_code_9a8b7c6d5e"],
+  }),
+  response: {
+    200: t.String({
+      description: "Streamlabs connected successfully.",
+      examples: ["OK"],
+    }),
+  },
 };
 
 export const endpoint = new Elysia().use(ip({ headersFirst: true }))
   .post("/", postHandler, postValidation)
-  .post("", postHandler, postValidation);
+  .post("", postHandler, { ...postValidation, detail: { ...postValidation.detail, hide: true } });
 
 export default endpoint;

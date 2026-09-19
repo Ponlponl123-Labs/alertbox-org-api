@@ -161,8 +161,26 @@ export const widgetRouter = new Elysia()
       return widgetData;
     },
     {
+      detail: {
+        tags: ["Widgets & Overlays"],
+        summary: "Get widget visual & sound settings",
+        description:
+          "Fetches alert styling, sound files, animations, and typography rules for the specified widget overlay token. Cached in Redis for ultra-fast OBS browser source loading.",
+        responses: {
+          200: {
+            description: "Active widget settings payload.",
+          },
+          401: {
+            description: "Unauthorized or invalid widget token.",
+          },
+        },
+      },
       params: t.Object({
-        token: t.String(),
+        token: t.String({
+          description:
+            "Unique overlay security token generated in the creator dashboard.",
+          examples: ["wgt_tok_9a8b7c6d5e"],
+        }),
       }),
     },
   )
@@ -177,16 +195,42 @@ export const widgetRouter = new Elysia()
       return widgetData;
     },
     {
+      detail: {
+        tags: ["Widgets & Overlays"],
+        summary: "Resolve widget metadata by token",
+        description:
+          "Resolves widget identity and initial configuration by token. Used by overlay web components to verify token validity before opening the persistent WebSocket connection.",
+        responses: {
+          200: {
+            description: "Widget metadata.",
+          },
+          401: {
+            description: "Unauthorized or invalid widget token.",
+          },
+        },
+      },
       params: t.Object({
-        token: t.String(),
+        token: t.String({
+          description: "Widget overlay token.",
+          examples: ["wgt_tok_9a8b7c6d5e"],
+        }),
       }),
     },
   )
   .ws("/widget/:token", {
+    detail: {
+      tags: ["Widgets & Overlays"],
+      summary: "OBS alert overlay real-time WebSocket",
+      description:
+        "Low-latency real-time WebSocket connection for OBS Browser Sources. Automatically subscribes to the creator's Redis alert channel. Sends `settings:init` on connect, then pushes live alert payloads whenever donations or events trigger.",
+    },
     maxPayloadLength: 16 * 1024,
     idleTimeout: 60,
     params: t.Object({
-      token: t.String(),
+      token: t.String({
+        description: "Widget overlay token.",
+        examples: ["wgt_tok_9a8b7c6d5e"],
+      }),
     }),
     async open(ws) {
       try {

@@ -68,10 +68,49 @@ const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
     return session;
   },
   {
-    body: t.Object({
-      code: t.String(),
-      redirect_uri: t.String(),
-    }),
+    detail: {
+      tags: ["Authentication"],
+      summary: "Exchange Discord OAuth2 code for session",
+      description:
+        "Handles the OAuth2 callback from Discord. Takes the authorization `code` from the redirect query, verifies that the user's email is verified on Discord, creates or signs into their account, generates a session token, and immediately revokes the temporary Discord access token.",
+      responses: {
+        200: {
+          description: "Authenticated session created successfully.",
+        },
+        400: {
+          description: "Invalid or unauthorized redirect_uri.",
+        },
+        401: {
+          description: "Unauthorized or failed code exchange.",
+        },
+        406: {
+          description: "Discord email is not verified.",
+        },
+      },
+    },
+    body: t.Object(
+      {
+        code: t.String({
+          description:
+            "The authorization code returned by Discord in the `?code=` query param.",
+          examples: ["mXv97s8dF72k1LmP0qWzYa"],
+        }),
+        redirect_uri: t.String({
+          description:
+            "The exact redirect URI configured in your Discord Developer portal.",
+          examples: ["https://alertbox.org/auth/callback"],
+        }),
+      },
+      {
+        description: "Discord authorization credentials",
+        examples: [
+          {
+            code: "mXv97s8dF72k1LmP0qWzYa",
+            redirect_uri: "https://alertbox.org/auth/callback",
+          },
+        ],
+      },
+    ),
   },
 );
 

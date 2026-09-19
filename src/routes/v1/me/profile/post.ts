@@ -1,4 +1,4 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { prisma } from "@/core/prisma";
 import { auth } from "@/core/auth";
 import { sessionUserSelect, fullUserSelect } from "@/consts/session";
@@ -34,7 +34,21 @@ export const endpoint = new Elysia()
       }
 
       return "OK";
-    }
+    },
+    {
+      detail: {
+        tags: ["Creator Profile"],
+        summary: "Publish creator profile",
+        description:
+          "Makes the creator's tipping page and profile publicly visible to everyone. Sets `publishedAt` to current timestamp and flushes the cache.",
+      },
+      response: {
+        200: t.String({
+          description: "Profile published successfully.",
+          examples: ["OK"],
+        }),
+      },
+    },
   );
 
 export default endpoint;

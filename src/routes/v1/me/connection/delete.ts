@@ -24,9 +24,24 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      detail: {
+        tags: ["Payment Connections"],
+        summary: "Disconnect a payment provider",
+        description:
+          "Removes stored credentials and integration configuration for the given provider. Supported `:provider` values: `stripe`, `kofi`, `buymeacoffee`, `feelfreepay`. Future webhook events from this provider will no longer trigger alerts.",
+      },
       params: t.Object({
-        provider: t.String(),
+        provider: t.String({
+          description: "Provider identifier or alias to disconnect.",
+          examples: ["kofi"],
+        }),
       }),
+      response: {
+        200: t.String({
+          description: "Provider disconnected successfully.",
+          examples: ["OK"],
+        }),
+      },
     },
   );
 

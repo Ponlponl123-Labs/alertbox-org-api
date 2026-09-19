@@ -1,4 +1,4 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { prisma } from "@/core/prisma";
 import { auth } from "@/core/auth";
 import { sessionUserSelect, fullUserSelect } from "@/consts/session";
@@ -34,7 +34,21 @@ export const endpoint = new Elysia()
       }
 
       return "OK";
-    }
+    },
+    {
+      detail: {
+        tags: ["Creator Profile"],
+        summary: "Unpublish creator profile",
+        description:
+          "Hides the creator's public profile and tipping page (`publishedAt: null`). Visitors attempting to view the page will receive a 404.",
+      },
+      response: {
+        200: t.String({
+          description: "Profile unpublished successfully.",
+          examples: ["OK"],
+        }),
+      },
+    },
   );
 
 export default endpoint;

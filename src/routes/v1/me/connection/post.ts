@@ -31,21 +31,57 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      detail: {
+        tags: ["Payment Connections"],
+        summary: "Connect or update a payment provider",
+        description:
+          "Links credentials for payment gateways and donation platforms. Supported `:provider` values: `stripe`, `kofi`, `buymeacoffee` (or `bmac`), `feelfreepay` (or `ffp`). For Ko-fi and BMAC, both `username` and `secret` are required. For Stripe and FeelFreePay, supply either an object with `secret` or raw secret string.",
+      },
       params: t.Object({
-        provider: t.String(),
+        provider: t.String({
+          description:
+            "Target provider name or alias (`stripe`, `kofi`, `buymeacoffee`, `feelfreepay`).",
+          examples: ["kofi"],
+        }),
       }),
       body: t.Union(
         [
-          t.Object({
-            secret: t.String(),
-            username: t.Optional(t.String()),
+          t.Object(
+            {
+              secret: t.String({
+                description:
+                  "API key, webhook secret, or verification token.",
+                examples: ["whsec_1234567890abcdef"],
+              }),
+              username: t.Optional(
+                t.String({
+                  description:
+                    "Platform username (required for Ko-fi and Buy Me a Coffee).",
+                  examples: ["creator_name"],
+                }),
+              ),
+            },
+            {
+              description: "Structured provider credentials object.",
+            },
+          ),
+          t.String({
+            description:
+              "Raw secret or API key string (supported for Stripe & FeelFreePay).",
+            examples: ["whsec_1234567890abcdef"],
           }),
-          t.String(),
         ],
         {
+          description: "Provider configuration payload.",
           examples: [{ secret: "your-secret-key", username: "creator_name" }],
         },
       ),
+      response: {
+        200: t.String({
+          description: "Provider credentials saved successfully.",
+          examples: ["OK"],
+        }),
+      },
     },
   );
 

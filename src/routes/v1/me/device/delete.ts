@@ -18,9 +18,24 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      detail: {
+        tags: ["User Security"],
+        summary: "Revoke an active device session",
+        description:
+          "Immediately terminates a specific login session by its device/session ID. The session token is permanently invalidated in Redis and database, logging out that device.",
+      },
       params: t.Object({
-        id: t.String(),
+        id: t.String({
+          description: "Device session ID to revoke.",
+          examples: ["sess_dev_1a2b3c4d5e"],
+        }),
       }),
+      response: {
+        200: t.String({
+          description: "Device session revoked.",
+          examples: ["OK"],
+        }),
+      },
     },
   );
 

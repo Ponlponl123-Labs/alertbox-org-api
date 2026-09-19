@@ -1,4 +1,4 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
@@ -7,6 +7,15 @@ import { isAllowedOrigin } from "@/utils/security";
 export const endpoint = new Elysia()
   .use(ip({ headersFirst: true }))
   .ws("/ws", {
+    detail: {
+      tags: ["Streamlabs Relay"],
+      summary: "Streamlabs live relay log stream",
+      description:
+        "Subscribes to the creator's real-time Streamlabs forwarding events and execution logs via WebSocket. Pass session token in `?token=` query param or `Authorization` header.",
+    },
+    query: t.Object({
+      token: t.Optional(t.String({ description: "Session bearer token." })),
+    }),
     maxPayloadLength: 16 * 1024,
     idleTimeout: 60,
     async open(ws) {

@@ -63,10 +63,33 @@ export const endpoint = new Elysia().get(
     };
   },
   {
-    params: t.Object({
-      uri: t.String(),
-    }),
-  },
-);
+      detail: {
+        tags: ["Public Profiles"],
+        summary: "Get public creator tipping profile",
+        description:
+          "Fetches the public profile information for a creator's tipping page (e.g. `tip-to.me/@ponlponl`). Returns public fields (display name, bio, accent color, avatar/banner URLs, social links) and a sanitized map of enabled payment providers (`stripe`, `kofi`, `bmac`, `feelfreepay`) with zero sensitive secrets exposed.",
+        responses: {
+          200: {
+            description: "Public tipping page metadata.",
+          },
+          400: {
+            description: "Invalid URI format.",
+          },
+          403: {
+            description: "Creator profile is unpublished or disabled.",
+          },
+          404: {
+            description: "Creator profile not found.",
+          },
+        },
+      },
+      params: t.Object({
+        uri: t.String({
+          description: "Creator's registered custom handle.",
+          examples: ["ponlponl"],
+        }),
+      }),
+    },
+  );
 
 export default endpoint;

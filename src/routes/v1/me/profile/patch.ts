@@ -45,7 +45,23 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
-      body: t.String(),
+      detail: {
+        tags: ["Creator Profile"],
+        summary: "Claim or change custom URI handle",
+        description:
+          "Registers a custom public tipping handle (e.g. `tip-to.me/@yourname`). Must be 1–50 alphanumeric characters or underscores. Once updated, a 30-day cooldown is enforced before the handle can be changed again.",
+      },
+      body: t.String({
+        description:
+          "New custom URI handle (1-50 chars, lowercase alphanumeric and underscores).",
+        examples: ["ponlponl"],
+      }),
+      response: {
+        200: t.String({
+          description: "URI successfully registered.",
+          examples: ["OK"],
+        }),
+      },
     },
   );
 

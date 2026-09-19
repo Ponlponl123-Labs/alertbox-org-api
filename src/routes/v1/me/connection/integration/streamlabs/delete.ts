@@ -23,13 +23,28 @@ const deleteHandler = async ({ headers, set, ip }: any) => {
 };
 
 const deleteValidation = {
+  detail: {
+    tags: ["Streamlabs Relay"],
+    summary: "Disconnect Streamlabs integration",
+    description:
+      "Revokes the Streamlabs connection, clearing access and refresh tokens from the database. Automatic donation forwarding will cease immediately.",
+  },
   headers: t.Object({
-    authorization: t.String(),
+    authorization: t.String({
+      description: "Bearer session token.",
+      examples: ["Bearer ab_sess_123456"],
+    }),
   }),
+  response: {
+    200: t.String({
+      description: "Streamlabs disconnected.",
+      examples: ["OK"],
+    }),
+  },
 };
 
 export const endpoint = new Elysia().use(ip({ headersFirst: true }))
   .delete("/", deleteHandler, deleteValidation)
-  .delete("", deleteHandler, deleteValidation);
+  .delete("", deleteHandler, { ...deleteValidation, detail: { ...deleteValidation.detail, hide: true } });
 
 export default endpoint;

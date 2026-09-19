@@ -70,6 +70,12 @@ class Server {
             url: "https://github.com/Ponlponl123-Labs/alertbox-org-api/blob/main/LICENSE",
           },
         },
+        servers: [
+          {
+            url: isDev ? "http://localhost:3001" : "https://api.alertbox.org",
+            description: isDev ? "Development Server" : "Production Server",
+          },
+        ],
       },
     }));
     this.port = port;
