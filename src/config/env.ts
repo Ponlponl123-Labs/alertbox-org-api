@@ -279,6 +279,18 @@ export const migrationDbConfig = {
  * Redis Configuration
  */
 export const redisConfig = {
+  get host() {
+    return process.env.REDIS_HOST || undefined;
+  },
+  get port() {
+    return process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : undefined;
+  },
+  get sentinelEnabled() {
+    if (process.env.REDIS_SENTINEL_ENABLED !== undefined) {
+      return process.env.REDIS_SENTINEL_ENABLED === "true" || process.env.REDIS_SENTINEL_ENABLED === "1";
+    }
+    return undefined;
+  },
   get password() {
     return process.env.REDIS_PASSWORD || undefined;
   },

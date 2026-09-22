@@ -80,10 +80,13 @@ export class RedisClient {
       ),
     );
 
-    this.natMap = this.buildNatMap();
-    this.redisSentinels = this.buildSentinels();
+    const isSentinelEnabled =
+      redisConfig.sentinelEnabled !== undefined
+        ? redisConfig.sentinelEnabled
+        : !!tomlConfig.redis?.sentinel?.enabled;
 
-    const isSentinelEnabled = !!tomlConfig.redis?.sentinel?.enabled;
+    this.natMap = isSentinelEnabled ? this.buildNatMap() : undefined;
+    this.redisSentinels = isSentinelEnabled ? this.buildSentinels() : undefined;
 
     const tlsConfig = buildTlsOptions(
       redisConfig.tls,
@@ -127,8 +130,8 @@ export class RedisClient {
           ...(sentinelTlsConfig ? { sentinelTLS: sentinelTlsConfig } : {}),
         }
         : {
-          host: tomlConfig.redis?.host || "localhost",
-          port: tomlConfig.redis?.port || 6379,
+          host: redisConfig.host || tomlConfig.redis?.host || "localhost",
+          port: redisConfig.port || tomlConfig.redis?.port || 6379,
         }),
       password: redisConfig.password || tomlConfig.redis?.password || undefined,
       ...(tlsConfig ? { tls: tlsConfig } : {}),
@@ -232,7 +235,11 @@ export class RedisClient {
   }
 
   private buildSentinels(): Partial<SentinelAddress>[] | undefined {
-    if (!tomlConfig?.redis?.sentinel?.enabled) {
+    const isSentinelEnabled =
+      redisConfig.sentinelEnabled !== undefined
+        ? redisConfig.sentinelEnabled
+        : !!tomlConfig?.redis?.sentinel?.enabled;
+    if (!isSentinelEnabled) {
       betterConsole.log(
         tsflag(
           "warn",
