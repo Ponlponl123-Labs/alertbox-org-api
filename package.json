@@ -17,6 +17,7 @@
   "dependencies": {
     "@elysia/openapi": "^1.4.16",
     "@elysiajs/cors": "^1.4.2",
+    "@elysiajs/static": "^1.4.10",
     "@prisma/adapter-libsql": "7.10.0",
     "@prisma/adapter-mariadb": "7.10.0",
     "@prisma/client": "^7.10.0",

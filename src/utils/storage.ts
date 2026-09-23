@@ -2,7 +2,7 @@ import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { existsSync } from "node:fs";
 
-const STORAGE_PATH = process.env.STORAGE_PATH || join(process.cwd(), "uploads");
+const STORAGE_PATH = process.env.STORAGE_PATH || join(process.cwd(), "public", "uploads");
 const CDN_BASE_URL = process.env.CDN_BASE_URL || "https://static.alertbox.org";
 
 export async function saveProfileImage(

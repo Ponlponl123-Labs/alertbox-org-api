@@ -8,6 +8,7 @@ import { isDev } from "../config/env";
 import { isAllowedOrigin } from "@/utils/security";
 import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 import openapi from "@elysia/openapi";
+import staticPlugin from "@elysiajs/static";
 
 class Server {
   public app: Elysia;
@@ -45,6 +46,7 @@ class Server {
         credentials: true,
       }),
     );
+    this.app.use(staticPlugin());
     this.app.use(openapi({
       provider: null,
       documentation: {

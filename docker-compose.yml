@@ -54,6 +54,8 @@ services:
       DB_MIGRATION_USER: alertbox_migrator_dev
       DB_MIGRATION_PASS: "dev-migration-very-secure-password"
       DB_MIGRATION_SHADOW_NAME: alertbox_org_dev_shadow
+      STORAGE_PATH: "/app/public/uploads"
+      CDN_BASE_URL: "http://localhost:3001/public/uploads"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_SENTINEL_ENABLED: "false"
