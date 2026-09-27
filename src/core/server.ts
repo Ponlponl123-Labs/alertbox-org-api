@@ -42,6 +42,7 @@ class Server {
           "Authorization",
           "X-Signature-SHA256",
           "X-Requested-With",
+          "Accept",
         ],
         credentials: true,
       }),
