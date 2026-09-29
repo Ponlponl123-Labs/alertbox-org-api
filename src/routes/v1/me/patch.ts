@@ -1,6 +1,7 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { sessionUserSelect } from "@/consts/session";
+import { Moderation } from "@/classes/moderation";
 
 /**
  * PATCH endpoint to update the currently logged in user's profile.
@@ -9,8 +10,43 @@ export const endpoint = new Elysia()
   .use(auth)
   .patch(
     "/",
-    async ({ getAuthenticatedUser, body }) => {
+    async ({ getAuthenticatedUser, body, set }) => {
       const user = await getAuthenticatedUser(sessionUserSelect);
+
+      if (body.displayname) {
+        const check = await Moderation.moderateText(body.displayname);
+        if (check.flagged) {
+          set.status = "Unavailable For Legal Reasons";
+          return "Display name contains inappropriate content";
+        }
+      }
+
+      if (body.bio) {
+        const check = await Moderation.moderateText(body.bio);
+        if (check.flagged) {
+          set.status = "Unavailable For Legal Reasons";
+          return "Bio contains inappropriate content";
+        }
+      }
+
+      if (body.avatar) {
+        const buf = Buffer.from(await body.avatar.arrayBuffer());
+        const check = await Moderation.moderateImage(buf);
+        if (check.flagged) {
+          set.status = "Unavailable For Legal Reasons";
+          return "Avatar contains inappropriate or NSFW content";
+        }
+      }
+
+      if (body.banner) {
+        const buf = Buffer.from(await body.banner.arrayBuffer());
+        const check = await Moderation.moderateImage(buf);
+        if (check.flagged) {
+          set.status = "Unavailable For Legal Reasons";
+          return "Banner contains inappropriate or NSFW content";
+        }
+      }
+
       const updated = await user.profile.update(body);
       if (!updated) return "No changes";
       return user.toJSON();
@@ -124,6 +160,9 @@ export const endpoint = new Elysia()
       response: {
         200: t.Any({
           description: "Updated user profile object or 'No changes' status.",
+        }),
+        451: t.String({
+          description: "Content moderation safety check rejected input (NSFW, hate speech, violence).",
         }),
       },
     },

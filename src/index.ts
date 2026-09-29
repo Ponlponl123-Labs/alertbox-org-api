@@ -13,6 +13,7 @@ import "./config/env";
 import { redis } from "./core/redis";
 import { prisma } from "./core/prisma";
 import Server from "./core/server";
+import { Moderation } from "./classes/moderation";
 
 // @ts-expect-error BigInt.prototype.toJSON is not defined in the type system
 BigInt.prototype.toJSON = function (): string {
@@ -63,6 +64,8 @@ const printBanner = (): void => {
 };
 
 printBanner();
+
+Moderation.printStatusCard();
 
 new Card("· Starting the Elysia Server...", undefined, {
   border: {
