@@ -34,21 +34,27 @@ FROM oven/bun:1.3-slim AS release
 
 # Set production environment
 ENV NODE_ENV=production
+ENV HOME=/home/bun
+ENV HF_HOME=/home/bun/.cache
+ENV TRANSFORMERS_CACHE=/home/bun/.cache
 
 WORKDIR /app
 
+# Ensure writable cache directory for non-root user
+RUN mkdir -p /home/bun/.cache /app/.cache && chown -R bun:bun /home/bun /app
+
 # Copy the build output from the build stage
-COPY --from=build /app/dist/index.js ./index.js
+COPY --from=build --chown=bun:bun /app/dist/index.js ./index.js
 
 # Copy static assets required by the server (favicon.ico is served in src/core/server.ts)
-COPY --from=build /app/favicon.ico ./favicon.ico
+COPY --from=build --chown=bun:bun /app/favicon.ico ./favicon.ico
 
 # Copy Prisma schema, migrations, config, and CLI for runtime migration execution
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/prisma.config.ts ./prisma.config.ts
-COPY --from=build /app/src/config ./src/config
+COPY --from=build --chown=bun:bun /app/package.json ./package.json
+COPY --from=build --chown=bun:bun /app/node_modules ./node_modules
+COPY --from=build --chown=bun:bun /app/prisma ./prisma
+COPY --from=build --chown=bun:bun /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build --chown=bun:bun /app/src/config ./src/config
 
 # Kubernetes / Docker best practice: run as a non-root user
 USER bun
