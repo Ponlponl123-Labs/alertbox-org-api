@@ -23,8 +23,6 @@ RUN rm -rf \
     node_modules/onnxruntime-node/bin/napi-v6/darwin \
     node_modules/onnxruntime-node/bin/napi-v6/linux/arm* \
     node_modules/onnxruntime-web \
-    node_modules/@prisma/studio-core \
-    node_modules/@prisma/dev \
     node_modules/@img/*musl* \
     node_modules/typescript \
     node_modules/@types
