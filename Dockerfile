@@ -1,7 +1,7 @@
 # ---------------------------------------------------
 # Stage 1: Build
 # ---------------------------------------------------
-FROM oven/bun:1.3-alpine AS build
+FROM oven/bun:1.3-slim AS build
 
 WORKDIR /app
 
@@ -17,10 +17,22 @@ RUN bun prisma generate
 COPY . .
 RUN bun build ./src/index.ts --outdir ./dist --target bun --minify --sourcemap=none
 
+# Prune unused cross-platform binaries and dev artifacts
+RUN rm -rf \
+    node_modules/onnxruntime-node/bin/napi-v6/win32 \
+    node_modules/onnxruntime-node/bin/napi-v6/darwin \
+    node_modules/onnxruntime-node/bin/napi-v6/linux/arm* \
+    node_modules/onnxruntime-web \
+    node_modules/@prisma/studio-core \
+    node_modules/@prisma/dev \
+    node_modules/@img/*musl* \
+    node_modules/typescript \
+    node_modules/@types
+
 # ---------------------------------------------------
 # Stage 2: Runtime
 # ---------------------------------------------------
-FROM oven/bun:1.3-alpine AS release
+FROM oven/bun:1.3-slim AS release
 
 # Set production environment
 ENV NODE_ENV=production
