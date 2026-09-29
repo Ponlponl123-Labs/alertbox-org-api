@@ -1,6 +1,6 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { isValidUri } from "@/utils/regex";
+import { isValidUri, allowed_social } from "@/utils/regex";
 import { week } from "@/consts/time";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
@@ -50,29 +50,40 @@ export async function updateProfile(
   
   for (const [key, field] of Object.entries(socialMap)) {
     if ((payload as any)[key] !== undefined) {
-      data[field] = (payload as any)[key] ? (payload as any)[key].trim().slice(0, 512) : null;
+      const raw = (payload as any)[key];
+      if (raw && typeof raw === "string") {
+        const trimmed = raw.trim();
+        data[field] = allowed_social.test(trimmed) ? trimmed.slice(0, 64) : null;
+      } else {
+        data[field] = null;
+      }
     }
   }
 
   // Image Processing
   if (payload.avatar) {
-    const buffer = Buffer.from(await payload.avatar.arrayBuffer());
-    const processed = await processAvatar(buffer);
-    const { url } = await saveProfileImage(uid, "avatar", nanoid(), processed.buffer);
-    if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old avatar: ${err}`)));
-    data.avatar = url;
+    try {
+      const buffer = Buffer.from(await payload.avatar.arrayBuffer());
+      const processed = await processAvatar(buffer);
+      const { url } = await saveProfileImage(uid, "avatar", nanoid(), processed.buffer);
+      if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old avatar: ${err}`)));
+      data.avatar = url;
+    } catch (err) {
+      betterConsole.error(tsflag("error", true, `Failed to process avatar: ${err}`));
+    }
   }
 
   if (payload.banner) {
-    const buffer = Buffer.from(await payload.banner.arrayBuffer());
-    const processed = await processBanner(buffer);
-    const { url } = await saveProfileImage(uid, "banner", nanoid(), processed.buffer);
-    if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
-    data.banner = url;
-
-    // Automatically extract dominant/average color from the banner as the accent color
     try {
-      const onePixelPng = await new Bun.Image(processed.buffer)
+      const buffer = Buffer.from(await payload.banner.arrayBuffer());
+      const processed = await processBanner(buffer);
+      const { url } = await saveProfileImage(uid, "banner", nanoid(), processed.buffer);
+      if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
+      data.banner = url;
+
+      // Automatically extract dominant/average color from the banner as the accent color
+      try {
+        const onePixelPng = await new Bun.Image(processed.buffer)
         .resize(1, 1)
         .png()
         .bytes();
@@ -103,8 +114,11 @@ export async function updateProfile(
           data.accentColor = (r << 16) + (g << 8) + b;
         }
       }
-    } catch (e) {
-      betterConsole.error(tsflag("error", true, `Failed to extract banner accent color: ${e}`));
+      } catch (e) {
+        betterConsole.error(tsflag("error", true, `Failed to extract banner accent color: ${e}`));
+      }
+    } catch (err) {
+      betterConsole.error(tsflag("error", true, `Failed to process banner: ${err}`));
     }
   }
 

@@ -177,6 +177,9 @@ export const widgetRouter = new Elysia()
       },
       params: t.Object({
         token: t.String({
+          pattern: "^[a-zA-Z0-9_.-]+$",
+          minLength: 1,
+          maxLength: 255,
           description:
             "Unique overlay security token generated in the creator dashboard.",
           examples: ["wgt_tok_9a8b7c6d5e"],
@@ -211,6 +214,9 @@ export const widgetRouter = new Elysia()
       },
       params: t.Object({
         token: t.String({
+          pattern: "^[a-zA-Z0-9_.-]+$",
+          minLength: 1,
+          maxLength: 255,
           description: "Widget overlay token.",
           examples: ["wgt_tok_9a8b7c6d5e"],
         }),
@@ -228,6 +234,9 @@ export const widgetRouter = new Elysia()
     idleTimeout: 60,
     params: t.Object({
       token: t.String({
+        pattern: "^[a-zA-Z0-9_.-]+$",
+        minLength: 1,
+        maxLength: 255,
         description: "Widget overlay token.",
         examples: ["wgt_tok_9a8b7c6d5e"],
       }),

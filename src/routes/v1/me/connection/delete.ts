@@ -32,6 +32,8 @@ export const endpoint = new Elysia()
       },
       params: t.Object({
         provider: t.String({
+          pattern: "^[a-z0-9_-]+$",
+          maxLength: 32,
           description: "Provider identifier or alias to disconnect.",
           examples: ["kofi"],
         }),

@@ -66,7 +66,7 @@ export class WebhookDispatcher {
         type: payload.type,
         status: payload.status ?? TransactionStatus.COMPLETED,
         isTest: payload.isTest,
-        amount: Math.round(payload.amount * 100),
+        amount: Math.round((Number.isFinite(payload.amount) && payload.amount >= 0 ? payload.amount : 0) * 100),
         currency: payload.currency,
         senderName: payload.senderName,
         senderEmail: payload.senderEmail ?? null,

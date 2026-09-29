@@ -26,6 +26,9 @@ export const endpoint = new Elysia()
       },
       params: t.Object({
         id: t.String({
+          pattern: "^[a-zA-Z0-9_.-]+$",
+          minLength: 1,
+          maxLength: 64,
           description: "Device session ID to revoke.",
           examples: ["sess_dev_1a2b3c4d5e"],
         }),

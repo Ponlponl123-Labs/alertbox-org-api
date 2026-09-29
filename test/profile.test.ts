@@ -30,6 +30,26 @@ describe("Profile Validation & Color Utilities", () => {
     });
   });
 
+  describe("Social Handle Validation", () => {
+    const { isValidSocial } = require("../src/utils/regex");
+
+    it("should accept valid social handles and usernames", () => {
+      expect(isValidSocial("ponlponl123")).toBe(true);
+      expect(isValidSocial("@ponlponl123")).toBe(true);
+      expect(isValidSocial("streamer_official")).toBe(true);
+      expect(isValidSocial("streamer-123")).toBe(true);
+      expect(isValidSocial("user.name")).toBe(true);
+    });
+
+    it("should reject invalid characters, injection, or excessive lengths", () => {
+      expect(isValidSocial("<script>alert(1)</script>")).toBe(false);
+      expect(isValidSocial("javascript:alert(1)")).toBe(false);
+      expect(isValidSocial("user name")).toBe(false);
+      expect(isValidSocial("user$name")).toBe(false);
+      expect(isValidSocial("a".repeat(65))).toBe(false);
+    });
+  });
+
   describe("Color Processing", () => {
     it("should convert hex colors to 24-bit integer values", () => {
       expect(hexColorToNumber("#ffffff")).toBe(16777215);

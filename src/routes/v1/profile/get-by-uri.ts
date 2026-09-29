@@ -28,6 +28,9 @@ export const endpoint = new Elysia().get(
     },
     params: t.Object({
       uri: t.String({
+        pattern: "^[a-z0-9_]+$",
+        minLength: 1,
+        maxLength: 49,
         description: "The custom handle or slug to check.",
         examples: ["ponlponl123"],
       }),

@@ -85,6 +85,9 @@ export const endpoint = new Elysia().get(
     },
     params: t.Object({
       uri: t.String({
+        pattern: "^[a-z0-9_]+$",
+        minLength: 1,
+        maxLength: 49,
         description: "Creator's registered custom handle.",
         examples: ["ponlponl123"],
       }),

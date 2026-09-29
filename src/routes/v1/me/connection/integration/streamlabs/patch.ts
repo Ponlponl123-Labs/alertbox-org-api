@@ -43,7 +43,9 @@ const patchValidation = {
   }),
   body: t.Object(
     {
-      options: t.Number({
+      options: t.Integer({
+        minimum: 0,
+        maximum: 255,
         description: "Bitflag integer representing configured relay options.",
         examples: [1],
       }),

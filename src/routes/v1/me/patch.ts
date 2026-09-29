@@ -26,65 +26,85 @@ export const endpoint = new Elysia()
         {
           displayname: t.Optional(
             t.String({
+              minLength: 1,
+              maxLength: 64,
               description: "Public creator display name.",
               examples: ["Ponlponl123"],
             }),
           ),
           bio: t.Optional(
             t.String({
+              maxLength: 1000,
               description: "Short bio or tagline displayed on tipping pages.",
               examples: ["Fullstack dev & open source creator."],
             }),
           ),
           accentColor: t.Optional(
             t.String({
+              pattern: "^$|^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
               description: "Hex color code for theme highlights (with or without #).",
               examples: ["#8B5CF6"],
             }),
           ),
           socialDiscord: t.Optional(
             t.String({
-              description: "Discord username or invite link.",
-              examples: ["https://discord.gg/alertbox"],
+              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "Discord username or invite code.",
+              examples: ["alertbox"],
             }),
           ),
           socialFacebook: t.Optional(
             t.String({
-              description: "Facebook profile or page URL.",
-              examples: ["https://facebook.com/creator"],
+              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "Facebook profile or page handle.",
+              examples: ["creator"],
             }),
           ),
           socialReddit: t.Optional(
             t.String({
-              description: "Reddit username or profile link.",
+              pattern: "^$|^(u/)?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "Reddit username or profile handle.",
               examples: ["u/creator"],
             }),
           ),
           socialTwitch: t.Optional(
             t.String({
-              description: "Twitch channel name or link.",
-              examples: ["https://twitch.tv/creator"],
+              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "Twitch channel name.",
+              examples: ["creator"],
             }),
           ),
           socialTwitter: t.Optional(
             t.String({
-              description: "X / Twitter handle or URL.",
+              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "X / Twitter handle.",
               examples: ["@creator"],
             }),
           ),
           socialYoutube: t.Optional(
             t.String({
-              description: "YouTube channel URL or handle.",
+              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
+              maxLength: 64,
+              description: "YouTube channel handle.",
               examples: ["@creator"],
             }),
           ),
           avatar: t.Optional(
             t.File({
+              maxSize: "5m",
+              type: ["image/png", "image/jpeg", "image/webp"],
               description: "Avatar image file (PNG, JPEG, WebP, max 5MB).",
             }),
           ),
           banner: t.Optional(
             t.File({
+              maxSize: "10m",
+              type: ["image/png", "image/jpeg", "image/webp"],
               description: "Banner cover image file (PNG, JPEG, WebP, max 10MB).",
             }),
           ),

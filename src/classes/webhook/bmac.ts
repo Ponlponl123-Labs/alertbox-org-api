@@ -144,7 +144,8 @@ export class BmacWebhook {
       const isTest = isBmacTest(rawTxId, live_mode, data.supporter_name);
       const providerTxId = isTest ? generateTestTransactionId(rawTxId) : rawTxId;
 
-      const amount = Number(data.amount || 0);
+      const rawAmount = Number(data.amount || 0);
+      const amount = Number.isFinite(rawAmount) && rawAmount >= 0 ? rawAmount : 0;
       const currency = data.currency || "USD";
       const senderName = data.supporter_name || "Anonymous";
       const senderEmail = data.supporter_email ?? null;

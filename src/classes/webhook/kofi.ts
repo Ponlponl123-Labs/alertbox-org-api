@@ -64,7 +64,8 @@ export class KofiWebhook {
       const isTest = isKofiTest(rawTxId, payload);
       const providerTxId = isTest ? generateTestTransactionId(rawTxId) : rawTxId;
 
-      const amount = Number(payload.amount || 0);
+      const rawAmount = Number(payload.amount || 0);
+      const amount = Number.isFinite(rawAmount) && rawAmount >= 0 ? rawAmount : 0;
       const currency = payload.currency || "USD";
       const senderName = payload.from_name || "Anonymous";
       const senderEmail = payload.email || null;

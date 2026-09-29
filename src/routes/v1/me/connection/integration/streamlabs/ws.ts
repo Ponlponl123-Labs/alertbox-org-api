@@ -28,23 +28,23 @@ export const endpoint = new Elysia()
         }
 
         const authHeader = (ws.data.headers as Record<string, string | undefined>)["authorization"];
-        const token = ws.data.query.token || (authHeader ? isBearerToken(authHeader) : null);
-        if (!token) {
+        const rawToken = ws.data.query.token || (authHeader ? isBearerToken(authHeader) : null);
+        if (!rawToken) {
           ws.send(JSON.stringify({ type: "error", message: "Token is required" }));
           ws.close();
           return;
         }
 
-        const auth = typeof token === "string" && !token.startsWith("Bearer ")
-          ? isBearerToken("Bearer " + token)
-          : token;
-        if (!auth) {
+        const token = typeof rawToken === "string" && rawToken.startsWith("Bearer ")
+          ? isBearerToken(rawToken)
+          : rawToken;
+        if (!token || typeof token !== "string" || !/^[a-zA-Z0-9_.-]+$/.test(token)) {
           ws.send(JSON.stringify({ type: "error", message: "Invalid token format" }));
           ws.close();
           return;
         }
 
-        const user = await new Me({ cache: true }).use(auth, ws.data.ip, { id: true });
+        const user = await new Me({ cache: true }).use(token, ws.data.ip, { id: true });
         if (!user || !user.data) {
           ws.send(JSON.stringify({ type: "error", message: "Unauthorized" }));
           ws.close();

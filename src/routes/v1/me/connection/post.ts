@@ -39,6 +39,8 @@ export const endpoint = new Elysia()
       },
       params: t.Object({
         provider: t.String({
+          pattern: "^[a-z0-9_-]+$",
+          maxLength: 32,
           description:
             "Target provider name or alias (`stripe`, `kofi`, `buymeacoffee`, `feelfreepay`).",
           examples: ["kofi"],
@@ -49,12 +51,16 @@ export const endpoint = new Elysia()
           t.Object(
             {
               secret: t.String({
+                minLength: 1,
+                maxLength: 256,
                 description:
                   "API key, webhook secret, or verification token.",
                 examples: ["whsec_1234567890abcdef"],
               }),
               username: t.Optional(
                 t.String({
+                  pattern: "^$|^[a-zA-Z0-9_.-]{1,64}$",
+                  maxLength: 64,
                   description:
                     "Platform username (required for Ko-fi and Buy Me a Coffee).",
                   examples: ["creator_name"],
@@ -66,6 +72,8 @@ export const endpoint = new Elysia()
             },
           ),
           t.String({
+            minLength: 1,
+            maxLength: 256,
             description:
               "Raw secret or API key string (supported for Stripe & FeelFreePay).",
             examples: ["whsec_1234567890abcdef"],
