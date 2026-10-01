@@ -40,14 +40,15 @@ ENV TRANSFORMERS_CACHE=/home/bun/.cache
 
 WORKDIR /app
 
-# Ensure writable cache directory for non-root user
-RUN mkdir -p /home/bun/.cache /app/.cache && chown -R bun:bun /home/bun /app
+# Ensure writable cache and uploads directories for non-root user (before copying node_modules)
+RUN mkdir -p /home/bun/.cache /app/.cache /app/public/uploads && chown -R bun:bun /home/bun /app
 
 # Copy the build output from the build stage
 COPY --from=build --chown=bun:bun /app/dist/index.js ./index.js
 
-# Copy static assets required by the server (favicon.ico is served in src/core/server.ts)
+# Copy static assets required by the server
 COPY --from=build --chown=bun:bun /app/favicon.ico ./favicon.ico
+COPY --from=build --chown=bun:bun /app/public ./public
 
 # Copy Prisma schema, migrations, config, and CLI for runtime migration execution
 COPY --from=build --chown=bun:bun /app/package.json ./package.json
@@ -57,6 +58,7 @@ COPY --from=build --chown=bun:bun /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build --chown=bun:bun /app/src/config ./src/config
 
 # Kubernetes / Docker best practice: run as a non-root user
+ENV HF_HOME=/home/bun/.cache
 USER bun
 
 # Default port for Elysia

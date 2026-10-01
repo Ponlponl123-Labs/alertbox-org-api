@@ -12,7 +12,7 @@ import {
   HARASSMENT_TOXICITY_PATTERNS,
 } from "@/consts/moderation";
 import { ModerationConfigManager } from "./config";
-import { normalizeModerationText, splitModerationChunks } from "@/utils/moderation";
+import { getTransformersCacheDir, normalizeModerationText, splitModerationChunks } from "@/utils/moderation";
 import betterConsole, { tsflag, s } from "ts-better-console";
 
 export class TextModerator {
@@ -37,11 +37,16 @@ export class TextModerator {
       );
 
       const startTime = performance.now();
-      const { pipeline } = await import("@huggingface/transformers");
+      const { env, pipeline } = await import("@huggingface/transformers");
+      const cacheDir = getTransformersCacheDir();
+      env.cacheDir = cacheDir;
+      env.useBrowserCache = false;
       this.minilmExtractor = await pipeline(
         "feature-extraction",
         "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
         {
+          dtype: "q8",
+          cache_dir: cacheDir,
           session_options: {
             intraOpNumThreads: config.cpuThreads,
             interOpNumThreads: config.cpuThreads,
@@ -75,11 +80,16 @@ export class TextModerator {
       );
 
       const startTime = performance.now();
-      const { pipeline } = await import("@huggingface/transformers");
+      const { env, pipeline } = await import("@huggingface/transformers");
+      const cacheDir = getTransformersCacheDir();
+      env.cacheDir = cacheDir;
+      env.useBrowserCache = false;
       this.toxicBertClassifier = await pipeline(
         "text-classification",
         "Xenova/toxic-bert",
         {
+          dtype: "q8",
+          cache_dir: cacheDir,
           session_options: {
             intraOpNumThreads: config.cpuThreads,
             interOpNumThreads: config.cpuThreads,

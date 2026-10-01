@@ -1,3 +1,13 @@
+import path from "path";
+
+export function getTransformersCacheDir(): string {
+  return (
+    process.env.HF_HOME ||
+    process.env.TRANSFORMERS_CACHE ||
+    (process.env.HOME ? path.join(process.env.HOME, ".cache") : path.join(process.cwd(), ".cache"))
+  );
+}
+
 /**
  * Normalizes input text to unmask leetspeak and common evasion techniques (Thai & English).
  */

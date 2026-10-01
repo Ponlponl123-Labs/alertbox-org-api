@@ -3,6 +3,7 @@ import { redis } from "@/core/redis";
 import tomlConfig from "@/config/toml";
 import type { ImageModerationResult } from "@/types";
 import { ModerationConfigManager } from "./config";
+import { getTransformersCacheDir } from "@/utils/moderation";
 import betterConsole, { tsflag, s } from "ts-better-console";
 
 export class ImageModerator {
@@ -23,11 +24,16 @@ export class ImageModerator {
       );
 
       const startTime = performance.now();
-      const { pipeline } = await import("@huggingface/transformers");
+      const { env, pipeline } = await import("@huggingface/transformers");
+      const cacheDir = getTransformersCacheDir();
+      env.cacheDir = cacheDir;
+      env.useBrowserCache = false;
       this.imageNsfwClassifier = await pipeline(
         "image-classification",
         "onnx-community/nsfw_image_detection-ONNX",
         {
+          dtype: "q8",
+          cache_dir: cacheDir,
           session_options: {
             intraOpNumThreads: config.cpuThreads,
             interOpNumThreads: config.cpuThreads,
