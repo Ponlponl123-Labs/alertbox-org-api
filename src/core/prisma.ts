@@ -1,7 +1,7 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import betterConsole, { Card, cs, s, tsflag, rgb } from "ts-better-console";
-import { dbConfig } from "@/config/env";
+import { dbConfig, nodeEnv } from "@/config/env";
 
 class PrismaORM {
   public client: PrismaClient;
@@ -27,7 +27,9 @@ class PrismaORM {
     });
     this.client = new PrismaClient({ adapter: this.adapter });
 
-    this.connect();
+    if (nodeEnv !== "test") {
+      this.connect();
+    }
   }
 
   private async connect() {

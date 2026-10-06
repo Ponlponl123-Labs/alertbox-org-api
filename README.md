@@ -140,12 +140,46 @@ bun x tsc --noEmit
 # Run unit and integration tests
 bun test
 
+# Run database query performance & zero-scan verification
+bun run db:inspect
+
 # Run moderation pipeline tests
 bun test test/moderation.test.ts
 
 # Compile standalone production binary
 bun run build
 ```
+
+---
+
+## Database Query Optimization & Standards
+
+Every query in `alertbox-org-api` must be analyzed before implementation to preserve low latency on the MariaDB Galera cluster:
+
+1. **Zero Table Scans (`type != ALL`)**: Full table scans are rejected. All `WHERE`, `JOIN` (ON), and `ORDER BY` clauses must resolve to a primary key, unique constraint, or composite index.
+2. **Projection Hygiene (`select` > `include`)**: Always use explicit, minimal `select` blocks. Never use broad `include` or full model fetches to avoid pulling sensitive credentials (e.g. `secret`) and to reduce buffer pool memory usage.
+3. **Lookup Method Priority**: Use `findUnique` over `findFirst` when querying unique keys.
+4. **I/O Metric Invariants**: Point lookups must produce **0 table scans**, single-digit logical reads (`Innodb_buffer_pool_read_requests`), and **0 physical reads** under warm cache.
+
+### MariaDB Galera I/O Performance Summary
+
+All core queries are regression-tested via [`test/queries.performance.test.ts`](test/queries.performance.test.ts) (`bun run db:inspect`):
+
+| Query Target | Table | Scan Count | Logical Reads | Physical Reads | Latency | Index Access | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- | :---: |
+| `User.isExist` | `User` | 0 | 1 | 0 | ~1.1 ms | `User_email_key` | **PASS** |
+| `User.byId` | `User` | 0 | 1 | 0 | ~1.4 ms | `PRIMARY` | **PASS** |
+| `Session.auth` | `Session` | 0 | 1 | 0 | ~1.2 ms | `Session_token_key` + `PRIMARY` | **PASS** |
+| `Session.byUser` | `Session` | 0 | 2 | 0 | ~1.3 ms | `Session_userId_userSecret_idx` | **PASS** |
+| `SessionUsage.latest` | `SessionUsage` | 0 | 4 | 0 | ~1.1 ms | `SessionUsage_sessionId_idx` | **PASS** |
+| `Widget.byToken` | `Widget` | 0 | 1 | 0 | ~1.0 ms | `Widget_token_key` | **PASS** |
+| `Widget.activeAlertbox` | `Widget` | 0 | 2 | 0 | ~1.1 ms | `Widget_userId_idx` | **PASS** |
+| `WidgetTokenLog.history` | `WidgetTokenLog` | 0 | 2 | 0 | ~0.9 ms | `WidgetTokenLog_createdAt_idx` | **PASS** |
+| `ReservedUri.byUri` | `ReservedUri` | 0 | 1 | 0 | ~1.8 ms | `ReservedUri_uri_key` | **PASS** |
+| `ReservedUri.byUser` | `ReservedUri` | 0 | 2 | 0 | ~0.8 ms | `ReservedUri_userId_idx` | **PASS** |
+| `TransactionLog.dedup` | `TransactionLog` | 0 | 1 | 0 | ~0.8 ms | `provider_providerTxId_key` | **PASS** |
+| `TransactionLog.byUser` | `TransactionLog` | 0 | 2 | 0 | ~0.7 ms | `TransactionLog_createdAt_idx` | **PASS** |
+| `StreamlabsRelayLog.byUser` | `StreamlabsRelayLog` | 0 | 2 | 0 | ~0.9 ms | `StreamlabsRelayLog_createdAt_idx` | **PASS** |
 
 ---
 

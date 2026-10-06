@@ -39,19 +39,19 @@ export async function createSession(
   uid: string,
   metadata: SessionMetadata,
 ): Promise<string | false> {
-  const user = await prisma.client.user.findFirst({
+  const user = await prisma.client.user.findUnique({
     select: {
       id: true,
       secret: true,
+      disabledAt: true,
+      deletedAt: true,
     },
     where: {
       id: uid,
-      disabledAt: null,
-      deletedAt: null,
     },
   });
 
-  if (!user) return false;
+  if (!user || user.disabledAt || user.deletedAt) return false;
 
   const useragent = UAParser(metadata.userAgent);
   const ip_geo = await get_IPGeolocation(metadata.ipAddress);

@@ -66,6 +66,15 @@ export async function createAccount(data: {
           },
         },
       });
+      await redis.redis.setex(
+        `email:${data.email.trim().toLowerCase()}`,
+        day,
+        JSON.stringify({
+          id: user.id,
+          disabledAt: user.disabledAt,
+          deletedAt: user.deletedAt,
+        }),
+      );
       return user;
     } catch (error: any) {
       if (error?.code === "P2002") {
@@ -101,22 +110,23 @@ export async function createAccount(data: {
  * Check if a user exists by email, with caching.
  */
 export async function isExist(email: string): Promise<MinimalUser | null> {
-  const cacheKey = `email:${email}`;
+  const cleanEmail = email.trim().toLowerCase();
+  const cacheKey = `email:${cleanEmail}`;
   const cached = await redis.redis.get(cacheKey);
 
   if (cached) {
-    if (cached === "deleted") return null;
+    if (cached === "deleted" || cached === "null") return null;
     return JSON.parse(cached);
   }
 
-  const user = await prisma.client.user.findFirst({
+  const user = await prisma.client.user.findUnique({
     select: {
       id: true,
       disabledAt: true,
       deletedAt: true,
     },
     where: {
-      email,
+      email: cleanEmail,
     },
   });
 
@@ -127,6 +137,8 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
 
   if (user) {
     await redis.redis.setex(cacheKey, day, JSON.stringify(user));
+  } else {
+    await redis.redis.setex(cacheKey, 300, "null");
   }
 
   return user;
@@ -195,7 +207,7 @@ export async function deleteAccount(uid: string, email: string) {
   // Cleanup Caches
   const cacheCleanup: Promise<any>[] = [
     redis.redis.del(`user:${uid}:info`),
-    redis.redis.del(`email:${email}`),
+    redis.redis.del(`email:${email.trim().toLowerCase()}`),
   ];
 
   if (user.profile?.uri) {

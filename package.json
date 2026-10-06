@@ -12,7 +12,8 @@
     "db:migrate:resolve": "bun node_modules/prisma/build/index.js migrate resolve --applied 0_init",
     "db:migrate:reset": "bun node_modules/prisma/build/index.js migrate reset",
     "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
-    "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe"
+    "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe",
+    "db:inspect": "bun test test/queries.performance.test.ts"
   },
   "dependencies": {
     "@elysia/openapi": "^1.4.16",

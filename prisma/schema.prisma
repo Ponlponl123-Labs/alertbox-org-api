@@ -26,7 +26,6 @@ model User {
   widgets             Widget[]
 
   @@unique([id, secret])
-  @@index([email])
 }
 
 model Profile {
@@ -62,7 +61,6 @@ model Profile {
   user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([displayName])
-  @@index([uri])
   @@fulltext([bio])
 }
 
@@ -78,7 +76,7 @@ model Widget {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenLogs WidgetTokenLog[]
 
-  @@index([userId])
+  @@index([userId, type, deletedAt])
 }
 
 model AlertboxSetting {
@@ -152,6 +150,9 @@ model Integration {
   bmacUsername           String?   @db.VarChar(64)
   kofiUsername           String?   @db.VarChar(64)
   user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([kofiSecret, deletedAt])
+  @@index([bmacSecret, deletedAt])
 }
 
 model Session {
@@ -160,7 +161,7 @@ model Session {
   userSecret      String         @db.VarChar(255)
   token           String         @unique @db.VarChar(255)
   method          String         @db.VarChar(255)
-  userAgent       String         @db.LongText
+  userAgent       String         @db.Text
   os              String?        @db.VarChar(128)
   osVersion       String?        @db.VarChar(128)
   platform        String?        @db.VarChar(128)
@@ -205,6 +206,8 @@ model Session {
   sessionUsages   SessionUsage[]
 
   @@index([userId, userSecret])
+  @@index([userId, disabledAt, expiresAt])
+  @@index([expiresAt])
 }
 
 model SessionUsage {
@@ -217,8 +220,8 @@ model SessionUsage {
   session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([sessionId])
+  @@index([userId, createdAt])
+  @@index([sessionId, id])
 }
 
 model ReservedUri {
@@ -231,7 +234,7 @@ model ReservedUri {
   createdAt       DateTime  @default(now()) @db.Timestamp(0)
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, deletedAt, createdAt])
 }
 
 model WebhookLog {
@@ -241,6 +244,9 @@ model WebhookLog {
   rawPayload  String   @db.LongText
   status      String   @db.VarChar(50)
   processedAt DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([provider, processedAt])
+  @@index([processedAt])
 }
 
 model TransactionLog {
@@ -262,8 +268,7 @@ model TransactionLog {
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerTxId])
-  @@index([userId])
-  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 enum WidgetType {
@@ -292,12 +297,11 @@ model WidgetTokenLog {
   oldToken  String   @db.VarChar(255)
   newToken  String   @db.VarChar(255)
   ipAddress String   @db.VarChar(50)
-  userAgent String   @db.LongText
+  userAgent String   @db.Text
   createdAt DateTime @default(now()) @db.Timestamp(0)
   widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 
-  @@index([widgetId])
-  @@index([createdAt])
+  @@index([widgetId, createdAt])
 }
 
 model StreamlabsRelayLog {
@@ -319,6 +323,5 @@ model StreamlabsRelayLog {
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerTxId])
-  @@index([userId])
-  @@index([createdAt])
+  @@index([userId, createdAt])
 }

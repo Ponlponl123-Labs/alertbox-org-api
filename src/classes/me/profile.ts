@@ -168,10 +168,9 @@ export async function registerURI(
   const cachedOwner = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cachedOwner && cachedOwner !== "noone") return false;
 
-  const existingRecord = await prisma.client.reservedUri.findFirst({
+  const existingRecord = await prisma.client.reservedUri.findUnique({
     select: { userId: true, disabledAt: true },
     where: { uri: parsedUri },
-    orderBy: { createdAt: "desc" },
   });
 
   if (existingRecord) {
@@ -227,10 +226,9 @@ export async function getURIOwner(uri: string): Promise<string | false> {
   if (cached === "noone" || cached === "disabled") return false;
   if (cached) return cached;
 
-  const lastRecord = await prisma.client.reservedUri.findFirst({
+  const lastRecord = await prisma.client.reservedUri.findUnique({
     select: { createdAt: true, userId: true, disabledAt: true },
     where: { uri: parsedUri },
-    orderBy: { createdAt: "desc" },
   });
 
   if (!lastRecord) {

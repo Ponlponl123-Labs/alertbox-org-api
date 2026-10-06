@@ -20,7 +20,7 @@ let nodeEnv: string =
     ? "development"
     : "production");
 
-const isDev = nodeEnv === "development";
+const isDev = nodeEnv === "development" || nodeEnv === "test";
 
 const envFiles = isDev
   ? [".env.development.local", ".env.development", ".env.dev", ".env.local", ".env"]

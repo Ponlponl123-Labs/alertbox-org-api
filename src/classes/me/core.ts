@@ -45,22 +45,27 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     this.currentSession = session;
     this.lastSelect = select;
 
-    // Fetch session and include user to verify secret matching automatically
-    const session_info = await prisma.client.session.findFirst({
+    // Fetch session and include user via minimal select to drop unneeded heavy columns
+    const session_info = await prisma.client.session.findUnique({
       where: {
         token: session,
-        disabledAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
       },
-      include: {
-        user: true, // This will only resolve if userSecret matches user.secret due to schema relation
-      }
+      select: {
+        id: true,
+        userId: true,
+        ipAddress: true,
+        disabledAt: true,
+        expiresAt: true,
+        user: { select: { id: true } },
+      },
     });
 
-    if (!session_info || !session_info.user) {
-      // If session exists but user is null, it means User.secret has changed
+    if (
+      !session_info ||
+      session_info.disabledAt ||
+      session_info.expiresAt <= new Date() ||
+      !session_info.user
+    ) {
       if (session_info) void destroySession(session);
       return false;
     }
@@ -84,13 +89,11 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     }
 
     // Re-fetch with full user selection if not cached
-    const user = await prisma.client.user.findFirst({
+    const user = await prisma.client.user.findUnique({
       where: {
         id: session_info.userId,
       },
-      select: {
-        ...fullUserSelect,
-      } as any
+      select: fullUserSelect,
     });
 
     if (!user) return null;
@@ -128,13 +131,11 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       }
     }
 
-    const user = await prisma.client.user.findFirst({
+    const user = await prisma.client.user.findUnique({
       where: {
         id: uid,
       },
-      select: {
-        ...fullUserSelect,
-      } as any
+      select: fullUserSelect,
     });
 
     if (!user) return null;
@@ -332,12 +333,16 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       throw new Error("User data not loaded.");
     }
     const newSecret = `${nanoid(32)}.${Date.now()}.${nanoid(32)}`;
-    await prisma.client.user.update({
-      data: { secret: newSecret },
-      where: { id: this.data.id }
-    });
-    // Since Sessions reference the secret, they are now effectively invalid for relations.
-    // They will also be cleaned up or marked as disabled if we want more explicit handling.
+    await prisma.client.$transaction([
+      prisma.client.user.update({
+        data: { secret: newSecret },
+        where: { id: this.data.id },
+      }),
+      prisma.client.session.updateMany({
+        where: { userId: this.data.id, disabledAt: null },
+        data: { disabledAt: new Date() },
+      }),
+    ]);
     return true;
   }
 

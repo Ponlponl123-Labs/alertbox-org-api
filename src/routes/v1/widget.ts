@@ -96,8 +96,8 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
     }
   }
 
-  const widget = await prisma.client.widget.findFirst({
-    where: { token, deletedAt: null },
+  const widget = await prisma.client.widget.findUnique({
+    where: { token },
     include: {
       alertbox: {
         include: {
@@ -107,7 +107,7 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
     },
   });
 
-  if (!widget) return null;
+  if (!widget || widget.deletedAt) return null;
 
   const result: CachedWidgetSettings = {
     widgetId: widget.id,

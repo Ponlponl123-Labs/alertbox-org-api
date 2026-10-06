@@ -59,3 +59,31 @@ export const fullUserSelect = {
     },
   },
 } as const satisfies Prisma.UserSelect;
+
+export const sessionUserInclude = {
+  profile: true,
+  widgets: {
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.UserInclude;
+
+export const fullUserInclude = {
+  profile: true,
+  integration: true,
+  widgets: {
+    include: {
+      alertbox: {
+        include: {
+          events: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.UserInclude;
+
