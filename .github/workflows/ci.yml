@@ -50,7 +50,7 @@ jobs:
         run: bun x prisma generate
 
       - name: Deploy Database Schema to Sample MariaDB
-        run: bun x prisma db push --skip-generate
+        run: bun x prisma db push --accept-data-loss
 
       - name: Typecheck
         run: bun x tsc --noEmit

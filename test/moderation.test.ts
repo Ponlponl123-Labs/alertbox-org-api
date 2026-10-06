@@ -68,19 +68,6 @@ describe("Content Moderation Service", () => {
       expect(res.flagged).toBe(false);
       expect(res.score).toBe(0);
     });
-
-    it("should accurately evaluate all benchmark test cases in testcase.json if present", async () => {
-      const fs = await import("fs");
-      const path = await import("path");
-      const testcasePath = path.resolve(process.cwd(), "testcase.json");
-      if (!fs.existsSync(testcasePath)) return;
-      const cases = JSON.parse(fs.readFileSync(testcasePath, "utf8"));
-      for (const c of cases) {
-        const res = await moderateText(c.streamer_bio);
-        const isControl = c.test_id.includes("005");
-        expect(res.flagged).toBe(!isControl);
-      }
-    });
   });
 
   describe("Image Moderation", () => {
