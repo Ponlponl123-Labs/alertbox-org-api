@@ -15,6 +15,25 @@ jobs:
     name: Test & Build
     runs-on: ubuntu-latest
 
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: alertbox_org_dev
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=10
+
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: alertbox_org_dev
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/alertbox_org_dev
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -30,11 +49,17 @@ jobs:
       - name: Generate Prisma Client
         run: bun x prisma generate
 
+      - name: Deploy Database Schema to Sample MariaDB
+        run: bun x prisma db push --skip-generate
+
       - name: Typecheck
         run: bun x tsc --noEmit
 
       - name: Run Unit & Integration Tests
         run: bun test
+
+      - name: Run DB Query I/O & Performance Tests
+        run: bun run db:inspect
 
       - name: Build Verification
         run: bun run build
