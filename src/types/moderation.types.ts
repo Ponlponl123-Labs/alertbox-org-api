@@ -20,9 +20,7 @@ export interface ModerationConfig {
   enabled: boolean;
   textEnabled: boolean;
   imageEnabled: boolean;
-  textEngine: ModerationTextEngine;
-  cpuThreads: number;
-  textThreshold: number;
-  imageNsfwThreshold: number;
+  apiUrl: string;
   cacheTtlSec: number;
+  timeoutMs: number;
 }

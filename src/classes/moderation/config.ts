@@ -1,21 +1,32 @@
 import type { ModerationConfig } from "@/types";
-import { DEFAULT_MODERATION_CONFIG } from "@/consts/moderation";
 import betterConsole, { Card, rgb, tsflag } from "ts-better-console";
+
+export const DEFAULT_MODERATION_CONFIG: ModerationConfig = {
+  enabled: true,
+  textEnabled: true,
+  imageEnabled: true,
+  apiUrl: "",
+  cacheTtlSec: 604800,
+  timeoutMs: 5000,
+};
 
 export class ModerationConfigManager {
   private static warned = false;
 
   public static printWarningCard(config: ModerationConfig): void {
-    const isFullyDisabled = !config.enabled;
+    const isFullyDisabled = !config.enabled || !config.apiUrl;
     const title = isFullyDisabled
       ? "⚠ Content Moderation Disabled"
       : "⚠ Partial Content Moderation Notice";
 
     const details = isFullyDisabled
-      ? "All automated safety checks (Text & Image) are bypassed via configuration."
+      ? (!config.apiUrl
+          ? "No external moderation API endpoint configured (EXTERNAL_MODERATION_API)."
+          : "All automated safety checks (Text & Image) are bypassed via configuration.")
       : [
-          `• Text Moderation  : ${config.textEnabled && config.textEngine !== "none" ? `ACTIVE (${config.textEngine})` : "DISABLED"}`,
-          `• Image Moderation : ${config.imageEnabled ? "ACTIVE (nsfw_image_detection)" : "DISABLED"}`,
+          `• Endpoint        : ${config.apiUrl}`,
+          `• Text Moderation : ${config.textEnabled ? "ACTIVE" : "DISABLED"}`,
+          `• Image Moderation: ${config.imageEnabled ? "ACTIVE" : "DISABLED"}`,
         ].join("\n");
 
     new Card(`${title}\n\n${details}`, undefined, {
@@ -30,19 +41,21 @@ export class ModerationConfigManager {
   }
 
   public static printStatusCard(config: ModerationConfig = ModerationConfigManager.get()): void {
+    const isOnline = config.enabled && !!config.apiUrl;
     const lines = [
       `· Content Moderation Status`,
       ``,
-      `• Global Status    : ${config.enabled ? "ENABLED" : "DISABLED"}`,
-      `• Text Engine      : ${config.textEnabled ? config.textEngine : "DISABLED"} (threshold: ${config.textThreshold})`,
-      `• Image Engine     : ${config.imageEnabled ? "nsfw_image_detection" : "DISABLED"} (threshold: ${config.imageNsfwThreshold})`,
-      `• CPU Threads      : ${config.cpuThreads}`,
+      `• Global Status    : ${isOnline ? "ENABLED (External API)" : "DISABLED"}`,
+      `• Endpoint         : ${config.apiUrl || "NOT CONFIGURED"}`,
+      `• Text Checks      : ${config.textEnabled ? "ENABLED" : "DISABLED"}`,
+      `• Image Checks     : ${config.imageEnabled ? "ENABLED" : "DISABLED"}`,
+      `• Request Timeout  : ${config.timeoutMs}ms`,
       `• Cache TTL        : ${config.cacheTtlSec}s`,
     ];
 
     new Card(lines.join("\n"), undefined, {
       border: {
-        style: { color: config.enabled ? rgb(59, 130, 246) : rgb(245, 158, 11) },
+        style: { color: isOnline ? rgb(59, 130, 246) : rgb(245, 158, 11) },
         symbols: { style: "round" },
       },
     })
@@ -52,6 +65,12 @@ export class ModerationConfigManager {
   }
 
   public static get(): ModerationConfig {
+    const apiUrl = (
+      process.env.EXTERNAL_MODERATION_API ||
+      process.env.MODERATION_API_URL ||
+      DEFAULT_MODERATION_CONFIG.apiUrl
+    ).trim().replace(/\/+$/, "");
+
     const enabled = process.env.MODERATION_ENABLED !== undefined
       ? process.env.MODERATION_ENABLED !== "false"
       : DEFAULT_MODERATION_CONFIG.enabled;
@@ -64,23 +83,9 @@ export class ModerationConfigManager {
       ? process.env.MODERATION_IMAGE_ENABLED !== "false"
       : DEFAULT_MODERATION_CONFIG.imageEnabled;
 
-    const rawEngine = (process.env.MODERATION_TEXT_ENGINE || DEFAULT_MODERATION_CONFIG.textEngine).toLowerCase();
-    const textEngine: ModerationConfig["textEngine"] =
-      rawEngine === "toxic-bert" || rawEngine === "none"
-        ? (rawEngine as any)
-        : "minilm";
-
-    const cpuThreads = Math.max(
-      1,
-      parseInt(process.env.MODERATION_CPU_THREADS || String(DEFAULT_MODERATION_CONFIG.cpuThreads), 10),
-    );
-
-    const textThreshold = parseFloat(
-      process.env.MODERATION_TEXT_THRESHOLD || String(DEFAULT_MODERATION_CONFIG.textThreshold),
-    );
-
-    const imageNsfwThreshold = parseFloat(
-      process.env.MODERATION_IMAGE_NSFW_THRESHOLD || String(DEFAULT_MODERATION_CONFIG.imageNsfwThreshold),
+    const timeoutMs = parseInt(
+      process.env.MODERATION_TIMEOUT_MS || String(DEFAULT_MODERATION_CONFIG.timeoutMs),
+      10,
     );
 
     const cacheTtlSec = parseInt(
@@ -92,16 +97,14 @@ export class ModerationConfigManager {
       enabled,
       textEnabled,
       imageEnabled,
-      textEngine,
-      cpuThreads,
-      textThreshold,
-      imageNsfwThreshold,
+      apiUrl,
+      timeoutMs,
       cacheTtlSec,
     };
 
     if (!this.warned) {
       this.warned = true;
-      if (!config.enabled || !config.textEnabled || !config.imageEnabled || config.textEngine === "none") {
+      if (!config.enabled || !config.apiUrl || !config.textEnabled || !config.imageEnabled) {
         this.printWarningCard(config);
       }
     }
