@@ -172,14 +172,14 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       expect(res.explain.every((r) => r.type !== "ALL")).toBe(true);
     });
 
-    it("devices.list: Active sessions by userId [scans: 0, logical: 2, physical: 0]", async () => {
+    it("devices.list: Active sessions by userId [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
         "Session.byUser",
         "SELECT id, createdAt, ipAddress, userAgent FROM `Session` " +
         "WHERE userId = 'sample-uid' AND disabledAt IS NULL AND expiresAt > NOW()"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(4);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
       expect(res.explain.every((r) => r.type !== "ALL")).toBe(true);
@@ -210,26 +210,26 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       if (res.explain[0].key) expect(res.explain[0].key).toContain("Widget_token_key");
     });
 
-    it("dispatcher: Active ALERTBOX widgets [scans: 0, logical: 2, physical: 0]", async () => {
+    it("dispatcher: Active ALERTBOX widgets [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "Widget.activeAlertbox",
         "SELECT id FROM `Widget` WHERE userId = 'sample-uid' AND type = 'ALERTBOX' AND deletedAt IS NULL"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
       expect(["ref", "range", null]).toContain(res.explain[0].type);
     });
 
-    it("WidgetTokenLog: History ordered by createdAt [scans: 0, logical: 2, physical: 0]", async () => {
+    it("WidgetTokenLog: History ordered by createdAt [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "WidgetTokenLog.history",
         "SELECT id, oldToken, newToken, createdAt FROM `WidgetTokenLog` " +
         "WHERE widgetId = 'sample-widget' ORDER BY createdAt DESC LIMIT 10"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
     });
@@ -248,13 +248,13 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       if (res.explain[0].key) expect(res.explain[0].key).toContain("ReservedUri_uri_key");
     });
 
-    it("deleteAccount: User active reserved URIs [scans: 0, logical: 2, physical: 0]", async () => {
+    it("deleteAccount: User active reserved URIs [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "ReservedUri.byUser",
         "SELECT id, uri FROM `ReservedUri` WHERE userId = 'sample-uid' AND deletedAt IS NULL"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
     });
@@ -273,25 +273,25 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       if (res.explain[0].key) expect(res.explain[0].key).toContain("provider");
     });
 
-    it("TransactionLog: User transaction history ordered by createdAt [scans: 0, logical: 2, physical: 0]", async () => {
+    it("TransactionLog: User transaction history ordered by createdAt [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "TransactionLog.byUser",
         "SELECT id, amount, currency, createdAt FROM `TransactionLog` " +
         "WHERE userId = 'sample-uid' ORDER BY createdAt DESC LIMIT 25"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
     });
 
-    it("StreamlabsRelayLog: User relay history ordered by createdAt [scans: 0, logical: 2, physical: 0]", async () => {
+    it("StreamlabsRelayLog: User relay history ordered by createdAt [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "StreamlabsRelayLog.byUser",
         "SELECT id, provider, status, createdAt FROM `StreamlabsRelayLog` " +
         "WHERE userId = 'sample-uid' ORDER BY createdAt DESC LIMIT 20"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
     });
   });

@@ -28,9 +28,11 @@ describe("Environment & Database Config", () => {
   });
 
   it("should support empty DB password when SSL is required or configured", () => {
+    const origDbUrl = process.env.DATABASE_URL;
     const origPass = process.env.DB_PASS;
     const origSsl = process.env.DB_SSL_MODE;
     try {
+      delete process.env.DATABASE_URL;
       process.env.DB_PASS = "";
       process.env.DB_SSL_MODE = "REQUIRED";
       expect(dbConfig.password).toBe("");
@@ -40,6 +42,7 @@ describe("Environment & Database Config", () => {
     } finally {
       process.env.DB_PASS = origPass;
       process.env.DB_SSL_MODE = origSsl;
+      if (origDbUrl !== undefined) process.env.DATABASE_URL = origDbUrl;
     }
   });
 
