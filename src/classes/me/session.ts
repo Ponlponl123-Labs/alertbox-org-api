@@ -9,15 +9,15 @@ import { SessionMetadata } from "@/types/me.types";
  * Track a session usage event in the database.
  */
 export async function trackSessionUsage(
-  uid: string,
-  sessionId: string,
+  uid: string | bigint,
+  sessionId: string | bigint,
   ip: string,
 ) {
   return prisma.client.sessionUsage
     .create({
       data: {
-        userId: uid,
-        sessionId: sessionId,
+        userId: BigInt(uid),
+        sessionId: BigInt(sessionId),
         ipAddress: ip,
       },
     })
@@ -36,9 +36,16 @@ export async function trackSessionUsage(
  * Create a new session in the database.
  */
 export async function createSession(
-  uid: string,
+  uid: string | bigint,
   metadata: SessionMetadata,
 ): Promise<string | false> {
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
+    return false;
+  }
+
   const user = await prisma.client.user.findUnique({
     select: {
       id: true,
@@ -47,7 +54,7 @@ export async function createSession(
       deletedAt: true,
     },
     where: {
-      id: uid,
+      id: targetUid,
     },
   });
 

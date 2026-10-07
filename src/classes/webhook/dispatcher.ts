@@ -58,9 +58,16 @@ export class WebhookDispatcher {
   public static async recordTransaction(
     payload: DonationEventPayload,
   ): Promise<void> {
+    let targetUid: bigint;
+    try {
+      targetUid = BigInt(payload.userId);
+    } catch {
+      return;
+    }
+
     await prisma.client.transactionLog.create({
       data: {
-        userId: payload.userId,
+        userId: targetUid,
         provider: payload.provider,
         providerTxId: payload.providerTxId,
         type: payload.type,
@@ -133,7 +140,7 @@ export class WebhookDispatcher {
    * Broadcast alert payload to all user's active ALERTBOX widgets via Redis Pub/Sub.
    */
   public static async dispatchAlerts(
-    userId: string,
+    userId: string | bigint,
     alertData: {
       type: DonationEventPayload["type"];
       name: string;
@@ -142,9 +149,16 @@ export class WebhookDispatcher {
       message: string | null;
     },
   ): Promise<void> {
+    let targetUid: bigint;
+    try {
+      targetUid = BigInt(userId);
+    } catch {
+      return;
+    }
+
     const widgets = await prisma.client.widget.findMany({
       where: {
-        userId,
+        userId: targetUid,
         type: "ALERTBOX",
         deletedAt: null,
       },

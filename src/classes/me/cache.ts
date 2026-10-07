@@ -10,8 +10,9 @@ import { Prisma } from "@/generated/prisma/client";
  * @param uid - The unique user identifier.
  * @returns The cached user object, "deleted" if marked as deleted, or null if cache miss.
  */
-export async function getCachedUser(uid: string): Promise<any | null> {
-  const cachedData = await redis.redis.get("user:" + uid + ":info");
+export async function getCachedUser(uid: string | bigint): Promise<any | null> {
+  const userKey = String(uid);
+  const cachedData = await redis.redis.get("user:" + userKey + ":info");
   if (!cachedData) return null;
   if (cachedData === "deleted") return "deleted";
 
@@ -30,11 +31,12 @@ export async function getCachedUser(uid: string): Promise<any | null> {
  * @param user - The complete user object retrieved from the database.
  * @returns The sanitized user object without the authentication secret.
  */
-export async function setCachedUser(uid: string, user: any): Promise<any> {
+export async function setCachedUser(uid: string | bigint, user: any): Promise<any> {
+  const userKey = String(uid);
   const { secret, ...cacheableUser } = user;
   
   await redis.redis.setex(
-    "user:" + uid + ":info",
+    "user:" + userKey + ":info",
     day,
     JSON.stringify(cacheableUser),
   );

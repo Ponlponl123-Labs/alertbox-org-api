@@ -90,7 +90,7 @@ export const webhookBodySchema = t.Union([
 export type WebhookBodySchemaType = Static<typeof webhookBodySchema>;
 
 export interface BmacIntegrationRecord {
-  userId: string;
+  userId: bigint | string;
   bmacSecret: string | null;
   streamlabsSecret: string | null;
   streamlabsRefreshToken?: string | null;

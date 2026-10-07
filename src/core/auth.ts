@@ -42,7 +42,7 @@ export const auth = new Elysia({ name: "auth" })
        */
       async getAuthenticatedUser<S extends Prisma.UserSelect = typeof basicUserSelect>(
         select?: S,
-      ): Promise<Omit<Me<S>, "data"> & { data: Prisma.UserGetPayload<{ select: S }> & { id: string } }> {
+      ): Promise<Omit<Me<S>, "data"> & { data: Prisma.UserGetPayload<{ select: S }> & { id: bigint } }> {
         const authHeader = headers.authorization;
         if (!authHeader) {
           throw new BadRequestError("Bad Request");

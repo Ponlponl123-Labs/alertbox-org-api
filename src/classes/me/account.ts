@@ -116,7 +116,17 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
 
   if (cached) {
     if (cached === "deleted" || cached === "null") return null;
-    return JSON.parse(cached);
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.id != null) {
+        return {
+          ...parsed,
+          id: BigInt(parsed.id),
+        };
+      }
+    } catch {
+      await redis.redis.del(cacheKey);
+    }
   }
 
   const user = await prisma.client.user.findUnique({
@@ -147,11 +157,17 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
 /**
  * Mark a user as deleted, release unique fields (email, secret, profile URI, reserved URIs), and clean up caches.
  */
-export async function deleteAccount(uid: string, email: string) {
+export async function deleteAccount(uid: string | bigint, email: string) {
   const timestamp = Date.now();
+  let userId: bigint;
+  try {
+    userId = BigInt(uid);
+  } catch {
+    throw new Error("Invalid user ID");
+  }
 
   const user = await prisma.client.user.findUnique({
-    where: { id: uid },
+    where: { id: userId },
     include: {
       profile: true,
       reservedUris: {
@@ -199,7 +215,7 @@ export async function deleteAccount(uid: string, email: string) {
     }
 
     return await tx.user.update({
-      where: { id: uid },
+      where: { id: userId },
       data: userData,
     });
   });
@@ -229,9 +245,16 @@ export async function deleteAccount(uid: string, email: string) {
  * @param currentWidgets - The current list of widgets.
  * @returns Array of widgets including the created one.
  */
-export async function ensureUserWidgets(userId: string, currentWidgets: any[]): Promise<any[]> {
+export async function ensureUserWidgets(userId: string | bigint, currentWidgets: any[]): Promise<any[]> {
   if (currentWidgets && currentWidgets.length > 0) {
     return currentWidgets;
+  }
+
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(userId);
+  } catch {
+    return currentWidgets || [];
   }
 
   const timestamp = Date.now();
@@ -239,7 +262,7 @@ export async function ensureUserWidgets(userId: string, currentWidgets: any[]): 
 
   const createdWidget = await prisma.client.widget.create({
     data: {
-      userId,
+      userId: targetUid,
       type: "ALERTBOX",
       token: widgetToken,
       alertbox: {

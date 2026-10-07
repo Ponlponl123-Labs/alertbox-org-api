@@ -1,56 +1,60 @@
 # Contributing to Alertbox API
 
-Thanks for contributing to the Alertbox API!
+Thank you for contributing to the Alertbox API. To maintain our production standards of raw performance, strict type safety, and zero dataloss, please adhere to these guidelines.
 
 ---
 
-## Development Guidelines
+## Engineering Standards
 
-1. **Runtime**: Use `bun`. Do not commit npm or yarn lockfiles.
-2. **Type Safety**: Keep all types in `src/types/*.types.ts` and re-export via `src/types/index.ts`. All endpoints and schemas must use TypeBox validation.
-3. **Database Changes**: Always update `prisma/schema.prisma` and test with `bun x prisma generate` before submitting PRs.
-4. **Database Query Optimization**: Every query must be pre-analyzed for 0 table scans, minimal logical reads, and zero physical reads. Always use explicit `select` instead of `include`, and prefer `findUnique` over `findFirst`.
-5. **Security**: Ensure all external webhook endpoints use timing-safe HMAC validation via `src/utils/signature.ts`.
+### 1. Database Architecture & Migrations
+- **Clustered `BigInt` Primary Keys**: All models and relational foreign keys must use `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`. Do not use random string CUIDs or UUIDs as database keys to prevent B+ tree leaf page splits.
+- **Zero-Dataloss Migrations**: All database schema changes must be declarative, idempotent, and compatible with automated ArgoCD PreSync hooks (`bun run db:migrate:deploy`). Never drop production columns directly without a safe dual-write or migration strategy.
+
+### 2. Query Performance & Projection Hygiene
+- **Zero Table Scans (`type != ALL`)**: Every `WHERE`, `JOIN` (ON), and `ORDER BY` clause must resolve to a primary key or indexed column.
+- **Explicit Projection (`select` > `include`)**: Always use explicit, minimal `select` blocks. Never use wildcard queries or broad `include` blocks.
+- **Off-Page LOB Elimination**: Do not select large `TEXT` or blob columns (e.g., `userAgent`) unless strictly required by the client UI to eliminate secondary InnoDB buffer pool page fetches.
+- **Lookup Method Priority**: Prefer `findUnique` over `findFirst` when querying unique keys.
+
+### 3. Security & Cryptography
+- **Hardware-Accelerated Tokens**: Use the AES-256-GCM token engine (`src/utils/token.ts`) for user and session authentication.
+- **Constant-Time Verification**: All webhook signatures and token comparisons must use timing-safe comparison utilities (`timingSafeEqualString`).
+- **Secret Protection**: Ensure sensitive internal fields (such as `userSecret`) are never exposed across API boundaries.
+
+### 4. Code & Architecture Discipline
+- **Microservice Separation**: Heavy non-core workloads (such as AI/ML content moderation) belong in their respective microservices (e.g. [`moderation-api`](https://github.com/ponlponl123/moderation-api)). Do not introduce heavy dependencies or model weights into this repository.
+- **Type Safety**: Define schemas using TypeBox and keep interface definitions centralized in `src/types/`.
 
 ---
 
-## Database Query Standards & I/O Verification
+## Development Workflow
 
-Before adding or modifying any Prisma query or raw SQL, verify its performance:
+### Pre-PR Checklist
 
-- **Zero Table Scans (`type != ALL`)**: Every `WHERE`, `JOIN`, and `ORDER BY` clause must map to a primary key, unique constraint, or composite index.
-- **Projection Hygiene (`select` > `include`)**: Strictly project required fields via `select`. Never use indiscriminate `include` or full model fetches to prevent fetching secrets or bloating buffer pool memory.
-- **I/O Metric Invariants**: Lookups must produce **0 table scans**, single-digit logical reads (`Innodb_buffer_pool_read_requests`), and **0 physical reads**.
-- **Automated Verification**: Run `bun run db:inspect` to test all queries against the MariaDB Galera cluster.
-
----
-
-## Pre-PR Checklist
-
-Make sure all checks pass before opening your pull request:
+Before opening a pull request, run all verification steps locally:
 
 ```bash
 # 1. Generate Prisma Client
-bun x prisma generate
+bun run db:generate
 
 # 2. Strict Typecheck
 bun x tsc --noEmit
 
-# 3. Unit & Integration Tests
+# 3. Run Unit and Integration Tests
 bun test
 
-# 4. DB Query Performance & Zero-Scan Inspection
+# 4. Verify Database Query I/O (0 Table Scans)
 bun run db:inspect
 
-# 5. Compile Check
+# 5. Production Binary Compilation Check
 bun run build
 ```
 
 ---
 
-## Submitting Pull Requests
+## Pull Request Guidelines
 
-1. Fork the repo and create your branch (`feature/my-feature` or `fix/issue-description`).
-2. Commit your changes with clear messages.
-3. Open a Pull Request against `main`.
-4. Ensure the GitHub Actions CI pipeline passes.
+1. **Branch Naming**: Use clear prefixes: `feat/`, `fix/`, `perf/`, or `refactor/`.
+2. **Commit Messages**: Follow conventional commits (`feat: ...`, `fix: ...`, `perf: ...`).
+3. **Focused Scope**: Keep changes localized and purposeful. Avoid mixing unrelated refactors into a single PR.
+4. **CI Compliance**: Ensure all automated GitHub Actions checks pass cleanly.

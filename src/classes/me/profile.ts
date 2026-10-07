@@ -14,7 +14,7 @@ import { hexColorToNumber } from "@/utils/color";
  * Update user profile data and/or images.
  */
 export async function updateProfile(
-  uid: string,
+  uid: string | bigint,
   currentData: { avatar?: string | null; banner?: string | null },
   payload: {
     displayname?: string;
@@ -65,7 +65,7 @@ export async function updateProfile(
     try {
       const buffer = Buffer.from(await payload.avatar.arrayBuffer());
       const processed = await processAvatar(buffer);
-      const { url } = await saveProfileImage(uid, "avatar", nanoid(), processed.buffer);
+      const { url } = await saveProfileImage(String(uid), "avatar", nanoid(), processed.buffer);
       if (currentData.avatar) await deleteProfileImage(currentData.avatar).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old avatar: ${err}`)));
       data.avatar = url;
     } catch (err) {
@@ -77,7 +77,7 @@ export async function updateProfile(
     try {
       const buffer = Buffer.from(await payload.banner.arrayBuffer());
       const processed = await processBanner(buffer);
-      const { url } = await saveProfileImage(uid, "banner", nanoid(), processed.buffer);
+      const { url } = await saveProfileImage(String(uid), "banner", nanoid(), processed.buffer);
       if (currentData.banner) await deleteProfileImage(currentData.banner).catch((err) => betterConsole.error(tsflag("error", true, `Failed to delete old banner: ${err}`)));
       data.banner = url;
 
@@ -124,17 +124,24 @@ export async function updateProfile(
 
   if (Object.keys(data).length === 0) return null;
 
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
+    return null;
+  }
+
   const updated = await prisma.client.profile.update({
     data,
-    where: { userId: uid },
+    where: { userId: targetUid },
   });
 
   // Invalidate Redis cache
-  await redis.redis.del(`user:${uid}:info`);
+  await redis.redis.del(`user:${String(uid)}:info`);
 
   // Sync Cache - fetch the full user (including integration) to maintain cache completeness
   const fullUser = await prisma.client.user.findUnique({
-    where: { id: uid },
+    where: { id: targetUid },
     include: {
       profile: true,
       integration: true,
@@ -158,7 +165,7 @@ export async function updateProfile(
  * Register a new URI for a user.
  */
 export async function registerURI(
-  uid: string,
+  uid: string | bigint,
   uri: string,
   token: string,
 ): Promise<boolean> {
@@ -174,8 +181,15 @@ export async function registerURI(
   });
 
   if (existingRecord) {
-    const status = existingRecord.disabledAt ? "disabled" : existingRecord.userId;
+    const status = existingRecord.disabledAt ? "disabled" : String(existingRecord.userId);
     void redis.redis.setex(`uri:${parsedUri}:owner`, week, status);
+    return false;
+  }
+
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
     return false;
   }
 
@@ -186,7 +200,7 @@ export async function registerURI(
       await tx.reservedUri.create({
         data: {
           uri: parsedUri,
-          userId: uid,
+          userId: targetUid,
           reservedByToken: token,
         },
       });
@@ -196,17 +210,17 @@ export async function registerURI(
           uri: parsedUri,
           uriCooldownEnd: cooldownDate,
         },
-        where: { userId: uid },
+        where: { userId: targetUid },
       });
     });
 
     const now = Date.now();
     await Promise.all([
-      redis.redis.setex(`uri:${parsedUri}:owner`, week, uid),
+      redis.redis.setex(`uri:${parsedUri}:owner`, week, String(uid)),
       redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(now)),
-      redis.redis.setex(`user:${uid}:uri`, week, parsedUri),
-      redis.redis.setex(`user:${uid}:uri_cooldown`, week, String(cooldownDate.getTime())),
-      redis.redis.del(`user:${uid}:info`), 
+      redis.redis.setex(`user:${String(uid)}:uri`, week, parsedUri),
+      redis.redis.setex(`user:${String(uid)}:uri_cooldown`, week, String(cooldownDate.getTime())),
+      redis.redis.del(`user:${String(uid)}:info`), 
     ]);
 
     return true;
@@ -224,7 +238,14 @@ export async function getURIOwner(uri: string): Promise<string | false> {
   
   const cached = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cached === "noone" || cached === "disabled") return false;
-  if (cached) return cached;
+  if (cached) {
+    try {
+      BigInt(cached);
+      return cached;
+    } catch {
+      await redis.redis.del(`uri:${parsedUri}:owner`);
+    }
+  }
 
   const lastRecord = await prisma.client.reservedUri.findUnique({
     select: { createdAt: true, userId: true, disabledAt: true },
@@ -236,12 +257,12 @@ export async function getURIOwner(uri: string): Promise<string | false> {
     return false;
   }
 
-  const status = lastRecord.disabledAt ? "disabled" : lastRecord.userId;
+  const status = lastRecord.disabledAt ? "disabled" : String(lastRecord.userId);
   
   await Promise.all([
     redis.redis.setex(`uri:${parsedUri}:owner`, week, status),
     redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(lastRecord.createdAt.getTime())),
   ]);
 
-  return lastRecord.disabledAt ? false : lastRecord.userId;
+  return lastRecord.disabledAt ? false : String(lastRecord.userId);
 }

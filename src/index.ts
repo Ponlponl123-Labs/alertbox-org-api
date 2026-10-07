@@ -63,19 +63,22 @@ const printBanner = (): void => {
   );
 };
 
-printBanner();
+import { logger } from "./utils/log";
 
-Moderation.printStatusCard();
+if (logger.isVerbose()) {
+  printBanner();
+  Moderation.printStatusCard();
 
-new Card("· Starting the Elysia Server...", undefined, {
-  border: {
-    style: { color: rgb(139, 92, 246) },
-    symbols: { style: "round" },
-  },
-})
-  .render()
-  .split("\n")
-  .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+  new Card("· Starting the Elysia Server...", undefined, {
+    border: {
+      style: { color: rgb(139, 92, 246) },
+      symbols: { style: "round" },
+    },
+  })
+    .render()
+    .split("\n")
+    .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+}
 
 export const server = new Server(Number(values.port || 3000));
 
@@ -84,21 +87,19 @@ export { redis, prisma };
 const exitSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGQUIT"];
 
 const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
-  betterConsole.log(
-    tsflag("info", true, `Received ${signal}, shutting down...`),
-  );
+  logger.process(tsflag("info", true, `Received ${signal}, shutting down...`));
 
   try {
     if (redis && redis.redis) {
       await redis.redis.quit();
-      betterConsole.log(tsflag("info", true, "Redis connection closed."));
+      logger.process(tsflag("info", true, "Redis connection closed."));
     }
 
     try {
       const { subRedis } = await import("./routes/v1/widget");
       if (subRedis) {
         await subRedis.quit();
-        betterConsole.log(tsflag("info", true, "Redis subscriber closed."));
+        logger.process(tsflag("info", true, "Redis subscriber closed."));
       }
     } catch {
       // ignore
@@ -106,19 +107,15 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
 
     if (prisma && prisma.client) {
       await prisma.client.$disconnect();
-      betterConsole.log(
-        tsflag("info", true, "Prisma connection disconnected."),
-      );
+      logger.process(tsflag("info", true, "Prisma connection disconnected."));
     }
 
     if (server && server.app) {
       await server.app.stop();
-      betterConsole.log(tsflag("info", true, "Server stopped."));
+      logger.process(tsflag("info", true, "Server stopped."));
     }
   } catch (error) {
-    betterConsole.log(
-      tsflag("error", true, "Error occurred during graceful shutdown:", error),
-    );
+    logger.error(tsflag("error", true, "Error occurred during graceful shutdown:", error));
   } finally {
     process.exit(0);
   }
@@ -127,9 +124,7 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
 exitSignals.forEach((signal) => {
   process.on(signal, () => {
     handleExit(signal).catch((err) => {
-      betterConsole.log(
-        tsflag("error", true, `Failed during shutdown: ${err}`),
-      );
+      logger.error(tsflag("error", true, `Failed during shutdown: ${err}`));
       process.exit(1);
     });
   });

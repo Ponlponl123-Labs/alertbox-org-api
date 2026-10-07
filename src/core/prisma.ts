@@ -2,6 +2,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import betterConsole, { Card, cs, s, tsflag, rgb } from "ts-better-console";
 import { dbConfig, nodeEnv } from "@/config/env";
+import { logger } from "@/utils/log";
 
 class PrismaORM {
   public client: PrismaClient;
@@ -9,7 +10,7 @@ class PrismaORM {
   private isConnected: boolean = false;
 
   constructor() {
-    betterConsole.log(
+    logger.process(
       tsflag(
         "info",
         true,
@@ -34,7 +35,7 @@ class PrismaORM {
 
   private async connect() {
     try {
-      betterConsole.log(
+      logger.process(
         tsflag(
           "info",
           true,
@@ -47,7 +48,7 @@ class PrismaORM {
       await this.client.$queryRaw`SELECT 1`;
 
       this.isConnected = true;
-      betterConsole.log(
+      logger.process(
         tsflag(
           "info",
           true,
@@ -57,7 +58,7 @@ class PrismaORM {
         ),
       );
     } catch (error) {
-      betterConsole.error(
+      logger.error(
         tsflag(
           "error",
           true,
@@ -70,51 +71,55 @@ class PrismaORM {
       process.exit(1);
     }
 
-    new Card(
-      cs(
-        [
-          "Host: " + dbConfig.host,
-          "Port: " + dbConfig.port,
-          "User: " + dbConfig.user,
-          "Database: " + dbConfig.database,
-          "SSL: " + (dbConfig.sslMode || (dbConfig.ssl ? "Enabled" : "Disabled")),
-        ],
-        "   \n",
-      ),
-      undefined,
-      {
-        title: {
-          content: `Database Connection Details`,
-        },
-        footer: {
-          content: `· Connection Status: ${this.isConnected ? "Connected" : "Disconnected"}`,
-          style: {
-            color: this.isConnected ? "green" : "red",
+    if (logger.isVerbose()) {
+      new Card(
+        cs(
+          [
+            "Host: " + dbConfig.host,
+            "Port: " + dbConfig.port,
+            "User: " + dbConfig.user,
+            "Database: " + dbConfig.database,
+            "SSL: " + (dbConfig.sslMode || (dbConfig.ssl ? "Enabled" : "Disabled")),
+          ],
+          "   \n",
+        ),
+        undefined,
+        {
+          title: {
+            content: `Database Connection Details`,
+          },
+          footer: {
+            content: `· Connection Status: ${this.isConnected ? "Connected" : "Disconnected"}`,
+            style: {
+              color: this.isConnected ? "green" : "red",
+            },
+          },
+          border: {
+            symbols: {
+              style: "round",
+            },
           },
         },
-        border: {
-          symbols: {
-            style: "round",
-          },
-        },
-      },
-    )
-      .render()
-      .split("\n")
-      .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+      )
+        .render()
+        .split("\n")
+        .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+    }
   }
 }
 
 // Print startup card for Prisma ORM
-new Card("· Starting the Prisma ORM...", undefined, {
-  border: {
-    style: { color: rgb(90, 103, 216) },
-    symbols: { style: "round" },
-  },
-})
-  .render()
-  .split("\n")
-  .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+if (logger.isVerbose()) {
+  new Card("· Starting the Prisma ORM...", undefined, {
+    border: {
+      style: { color: rgb(90, 103, 216) },
+      symbols: { style: "round" },
+    },
+  })
+    .render()
+    .split("\n")
+    .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+}
 
 /**
  * Singleton instance of the PrismaORM.

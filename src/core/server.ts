@@ -1,10 +1,12 @@
 import Elysia, { file } from "elysia";
 import { cors } from "@elysiajs/cors";
 import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
+import { logger } from "@/utils/log";
 import router, { availableVersions } from "../routes";
 import { UnauthorizedError, BadRequestError } from "./auth";
-import { setBunServer } from "./bun-server";
-import { isDev } from "../config/env";
+import { setBunServer, getBunServer } from "./bun-server";
+import fs from "node:fs";
+import { isDev, isProduction } from "../config/env";
 import { isAllowedOrigin } from "@/utils/security";
 import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 import openapi from "@elysia/openapi";
@@ -16,7 +18,38 @@ class Server {
 
   constructor(port: number = 3000) {
     this.app = new Elysia({ serve: { reusePort: false } });
-    this.app.onRequest(({ set }) => {
+    this.app.onRequest(({ request, set }) => {
+      (request as any)._reqStartTime = performance.now();
+      const ip =
+        request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        request.headers.get("x-real-ip") ||
+        getBunServer()?.requestIP(request)?.address;
+      const origin = request.headers.get("origin") || request.headers.get("referer");
+      (request as any)._clientIp = ip;
+      (request as any)._clientOrigin = origin;
+
+      if (logger.isTrafficPending()) {
+        let pathname = "";
+        try {
+          pathname = new URL(request.url).pathname;
+        } catch {
+          pathname = request.url;
+        }
+        logger.trafficPending(
+          tsflag(
+            "info",
+            true,
+            cs([
+              s("[TRAFFIC-PENDING]", { color: "yellow", styles: ["bold"] }),
+              request.method,
+              pathname,
+              ...(ip ? [s(`(${ip})`, { color: "gray" })] : []),
+              ...(origin ? [s(`from ${origin}`, { color: "gray" })] : []),
+            ]),
+          ),
+        );
+      }
       set.headers["X-Content-Type-Options"] = "nosniff";
       set.headers["X-Frame-Options"] = "SAMEORIGIN";
       set.headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
@@ -27,6 +60,38 @@ class Server {
       if (!isDev) {
         set.headers["Strict-Transport-Security"] =
           "max-age=31536000; includeSubDomains; preload";
+      }
+    });
+
+    this.app.onAfterResponse(({ request, set }) => {
+      if (logger.isTraffic()) {
+        const startTime = (request as any)._reqStartTime;
+        const duration = startTime ? `${(performance.now() - startTime).toFixed(2)}ms` : "0ms";
+        const status = Number(set.status || 200);
+        const statusColor = status >= 500 ? "red" : status >= 400 ? "yellow" : "green";
+        const ip = (request as any)._clientIp;
+        const origin = (request as any)._clientOrigin;
+        let pathname = "";
+        try {
+          pathname = new URL(request.url).pathname;
+        } catch {
+          pathname = request.url;
+        }
+        logger.traffic(
+          tsflag(
+            "info",
+            true,
+            cs([
+              s("[TRAFFIC]", { color: "magenta", styles: ["bold"] }),
+              request.method,
+              pathname,
+              s(String(status), { color: statusColor }),
+              s(`[${duration}]`, { color: "cyan" }),
+              ...(ip ? [s(`(${ip})`, { color: "gray" })] : []),
+              ...(origin ? [s(`from ${origin}`, { color: "gray" })] : []),
+            ]),
+          ),
+        );
       }
     });
     this.app.use(
@@ -47,9 +112,15 @@ class Server {
         credentials: true,
       }),
     );
-    this.app.use(staticPlugin());
+    if (!isProduction && fs.existsSync("./public")) {
+      this.app.use(staticPlugin());
+    }
     this.app.use(openapi({
       provider: null,
+      exclude: {
+        paths: [/^\/public/],
+        staticFile: true,
+      },
       documentation: {
         info: {
           title: "AlertBox.org API",
@@ -137,7 +208,7 @@ class Server {
       if (server) {
         setBunServer(server);
       }
-      betterConsole.log(
+      logger.process(
         tsflag(
           "info",
           true,
@@ -184,7 +255,7 @@ class Server {
       if (code === "NOT_FOUND") {
         return;
       }
-      betterConsole.log(
+      logger.error(
         tsflag("error", true, s("An error occurred:", { color: "red" }), error),
       );
       set.status = 500;
@@ -201,7 +272,7 @@ class Server {
         err.errno === -4091 ||
         err.message?.includes("address in use")
       ) {
-        betterConsole.log(
+        logger.process(
           tsflag(
             "warn",
             true,

@@ -36,7 +36,7 @@ export function resolveProvider(name: string): SupportedProvider | null {
 }
 
 export async function setConnection(
-  uid: string,
+  uid: string | bigint,
   provider: SupportedProvider,
   payload: string | { username?: string | null; secret: string; refreshToken?: string | null },
 ) {
@@ -61,22 +61,29 @@ export async function setConnection(
     if (refreshToken !== undefined) data.streamlabsRefreshToken = refreshToken;
   }
 
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
+    return null;
+  }
+
   const updated = await prisma.client.integration.upsert({
-    where: { userId: uid },
+    where: { userId: targetUid },
     update: data,
     create: {
-      userId: uid,
+      userId: targetUid,
       ...data,
     },
   });
 
   await Promise.all([
     redis.redis.setex(
-      `user:${uid}:connections:${provider}`,
+      `user:${String(uid)}:connections:${provider}`,
       day,
       secret,
     ),
-    redis.redis.del(`user:${uid}:info`),
+    redis.redis.del(`user:${String(uid)}:info`),
   ]);
 
   if (provider === "buymeacoffee") {
@@ -87,9 +94,16 @@ export async function setConnection(
 }
 
 export async function removeConnection(
-  uid: string,
+  uid: string | bigint,
   provider: SupportedProvider,
 ) {
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
+    return null;
+  }
+
   const data: any = {};
   if (provider === "stripe") data.stripeSecret = null;
   if (provider === "buymeacoffee") {
@@ -109,12 +123,12 @@ export async function removeConnection(
 
   const updated = await prisma.client.integration.update({
     data,
-    where: { userId: uid },
+    where: { userId: targetUid },
   });
 
   await Promise.all([
-    redis.redis.del(`user:${uid}:connections:${provider}`),
-    redis.redis.del(`user:${uid}:info`),
+    redis.redis.del(`user:${String(uid)}:connections:${provider}`),
+    redis.redis.del(`user:${String(uid)}:info`),
   ]);
 
   if (provider === "buymeacoffee") {

@@ -1,5 +1,5 @@
 export interface User {
-  id: string;
+  id: bigint;
   email: string;
   createWith: string;
   createdAt: Date;
@@ -9,12 +9,12 @@ export interface User {
 }
 
 export interface UserCreated {
-  id: string;
+  id: bigint;
   secret: string;
 }
 
 export interface MinimalUser {
-  id: string;
+  id: bigint;
   disabledAt: Date | null;
   deletedAt: Date | null;
 }

@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id                  String               @id @default(cuid())
+  id                  BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
   email               String               @unique @db.VarChar(256)
   createWith          String               @db.VarChar(50)
   secret              String               @unique @db.VarChar(255)
@@ -29,8 +29,8 @@ model User {
 }
 
 model Profile {
-  id                     String    @id @default(cuid())
-  userId                 String    @unique
+  id                     BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId                 BigInt    @unique @db.UnsignedBigInt
   name                   String    @db.VarChar(64)
   displayName            String    @db.VarChar(64)
   bio                    String?   @db.Text
@@ -65,8 +65,8 @@ model Profile {
 }
 
 model Widget {
-  id        String           @id @default(cuid())
-  userId    String
+  id        BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt           @db.UnsignedBigInt
   type      WidgetType
   token     String           @unique @db.VarChar(255)
   deletedAt DateTime?        @db.Timestamp(0)
@@ -80,16 +80,16 @@ model Widget {
 }
 
 model AlertboxSetting {
-  id           String          @id @default(cuid())
-  widgetId     String          @unique
+  id           BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  widgetId     BigInt          @unique @db.UnsignedBigInt
   globalVolume Int?            @default(50) @db.UnsignedTinyInt
   events       AlertboxEvent[]
   widget       Widget          @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 }
 
 model AlertboxEvent {
-  id                 String          @id @default(cuid())
-  alertboxId         String
+  id                 BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  alertboxId         BigInt          @db.UnsignedBigInt
   eventType          AlertEventType
   isEnabled          Boolean         @default(true)
   prefix             String?         @db.VarChar(64)
@@ -130,8 +130,8 @@ model AlertboxEvent {
 }
 
 model Integration {
-  id                     String    @id @default(cuid())
-  userId                 String    @unique
+  id                     BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId                 BigInt    @unique @db.UnsignedBigInt
   stripeSecret           String?   @db.VarChar(512)
   stripeOptions          Int       @default(0) @db.UnsignedInt
   bmacSecret             String?   @db.VarChar(512)
@@ -156,8 +156,8 @@ model Integration {
 }
 
 model Session {
-  id              String         @id @default(cuid())
-  userId          String
+  id              BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  userId          BigInt         @db.UnsignedBigInt
   userSecret      String         @db.VarChar(255)
   token           String         @unique @db.VarChar(255)
   method          String         @db.VarChar(255)
@@ -211,9 +211,9 @@ model Session {
 }
 
 model SessionUsage {
-  id        String    @id @default(cuid())
-  sessionId String
-  userId    String
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  sessionId BigInt    @db.UnsignedBigInt
+  userId    BigInt    @db.UnsignedBigInt
   ipAddress String    @db.VarChar(50)
   deletedAt DateTime? @db.Timestamp(0)
   createdAt DateTime  @default(now()) @db.Timestamp(0)
@@ -225,8 +225,8 @@ model SessionUsage {
 }
 
 model ReservedUri {
-  id              String    @id @default(cuid())
-  userId          String
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId          BigInt    @db.UnsignedBigInt
   uri             String    @unique @db.VarChar(50)
   reservedByToken String    @db.VarChar(255)
   disabledAt      DateTime? @db.Timestamp(0)
@@ -238,7 +238,7 @@ model ReservedUri {
 }
 
 model WebhookLog {
-  id          String   @id @default(cuid())
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   provider    String   @db.VarChar(100)
   eventType   String   @db.VarChar(50)
   rawPayload  String   @db.LongText
@@ -250,8 +250,8 @@ model WebhookLog {
 }
 
 model TransactionLog {
-  id           String            @id @default(cuid())
-  userId       String
+  id           BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  userId       BigInt            @db.UnsignedBigInt
   provider     String            @db.VarChar(50)
   providerTxId String?           @db.VarChar(255)
   type         AlertEventType
@@ -292,8 +292,8 @@ enum TransactionStatus {
 }
 
 model WidgetTokenLog {
-  id        String   @id @default(cuid())
-  widgetId  String
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  widgetId  BigInt   @db.UnsignedBigInt
   oldToken  String   @db.VarChar(255)
   newToken  String   @db.VarChar(255)
   ipAddress String   @db.VarChar(50)
@@ -305,8 +305,8 @@ model WidgetTokenLog {
 }
 
 model StreamlabsRelayLog {
-  id           String            @id @default(cuid())
-  userId       String
+  id           BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  userId       BigInt            @db.UnsignedBigInt
   provider     String            @db.VarChar(50)
   providerTxId String?           @db.VarChar(255)
   type         AlertEventType

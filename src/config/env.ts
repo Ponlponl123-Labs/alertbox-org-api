@@ -21,6 +21,7 @@ let nodeEnv: string =
     : "production");
 
 const isDev = nodeEnv === "development" || nodeEnv === "test";
+const isProduction = nodeEnv === "production";
 
 const envFiles = isDev
   ? [".env.development.local", ".env.development", ".env.dev", ".env.local", ".env"]
@@ -62,8 +63,10 @@ for (const file of envFiles) {
   }
 }
 
+import { logger } from "@/utils/log";
+
 // Log the status with high visibility
-betterConsole.log(
+logger.process(
   tsflag(
     "info",
     true,
@@ -72,7 +75,7 @@ betterConsole.log(
 );
 
 if (loadedFile) {
-  betterConsole.log(
+  logger.process(
     tsflag(
       "info",
       true,
@@ -82,7 +85,7 @@ if (loadedFile) {
     ),
   );
 } else {
-  betterConsole.log(
+  logger.warn(
     tsflag(
       "warn",
       true,
@@ -326,4 +329,4 @@ export const redisConfig = {
   },
 };
 
-export { nodeEnv, isDev, loadedFile };
+export { nodeEnv, isDev, isProduction, loadedFile };

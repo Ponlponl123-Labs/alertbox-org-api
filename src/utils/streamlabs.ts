@@ -42,7 +42,7 @@ export function formatStreamlabsName(name?: string | null): string {
  * Refreshes an expired Streamlabs OAuth access token using the stored refresh token.
  */
 export async function refreshStreamlabsToken(
-  userId: string,
+  userId: string | bigint,
   refreshToken: string,
 ): Promise<string | null> {
   try {
@@ -82,7 +82,7 @@ export async function refreshStreamlabsToken(
 }
 
 export interface RelayStreamlabsDonationParams {
-  userId: string;
+  userId: string | bigint;
   accessToken: string;
   refreshToken?: string | null;
   name: string | null;
@@ -111,12 +111,12 @@ export async function relayStreamlabsDonation({
   providerTxId,
   alertType,
 }: RelayStreamlabsDonationParams): Promise<void> {
-  let relayLogId: string | null = null;
+  let relayLogId: bigint | null = null;
 
   try {
     const relayLog = await prisma.client.streamlabsRelayLog.create({
       data: {
-        userId,
+        userId: BigInt(userId),
         provider,
         providerTxId: providerTxId ?? null,
         type: alertType,

@@ -3,35 +3,31 @@ import { prisma } from "@/core/prisma";
 /**
  * List all active sessions/devices for a user.
  */
-export async function listUserDevices(uid: string, currentAuthToken: string) {
+export async function listUserDevices(uid: string | bigint, currentAuthToken: string) {
+  let targetUid: bigint;
+  try {
+    targetUid = BigInt(uid);
+  } catch {
+    return [];
+  }
+
   const devicesRaw = await prisma.client.session.findMany({
     select: {
       id: true,
       createdAt: true,
-      disabledAt: true,
-      expiresAt: true,
       ipAddress: true,
-      userAgent: true,
+      os: true,
+      osVersion: true,
       platform: true,
-      platformMajor: true,
       platformVersion: true,
-      platformType: true,
       cpuArchitecture: true,
-      deviceModel: true,
-      deviceType: true,
-      deviceVendor: true,
-      asn: true,
-      city: true,
-      continentCode: true,
-      country: true,
-      countryCode: true,
-      countryCodeIso3: true,
       isp: true,
+      city: true,
+      region: true,
+      country: true,
       latitude: true,
       longitude: true,
-      postal: true,
-      region: true,
-      regionCode: true,
+      token: true,
       sessionUsages: {
         select: {
           createdAt: true,
@@ -41,12 +37,9 @@ export async function listUserDevices(uid: string, currentAuthToken: string) {
         },
         take: 1,
       },
-      os: true,
-      osVersion: true,
-      token: true,
     },
     where: {
-      userId: uid,
+      userId: targetUid,
       disabledAt: null,
       expiresAt: {
         gt: new Date(),
@@ -64,14 +57,23 @@ export async function listUserDevices(uid: string, currentAuthToken: string) {
 /**
  * Invalidate a specific session by its internal ID.
  */
-export async function destroyUserDevice(uid: string, deviceId: string) {
+export async function destroyUserDevice(uid: string | bigint, deviceId: string | bigint) {
+  let targetUid: bigint;
+  let targetDeviceId: bigint;
+  try {
+    targetUid = BigInt(uid);
+    targetDeviceId = BigInt(deviceId);
+  } catch {
+    return false;
+  }
+
   const result = await prisma.client.session.updateMany({
     data: {
       disabledAt: new Date(),
     },
     where: {
-      id: deviceId,
-      userId: uid,
+      id: targetDeviceId,
+      userId: targetUid,
     },
   });
 

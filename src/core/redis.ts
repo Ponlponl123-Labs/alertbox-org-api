@@ -3,6 +3,7 @@ import Redis, { type SentinelAddress } from "ioredis";
 import betterConsole, { Card, cs, link, s, tsflag, rgb } from "ts-better-console";
 import tomlConfig from "../config/toml";
 import { redisConfig } from "../config/env";
+import { logger } from "@/utils/log";
 
 function buildTlsOptions(
   envTls?: string,
@@ -72,7 +73,7 @@ export class RedisClient {
       return;
     }
 
-    betterConsole.log(
+    logger.process(
       tsflag(
         "info",
         true,
@@ -107,12 +108,12 @@ export class RedisClient {
     );
 
     if (tlsConfig) {
-      betterConsole.log(
+      logger.verbose(
         tsflag("info", true, s("· Redis TLS is enabled", { color: "cyan" })),
       );
     }
     if (isSentinelEnabled && sentinelTlsConfig) {
-      betterConsole.log(
+      logger.verbose(
         tsflag("info", true, s("· Redis Sentinel TLS is enabled", { color: "cyan" })),
       );
     }
@@ -149,7 +150,7 @@ export class RedisClient {
   }
 
   private async connect() {
-    betterConsole.log(
+    logger.process(
       tsflag(
         "info",
         true,
@@ -162,7 +163,7 @@ export class RedisClient {
     try {
       await this.redis.connect();
       await this.redis.ping();
-      betterConsole.log(
+      logger.process(
         tsflag(
           "info",
           true,
@@ -170,7 +171,7 @@ export class RedisClient {
         ),
       );
     } catch (err) {
-      betterConsole.log(
+      logger.error(
         tsflag(
           "error",
           true,
@@ -317,15 +318,17 @@ export class RedisClient {
 }
 
 // Print startup card for Redis client
-new Card("· Starting the Redis client...", undefined, {
-  border: {
-    style: { color: rgb(216, 44, 32) },
-    symbols: { style: "round" },
-  },
-})
-  .render()
-  .split("\n")
-  .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+if (logger.isVerbose()) {
+  new Card("· Starting the Redis client...", undefined, {
+    border: {
+      style: { color: rgb(216, 44, 32) },
+      symbols: { style: "round" },
+    },
+  })
+    .render()
+    .split("\n")
+    .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+}
 
 /**
  * Singleton instance of the RedisClient.

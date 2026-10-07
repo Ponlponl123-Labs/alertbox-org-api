@@ -4,6 +4,7 @@ import { redis } from "@/core/redis";
 import { getBunServer } from "@/core/bun-server";
 import tomlConfig from "@/config/toml";
 import betterConsole, { tsflag, s } from "ts-better-console";
+import { logger } from "@/utils/log";
 
 const ALERTS_PREFIX = "alertbox-org:alerts:";
 const LOGS_PREFIX = "alertbox-org:streamlabs-relay-logs:";
@@ -19,7 +20,7 @@ export interface CachedWidgetSettings {
 
 if (tomlConfig.redis?.enabled) {
   subRedis.on("error", (err: Error) => {
-    betterConsole.error(
+    logger.error(
       tsflag("error", true, s("Redis Subscriber Error:", { color: "red" })),
       err,
     );
@@ -28,7 +29,7 @@ if (tomlConfig.redis?.enabled) {
   subRedis
     .connect()
     .then(() => {
-      betterConsole.log(
+      logger.process(
         tsflag(
           "info",
           true,
@@ -41,7 +42,7 @@ if (tomlConfig.redis?.enabled) {
         `${LOGS_PREFIX}*`,
         (err) => {
           if (err) {
-            betterConsole.error(
+            logger.error(
               tsflag(
                 "error",
                 true,
@@ -54,7 +55,7 @@ if (tomlConfig.redis?.enabled) {
       );
     })
     .catch((err: Error) => {
-      betterConsole.error(
+      logger.error(
         tsflag(
           "error",
           true,
@@ -110,13 +111,13 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
   if (!widget || widget.deletedAt) return null;
 
   const result: CachedWidgetSettings = {
-    widgetId: widget.id,
+    widgetId: String(widget.id),
     type: widget.type,
     alertbox: widget.alertbox,
   };
 
   await redis.redis.setex(cacheKey, TOKEN_CACHE_TTL_SEC, JSON.stringify(result));
-  await redis.redis.setex(`widget:token:${token}`, TOKEN_CACHE_TTL_SEC, widget.id);
+  await redis.redis.setex(`widget:token:${token}`, TOKEN_CACHE_TTL_SEC, String(widget.id));
 
   return result;
 }
@@ -125,19 +126,26 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
  * Broadcast reactive settings updates to all connected widget overlays and invalidate cache.
  */
 export async function broadcastWidgetSettingsUpdate(
-  widgetId: string,
+  widgetId: string | bigint,
   alertboxSettings: any,
 ): Promise<void> {
   const payload = {
     type: "settings:update",
-    widgetId,
+    widgetId: String(widgetId),
     updatedAt: Date.now(),
     settings: alertboxSettings,
   };
 
+  let targetWidgetId: bigint;
+  try {
+    targetWidgetId = BigInt(widgetId);
+  } catch {
+    return;
+  }
+
   // Find token to invalidate token-based cache
   const widget = await prisma.client.widget.findUnique({
-    where: { id: widgetId },
+    where: { id: targetWidgetId },
     select: { token: true },
   });
 

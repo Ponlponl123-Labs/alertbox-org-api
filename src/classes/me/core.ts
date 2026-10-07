@@ -17,9 +17,8 @@ import {
 import { listUserDevices, destroyUserDevice } from "./device";
 
 export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
-  public data:
-    | (Prisma.UserGetPayload<{ select: T }> & { id: string })
-    | null = null;
+  public data: (Prisma.UserGetPayload<{ select: T }> & { id: bigint }) | null =
+    null;
   private options: MeOptions;
   private currentSession: string | null = null;
   private lastSelect: any = basicUserSelect;
@@ -115,11 +114,11 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
    * Load user data by UID.
    */
   public async load<S extends Prisma.UserSelect>(
-    uid: string,
+    uid: string | bigint,
     select: S,
   ): Promise<Me<S> | false | null>;
-  public async load(uid: string): Promise<Me<T> | false | null>;
-  public async load(uid: string, select: any = basicUserSelect): Promise<any> {
+  public async load(uid: string | bigint): Promise<Me<T> | false | null>;
+  public async load(uid: string | bigint, select: any = basicUserSelect): Promise<any> {
     this.lastSelect = select;
     if (this.options.cache) {
       const cached = await getCachedUser(uid);
@@ -131,9 +130,16 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       }
     }
 
+    let bigUid: bigint;
+    try {
+      bigUid = BigInt(uid);
+    } catch {
+      return null;
+    }
+
     const user = await prisma.client.user.findUnique({
       where: {
-        id: uid,
+        id: bigUid,
       },
       select: fullUserSelect,
     });
@@ -336,10 +342,10 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     await prisma.client.$transaction([
       prisma.client.user.update({
         data: { secret: newSecret },
-        where: { id: this.data.id },
+        where: { id: BigInt(this.data.id) },
       }),
       prisma.client.session.updateMany({
-        where: { userId: this.data.id, disabledAt: null },
+        where: { userId: BigInt(this.data.id), disabledAt: null },
         data: { disabledAt: new Date() },
       }),
     ]);

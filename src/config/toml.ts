@@ -1,6 +1,7 @@
 import { TOML } from "bun";
 import betterConsole, { Card, s, tsflag } from "ts-better-console";
 import { TomlConfig } from "../types/toml.types";
+import { logger } from "@/utils/log";
 
 export async function loadTomlConfig(): Promise<TomlConfig> {
   const env = process.env.NODE_ENV || "development";
@@ -9,7 +10,7 @@ export async function loadTomlConfig(): Promise<TomlConfig> {
 
   let config: TomlConfig = {};
 
-  betterConsole.log(
+  logger.verbose(
     tsflag(
       "info",
       true,
@@ -24,7 +25,7 @@ export async function loadTomlConfig(): Promise<TomlConfig> {
     if (await globalFile.exists()) {
       const globalConfig = TOML.parse(await globalFile.text()) as TomlConfig;
       config = { ...config, ...globalConfig };
-      betterConsole.log(
+      logger.verbose(
         tsflag(
           "info",
           true,
@@ -34,7 +35,7 @@ export async function loadTomlConfig(): Promise<TomlConfig> {
         ),
       );
     } else {
-      betterConsole.log(
+      logger.verbose(
         tsflag(
           "warn",
           true,
@@ -49,7 +50,7 @@ export async function loadTomlConfig(): Promise<TomlConfig> {
     if (await envFile.exists()) {
       const envConfig = TOML.parse(await envFile.text()) as TomlConfig;
       config = deepMerge(config, envConfig) as TomlConfig;
-      betterConsole.log(
+      logger.verbose(
         tsflag(
           "info",
           true,
@@ -59,11 +60,11 @@ export async function loadTomlConfig(): Promise<TomlConfig> {
         ),
       );
     } else {
-      betterConsole.log(
+      logger.verbose(
         tsflag(
           "warn",
           true,
-          s(`⚠ Environment config not found: config.${env}.toml`, {
+          s(`! Environment config not found: config.${env}.toml (optional)`, {
             color: "yellow",
           }),
         ),
