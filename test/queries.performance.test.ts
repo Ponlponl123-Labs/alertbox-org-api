@@ -120,10 +120,14 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       connectionLimit: 5,
     });
     conn = await pool.getConnection();
+    await conn.query("SET FOREIGN_KEY_CHECKS = 0");
   }, 10000);
 
   afterAll(async () => {
-    if (conn) conn.release();
+    if (conn) {
+      await conn.query("SET FOREIGN_KEY_CHECKS = 1").catch(() => {});
+      conn.release();
+    }
     if (pool) await pool.end();
     if (metricsReport.length > 0) {
       console.log("\n======================== MARIADB GALERA I/O PERFORMANCE SUMMARY ========================");
