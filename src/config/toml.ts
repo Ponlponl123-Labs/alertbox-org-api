@@ -1,7 +1,7 @@
 import { TOML } from "bun";
 import betterConsole, { Card, s, tsflag } from "ts-better-console";
 import { TomlConfig } from "../types/toml.types";
-import { logger } from "@/utils/log";
+import { logger } from "../utils/log";
 
 export async function loadTomlConfig(): Promise<TomlConfig> {
   const env = process.env.NODE_ENV || "development";

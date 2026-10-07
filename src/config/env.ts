@@ -63,7 +63,7 @@ for (const file of envFiles) {
   }
 }
 
-import { logger } from "@/utils/log";
+import { logger } from "../utils/log";
 
 // Log the status with high visibility
 logger.process(
