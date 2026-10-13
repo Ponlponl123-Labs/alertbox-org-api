@@ -15,6 +15,7 @@ RUN bun prisma generate
 
 # Copy source and build
 COPY . .
+RUN mkdir -p /app/public
 RUN bun build ./src/index.ts --outdir ./dist --target bun --minify --sourcemap=none
 
 # Prune unused cross-platform binaries and dev artifacts
