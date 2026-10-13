@@ -174,7 +174,10 @@ class Server {
 
     this.app.get("/", () => welcomeMessage);
 
-    this.app.get("/health", () => ({ status: "ok" }));
+    this.app.get("/health", ({ set }) => {
+      set.headers["cache-control"] = "public, max-age=5, s-maxage=10, stale-while-revalidate=5";
+      return { status: "ok" };
+    });
 
     this.app.ws("/health/ws", {
       open(ws) {

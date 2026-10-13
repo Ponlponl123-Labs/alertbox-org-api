@@ -66,4 +66,4 @@ USER bun
 EXPOSE 3000
 
 # Start the application
-ENTRYPOINT ["bun", "run", "index.js"]
+ENTRYPOINT ["bun", "run", "--smol", "index.js"]

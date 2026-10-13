@@ -63,10 +63,8 @@ for (const file of envFiles) {
   }
 }
 
-import { logger } from "../utils/log";
-
 // Log the status with high visibility
-logger.process(
+betterConsole.log(
   tsflag(
     "info",
     true,
@@ -75,7 +73,7 @@ logger.process(
 );
 
 if (loadedFile) {
-  logger.process(
+  betterConsole.log(
     tsflag(
       "info",
       true,
@@ -85,7 +83,7 @@ if (loadedFile) {
     ),
   );
 } else {
-  logger.warn(
+  betterConsole.warn(
     tsflag(
       "warn",
       true,
