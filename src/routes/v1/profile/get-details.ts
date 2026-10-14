@@ -1,5 +1,6 @@
 import Elysia, { t } from "elysia";
-import { Me } from "@/classes/me";
+import { prisma } from "@/core/prisma";
+import { Streamer } from "@/classes/streamer";
 import { isValidUri } from "@/utils/regex";
 
 /**
@@ -17,34 +18,43 @@ export const endpoint = new Elysia().get(
       set.status = "Bad Request";
       return "Bad Request";
     }
-    const owner = await Me.getURIOwner(parsedUri);
+    const owner = await Streamer.getURIOwner(parsedUri);
     if (!owner) {
       set.status = "Not Found";
       return "Not Found";
     }
 
-    const user = await new Me().load(owner, {
-      profile: true,
-      integration: true,
-      disabledAt: true,
-      deletedAt: true,
-    });
-
-    if (!user || !user.data || !user.data.profile) {
+    let targetStreamerId: bigint;
+    try {
+      targetStreamerId = BigInt(owner);
+    } catch {
       set.status = "Not Found";
       return "Not Found";
     }
 
-    if (!user.data.profile.publishedAt || user.data.disabledAt || user.data.deletedAt) {
+    const streamer = await prisma.client.streamer.findUnique({
+      where: { id: targetStreamerId },
+      include: {
+        integration: true,
+        organization: true,
+      },
+    });
+
+    if (!streamer || streamer.deletedAt || streamer.organization?.deletedAt) {
+      set.status = "Not Found";
+      return "Not Found";
+    }
+
+    if (!streamer.publishedAt) {
       set.status = "Forbidden";
       return "Forbidden";
     }
 
     // Exclude internal database identifiers from the returned public profile
-    const { userId: _, id: __, ...publicProfile } = user.data.profile;
+    const { id: _, orgId: __, ...publicProfile } = streamer;
 
     // Build safe public integrations — NEVER expose secrets
-    const integration = user.data.integration;
+    const integration = streamer.integration;
     const integrations = {
       stripe: !!integration?.stripeSecret,
       xendit: !!integration?.xenditSecret,
@@ -73,7 +83,7 @@ export const endpoint = new Elysia().get(
           description: "Public tipping page metadata.",
         },
         400: {
-          description: "Invalid URI format.",
+          description: "Malformed URI parameter.",
         },
         403: {
           description: "Creator profile is unpublished or disabled.",
@@ -88,7 +98,7 @@ export const endpoint = new Elysia().get(
         pattern: "^[a-z0-9_]+$",
         minLength: 1,
         maxLength: 49,
-        description: "Creator's registered custom handle.",
+        description: "The custom handle or slug of the creator.",
         examples: ["ponlponl123"],
       }),
     }),

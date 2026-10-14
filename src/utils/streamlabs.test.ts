@@ -56,7 +56,7 @@ describe("formatStreamlabsName", () => {
 describe("refreshStreamlabsToken", () => {
   test("returns null if refresh fails", async () => {
     const { refreshStreamlabsToken } = await import("./streamlabs");
-    const res = await refreshStreamlabsToken("fake-user-id", "invalid-token");
+    const res = await refreshStreamlabsToken("fake-streamer-id", "fake-org-id", "invalid-token");
     expect(res).toBeNull();
   });
 });

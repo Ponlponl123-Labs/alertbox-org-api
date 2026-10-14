@@ -1,16 +1,28 @@
 import Elysia, { t } from "elysia";
 import { isValidUri } from "@/utils/regex";
-import { auth } from "@/core/auth";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
+import { registerURI } from "@/classes/streamer";
+import { prisma } from "@/core/prisma";
 
 /**
- * PATCH endpoint to update/register the custom URI for the profile.
+ * PATCH endpoint to update/register the custom URI for the active streamer profile.
  * Subject to cooldown and availability checks.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .patch(
     "/",
-    async ({ getAuthenticatedUser, body, set }) => {
+    async ({ org, headers, body, set }) => {
+      if (!org) {
+        set.status = "Unauthorized";
+        return "Unauthorized";
+      }
+      if (!requireOrgPermission(org, OrgPerm.EDIT_STREAMER_PROFILE)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to edit streamer profile";
+      }
+
       const parsedUri = String(body ?? "")
         .trim()
         .toLowerCase();
@@ -19,23 +31,21 @@ export const endpoint = new Elysia()
         return "Bad Request";
       }
 
-      const user = await getAuthenticatedUser({
-        profile: {
-          select: {
-            uriCooldownEnd: true,
-          }
-        }
+      const streamer = await prisma.client.streamer.findUnique({
+        where: { id: org.streamerId },
+        select: { uriCooldownEnd: true },
       });
 
       const now = Date.now();
       const cooldown =
-        user.data.profile?.uriCooldownEnd && new Date(user.data.profile.uriCooldownEnd);
+        streamer?.uriCooldownEnd && new Date(streamer.uriCooldownEnd);
       if (cooldown && cooldown.getTime() > now) {
         set.status = "Too Many Requests";
         return "Please retry again after " + cooldown.getTime();
       }
 
-      const success = await user.profile.registerURI(parsedUri);
+      const token = headers.authorization ? headers.authorization.replace(/^Bearer\s+/i, "") : "";
+      const success = await registerURI(org.streamerId, parsedUri, token);
 
       if (!success) {
         set.status = "Forbidden";

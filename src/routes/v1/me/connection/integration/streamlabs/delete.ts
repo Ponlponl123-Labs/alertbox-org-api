@@ -3,7 +3,8 @@ import { isBearerToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
-import { removeConnection } from "@/classes/me/connections";
+import { removeConnection } from "@/classes/streamer";
+import { prisma } from "@/core/prisma";
 
 const deleteHandler = async ({ headers, set, ip }: any) => {
   const auth = isBearerToken(headers.authorization);
@@ -17,7 +18,13 @@ const deleteHandler = async ({ headers, set, ip }: any) => {
     return "Unauthorized";
   }
 
-  await removeConnection(user.data.id, "streamlabs");
+  const membership = await prisma.client.organizationMember.findFirst({
+    where: { userId: user.data.id },
+    include: { organization: { include: { streamers: { take: 1 } } } },
+  });
+  const streamerId = membership?.organization?.streamers?.[0]?.id ?? user.data.id;
+
+  await removeConnection(streamerId, "streamlabs");
 
   return "OK";
 };

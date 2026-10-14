@@ -1,32 +1,7 @@
 import Elysia, { t } from "elysia";
-import { isBearerToken } from "@/utils/bearer-token";
-import { Me } from "@/classes/me";
-import { ip } from "elysia-ip";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
 import { prisma } from "@/core/prisma";
-
-const patchHandler = async ({ headers, set, ip, body }: any) => {
-  const auth = isBearerToken(headers.authorization);
-  if (!auth) {
-    set.status = "Bad Request";
-    return "Bad Request";
-  }
-  const user = await new Me().use(auth, ip, { id: true });
-  if (!user || !user.data) {
-    set.status = "Unauthorized";
-    return "Unauthorized";
-  }
-
-  await prisma.client.integration.update({
-    where: {
-      userId: user.data.id,
-    },
-    data: {
-      streamlabsOptions: body.options,
-    },
-  });
-
-  return "OK";
-};
 
 const patchValidation = {
   detail: {
@@ -35,12 +10,6 @@ const patchValidation = {
     description:
       "Configures donation relay options (such as bitflags for automatic donation forwarding to Streamlabs).",
   },
-  headers: t.Object({
-    authorization: t.String({
-      description: "Bearer session token.",
-      examples: ["Bearer ab_sess_123456"],
-    }),
-  }),
   body: t.Object(
     {
       options: t.Integer({
@@ -63,8 +32,32 @@ const patchValidation = {
   },
 };
 
-export const endpoint = new Elysia().use(ip({ headersFirst: true }))
-  .patch("/", patchHandler, patchValidation)
-  .patch("", patchHandler, { ...patchValidation, detail: { ...patchValidation.detail, hide: true } });
+export const endpoint = new Elysia()
+  .use(orgContext)
+  .patch(
+    "/",
+    async ({ org, set, body }) => {
+      if (!org) {
+        set.status = "Unauthorized";
+        return "Unauthorized";
+      }
+      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to manage integrations";
+      }
+
+      await prisma.client.integration.update({
+        where: {
+          streamerId: org.streamerId,
+        },
+        data: {
+          streamlabsOptions: body.options,
+        },
+      });
+
+      return "OK";
+    },
+    patchValidation,
+  );
 
 export default endpoint;

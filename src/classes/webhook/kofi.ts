@@ -37,7 +37,8 @@ export class KofiWebhook {
           deletedAt: null,
         },
         select: {
-          userId: true,
+          orgId: true,
+          streamerId: true,
           kofiSecret: true,
           streamlabsSecret: true,
           streamlabsRefreshToken: true,
@@ -74,7 +75,8 @@ export class KofiWebhook {
       const { alertType, optionFlag } = resolveKofiEventType(payload);
 
       const result = await WebhookDispatcher.processDonation({
-        userId: matchedIntegration.userId,
+        orgId: matchedIntegration.orgId,
+        streamerId: matchedIntegration.streamerId,
         provider: "kofi",
         providerTxId,
         type: alertType,

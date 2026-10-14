@@ -2,25 +2,35 @@ import Elysia, { t } from "elysia";
 import {
   allowed_user_update_providers,
   resolveProvider,
-} from "@/classes/me/connections";
-import { auth } from "@/core/auth";
+  removeConnection,
+} from "@/classes/streamer";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
 
 /**
  * DELETE endpoint to remove integration configuration for a provider.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .delete(
     "/:provider",
-    async ({ getAuthenticatedUser, params, set }) => {
+    async ({ org, params, set }) => {
+      if (!org) {
+        set.status = "Forbidden";
+        return "No active organization found";
+      }
+      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to manage integrations";
+      }
+
       const provider = resolveProvider(params.provider ?? "");
       if (!provider || !allowed_user_update_providers.includes(provider)) {
         set.status = "Bad Request";
         return "Not supported provider";
       }
 
-      const user = await getAuthenticatedUser();
-      await user.connections.remove(provider);
+      await removeConnection(org.streamerId, provider);
       return "OK";
     },
     {

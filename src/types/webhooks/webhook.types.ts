@@ -13,7 +13,9 @@ export interface StreamlabsRelayConfig {
 }
 
 export interface DonationEventPayload {
-  userId: string | bigint;
+  orgId: string | bigint;
+  streamerId: string | bigint;
+  userId?: string | bigint;
   provider: "kofi" | "buymeacoffee" | string;
   providerTxId: string;
   type: AlertEventType;

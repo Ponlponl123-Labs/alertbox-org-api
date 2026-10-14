@@ -1,82 +1,73 @@
 import Elysia, { t } from "elysia";
-import { isBearerToken } from "@/utils/bearer-token";
-import { Me } from "@/classes/me";
-import { ip } from "elysia-ip";
-import { basicUserSelect } from "@/consts/session";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";
-
-const getHandler = async ({ headers, set, ip }: any) => {
-  const auth = isBearerToken(headers.authorization);
-  if (!auth) {
-    set.status = "Bad Request";
-    return "Bad Request";
-  }
-  const user = await new Me({ cache: false }).use(auth, ip, {
-    integration: {
-      select: {
-        streamlabsSecret: true,
-        streamlabsOptions: true,
-      },
-    },
-  });
-  if (!user || !user.data) {
-    set.status = "Unauthorized";
-    return "Unauthorized";
-  }
-
-  return {
-    isConnected: !!user.data.integration?.streamlabsSecret,
-    options: user.data.integration?.streamlabsOptions ?? null,
-  };
-};
 
 const getValidation = {
   detail: {
     tags: ["Streamlabs Relay"],
     summary: "Get Streamlabs connection status",
     description:
-      "Returns whether Streamlabs is linked to the creator account and any configured relay preferences (e.g. donation forwarding flag).",
+      "Returns whether Streamlabs is linked to the active streamer account and any configured relay preferences.",
     responses: {
       200: {
         description: "Streamlabs connection status and options.",
       },
-      400: {
-        description: "Missing or invalid authorization header.",
-      },
       401: {
-        description: "Unauthorized session token.",
+        description: "Unauthorized session token or missing organization.",
+      },
+      403: {
+        description: "Insufficient permissions.",
       },
     },
   },
-  headers: t.Object({
-    authorization: t.String({
-      description: "Bearer session token.",
-      examples: ["Bearer ab_sess_123456"],
-    }),
-  }),
 };
 
 export const endpoint = new Elysia()
-  .use(ip({ headersFirst: true }))
-  .get("/", getHandler, getValidation)
-  .get("", getHandler, { ...getValidation, detail: { ...getValidation.detail, hide: true } })
+  .use(orgContext)
   .get(
-    "/oauth2",
-    async ({ headers, set, ip }) => {
-      const auth = isBearerToken(headers.authorization);
-      if (!auth) {
-        set.status = "Bad Request";
-        return "Bad Request";
-      }
-      const user = await new Me().use(auth, ip, basicUserSelect);
-      if (!user || !user.data) {
+    "/",
+    async ({ org, set }) => {
+      if (!org) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
+      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to view integrations";
+      }
 
-      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${integrationRedirectUri[ConnectionProvider.STREAMLABS]}&scope=donations.create&response_type=code&state=${user.data.id}`;
+      const integration = await prisma.client.integration.findUnique({
+        where: { streamerId: org.streamerId },
+        select: {
+          streamlabsSecret: true,
+          streamlabsOptions: true,
+        },
+      });
+
+      return {
+        isConnected: !!integration?.streamlabsSecret,
+        options: integration?.streamlabsOptions ?? null,
+      };
+    },
+    getValidation,
+  )
+  .get(
+    "/oauth2",
+    async ({ org, set }) => {
+      if (!org) {
+        set.status = "Unauthorized";
+        return "Unauthorized";
+      }
+      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to configure integrations";
+      }
+
+      const state = `${org.streamerId}.${org.orgId}`;
+      const oauth2Url = `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${integrationRedirectUri[ConnectionProvider.STREAMLABS]}&scope=donations.create&response_type=code&state=${state}`;
 
       return oauth2Url;
     },
@@ -87,12 +78,6 @@ export const endpoint = new Elysia()
         description:
           "Builds a pre-authenticated Streamlabs OAuth2 link. Direct the user to this URL in their browser to connect their Streamlabs account.",
       },
-      headers: t.Object({
-        authorization: t.String({
-          description: "Bearer session token.",
-          examples: ["Bearer ab_sess_123456"],
-        }),
-      }),
       response: {
         200: t.String({
           description: "Full Streamlabs OAuth2 redirect URL.",
@@ -103,19 +88,17 @@ export const endpoint = new Elysia()
   )
   .get(
     "/logs",
-    async ({ headers, set, ip }) => {
-      const auth = isBearerToken(headers.authorization);
-      if (!auth) {
-        set.status = "Bad Request";
-        return "Bad Request";
-      }
-      const user = await new Me().use(auth, ip, { id: true });
-      if (!user || !user.data) {
+    async ({ org, set }) => {
+      if (!org) {
         set.status = "Unauthorized";
         return "Unauthorized";
       }
+      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to view integration logs";
+      }
 
-      const cacheKey = `redis:streamlabs-relay-logs:${user.data.id}`;
+      const cacheKey = `redis:streamlabs-relay-logs:${org.streamerId}`;
       const cached = await redis.redis.get(cacheKey);
       if (cached) {
         return JSON.parse(cached);
@@ -124,7 +107,7 @@ export const endpoint = new Elysia()
       // Query database
       const logs = await prisma.client.streamlabsRelayLog.findMany({
         where: {
-          userId: user.data.id,
+          streamerId: org.streamerId,
         },
         orderBy: {
           createdAt: "desc",
@@ -143,12 +126,6 @@ export const endpoint = new Elysia()
         description:
           "Fetches recent donation relay events (status, timestamps, payloads forwarded to Streamlabs). Results are cached in Redis for 60 seconds.",
       },
-      headers: t.Object({
-        authorization: t.String({
-          description: "Bearer session token.",
-          examples: ["Bearer ab_sess_123456"],
-        }),
-      }),
       response: {
         200: t.Array(
           t.Any(),

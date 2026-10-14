@@ -6,8 +6,11 @@ import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 
+import { OrgPerm } from "@/utils/rbac";
+import { fullUserSelect } from "@/consts/session";
+
 /**
- * Create a new user in the database with associated profile and highly customized modular widgets.
+ * Create a new user in the database with their primary organization, streamer profile, and widgets.
  */
 export async function createAccount(data: {
   name: string;
@@ -24,48 +27,71 @@ export async function createAccount(data: {
     const timestamp = Date.now();
     const internalSecret = `${nanoid(32)}.${timestamp}.${nanoid(32)}`;
     const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
+    const orgSlug = `${data.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "org"}-${nanoid(6)}`;
 
     try {
-      const user = await prisma.client.user.create({
-        data: {
-          email: data.email,
-          createWith: data.createWith,
-          secret: internalSecret,
-          profile: {
-            create: {
-              name: data.name,
-              displayName: data.name,
+      const user = await prisma.client.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: data.email,
+            name: data.name,
+            createWith: data.createWith,
+            secret: internalSecret,
+          },
+        });
+
+        const org = await tx.organization.create({
+          data: {
+            ownerId: newUser.id,
+            name: `${data.name}'s Org`,
+            slug: orgSlug,
+            members: {
+              create: {
+                userId: newUser.id,
+                role: "OWNER",
+                permissions: OrgPerm.ALL,
+              },
             },
           },
-          widgets: {
-            create: {
-              type: "ALERTBOX",
-              token: widgetToken,
-              alertbox: {
-                create: {
-                  events: {
-                    createMany: {
-                      data: DEFAULT_ALERTBOX_EVENTS,
+        });
+
+        await tx.streamer.create({
+          data: {
+            orgId: org.id,
+            name: data.name,
+            displayName: data.name,
+            widgets: {
+              create: {
+                orgId: org.id,
+                type: "ALERTBOX",
+                token: widgetToken,
+                alertbox: {
+                  create: {
+                    events: {
+                      createMany: {
+                        data: DEFAULT_ALERTBOX_EVENTS,
+                      },
                     },
                   },
                 },
               },
             },
-          },
-        },
-        include: {
-          profile: true,
-          widgets: {
-            include: {
-              alertbox: {
-                include: {
-                  events: true,
-                },
+            integration: {
+              create: {
+                orgId: org.id,
               },
             },
           },
-        },
+        });
+
+        return await tx.user.findUnique({
+          where: { id: newUser.id },
+          select: fullUserSelect,
+        });
       });
+
+      if (!user) throw new Error("Failed to load created user");
+
       await redis.redis.setex(
         `email:${data.email.trim().toLowerCase()}`,
         day,
@@ -169,9 +195,20 @@ export async function deleteAccount(uid: string | bigint, email: string) {
   const user = await prisma.client.user.findUnique({
     where: { id: userId },
     include: {
-      profile: true,
-      reservedUris: {
-        where: { deletedAt: null },
+      memberships: {
+        include: {
+          organization: {
+            include: {
+              streamers: {
+                include: {
+                  reservedUris: {
+                    where: { deletedAt: null },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
   });
@@ -183,54 +220,61 @@ export async function deleteAccount(uid: string | bigint, email: string) {
   const deletedEmail = `deleted-${timestamp}-${email}`.slice(0, 256);
   const deletedSecret = `deleted-${timestamp}-${user.secret}`.slice(0, 255);
 
-  const profileUpdate: any = {
-    deletedAt: new Date(),
-  };
-  if (user.profile?.uri) {
-    profileUpdate.uri = `deleted-${timestamp}-${user.profile.uri}`.slice(0, 64);
-  }
-
   const updated = await prisma.client.$transaction(async (tx) => {
     // Release active reserved URIs by suffixing them and marking as deleted
-    for (const reserved of user.reservedUris) {
-      await tx.reservedUri.update({
-        where: { id: reserved.id },
-        data: {
-          uri: `deleted-${timestamp}-${reserved.uri}`.slice(0, 50),
-          deletedAt: new Date(),
-        },
-      });
-    }
-
-    const userData: any = {
-      email: deletedEmail,
-      secret: deletedSecret,
-      deletedAt: new Date(),
-    };
-
-    if (user.profile) {
-      userData.profile = {
-        update: profileUpdate,
-      };
+    for (const membership of user.memberships) {
+      if (membership.role === "OWNER") {
+        for (const streamer of membership.organization.streamers) {
+          for (const reserved of streamer.reservedUris) {
+            await tx.reservedUri.update({
+              where: { id: reserved.id },
+              data: {
+                uri: `deleted-${timestamp}-${reserved.uri}`.slice(0, 50),
+                deletedAt: new Date(),
+              },
+            });
+          }
+          if (streamer.uri) {
+            await tx.streamer.update({
+              where: { id: streamer.id },
+              data: {
+                uri: `deleted-${timestamp}-${streamer.uri}`.slice(0, 64),
+                deletedAt: new Date(),
+              },
+            });
+          }
+        }
+      }
     }
 
     return await tx.user.update({
       where: { id: userId },
-      data: userData,
+      data: {
+        email: deletedEmail,
+        secret: deletedSecret,
+        deletedAt: new Date(),
+      },
     });
   });
 
   // Cleanup Caches
   const cacheCleanup: Promise<any>[] = [
     redis.redis.del(`user:${uid}:info`),
+    redis.redis.del(`user:${uid}:orgs`),
     redis.redis.del(`email:${email.trim().toLowerCase()}`),
   ];
 
-  if (user.profile?.uri) {
-    cacheCleanup.push(redis.redis.del(`uri:${user.profile.uri.toLowerCase()}:owner`));
-  }
-  for (const reserved of user.reservedUris) {
-    cacheCleanup.push(redis.redis.del(`uri:${reserved.uri.toLowerCase()}:owner`));
+  for (const membership of user.memberships) {
+    if (membership.role === "OWNER") {
+      for (const streamer of membership.organization.streamers) {
+        if (streamer.uri) {
+          cacheCleanup.push(redis.redis.del(`uri:${streamer.uri.toLowerCase()}:owner`));
+        }
+        for (const reserved of streamer.reservedUris) {
+          cacheCleanup.push(redis.redis.del(`uri:${reserved.uri.toLowerCase()}:owner`));
+        }
+      }
+    }
   }
 
   await Promise.all(cacheCleanup);
@@ -239,20 +283,22 @@ export async function deleteAccount(uid: string | bigint, email: string) {
 }
 
 /**
- * Safely self-heals/provisions a default ALERTBOX widget for a user if they don't have one.
- * 
- * @param userId - The ID of the user.
- * @param currentWidgets - The current list of widgets.
- * @returns Array of widgets including the created one.
+ * Safely self-heals/provisions a default ALERTBOX widget for a streamer if they don't have one.
  */
-export async function ensureUserWidgets(userId: string | bigint, currentWidgets: any[]): Promise<any[]> {
+export async function ensureStreamerWidgets(
+  streamerId: string | bigint,
+  orgId: string | bigint,
+  currentWidgets: any[],
+): Promise<any[]> {
   if (currentWidgets && currentWidgets.length > 0) {
     return currentWidgets;
   }
 
-  let targetUid: bigint;
+  let targetStreamerId: bigint;
+  let targetOrgId: bigint;
   try {
-    targetUid = BigInt(userId);
+    targetStreamerId = BigInt(streamerId);
+    targetOrgId = BigInt(orgId);
   } catch {
     return currentWidgets || [];
   }
@@ -262,7 +308,8 @@ export async function ensureUserWidgets(userId: string | bigint, currentWidgets:
 
   const createdWidget = await prisma.client.widget.create({
     data: {
-      userId: targetUid,
+      orgId: targetOrgId,
+      streamerId: targetStreamerId,
       type: "ALERTBOX",
       token: widgetToken,
       alertbox: {
@@ -285,4 +332,8 @@ export async function ensureUserWidgets(userId: string | bigint, currentWidgets:
   });
 
   return [createdWidget];
+}
+
+export async function ensureUserWidgets(userId: string | bigint, currentWidgets: any[]): Promise<any[]> {
+  return currentWidgets || [];
 }

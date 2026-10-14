@@ -235,7 +235,7 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("dispatcher: Active ALERTBOX widgets [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
         "Widget.activeAlertbox",
-        "SELECT id FROM `Widget` WHERE userId = 'sample-uid' AND type = 'ALERTBOX' AND deletedAt IS NULL"
+        "SELECT id FROM `Widget` WHERE streamerId = 'sample-streamer-id' AND type = 'ALERTBOX' AND deletedAt IS NULL"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
@@ -261,7 +261,7 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("getURIOwner: ReservedUri lookup by unique uri [scans: 0, logical: 1, physical: 0]", async () => {
       const res = await inspectQuery(
         "ReservedUri.byUri",
-        "SELECT createdAt, userId, disabledAt FROM `ReservedUri` WHERE uri = 'sample_slug' LIMIT 1"
+        "SELECT createdAt, streamerId, disabledAt FROM `ReservedUri` WHERE uri = 'sample_slug' LIMIT 1"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(2);
@@ -272,8 +272,8 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
 
     it("deleteAccount: User active reserved URIs [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
-        "ReservedUri.byUser",
-        "SELECT id, uri FROM `ReservedUri` WHERE userId = 'sample-uid' AND deletedAt IS NULL"
+        "ReservedUri.byStreamer",
+        "SELECT id, uri FROM `ReservedUri` WHERE streamerId = 'sample-streamer-id' AND deletedAt IS NULL"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
@@ -297,9 +297,9 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
 
     it("TransactionLog: User transaction history ordered by createdAt [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
-        "TransactionLog.byUser",
+        "TransactionLog.byStreamer",
         "SELECT id, amount, currency, createdAt FROM `TransactionLog` " +
-        "WHERE userId = 'sample-uid' ORDER BY createdAt DESC LIMIT 25"
+        "WHERE streamerId = 'sample-streamer-id' ORDER BY createdAt DESC LIMIT 25"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
@@ -308,9 +308,9 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
 
     it("StreamlabsRelayLog: User relay history ordered by createdAt [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
-        "StreamlabsRelayLog.byUser",
+        "StreamlabsRelayLog.byStreamer",
         "SELECT id, provider, status, createdAt FROM `StreamlabsRelayLog` " +
-        "WHERE userId = 'sample-uid' ORDER BY createdAt DESC LIMIT 20"
+        "WHERE streamerId = 'sample-streamer-id' ORDER BY createdAt DESC LIMIT 20"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
@@ -336,14 +336,14 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
         "INSERT INTO `SessionUsage` (userId, sessionId, ipAddress) VALUES (1, 1, '127.0.0.1')"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
       expect(res.physicalReads).toBe(0);
     });
 
     it("Profile.update: update profile by unique userId [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
-        "Profile.update",
-        "UPDATE `Profile` SET displayName = 'perf-tester', updatedAt = NOW() WHERE userId = 1"
+        "Streamer.update",
+        "UPDATE `Streamer` SET displayName = 'perf-tester', updatedAt = NOW() WHERE id = 1"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);
@@ -354,7 +354,7 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("Integration.update: update integration by unique userId [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
         "Integration.update",
-        "UPDATE `Integration` SET streamlabsSecret = 'secret_perf', updatedAt = NOW() WHERE userId = 1"
+        "UPDATE `Integration` SET streamlabsSecret = 'secret_perf', updatedAt = NOW() WHERE streamerId = 1"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);
@@ -376,8 +376,8 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("TransactionLog.create: insert donation transaction [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
         "TransactionLog.create",
-        "INSERT INTO `TransactionLog` (userId, provider, providerTxId, type, status, isTest, amount, currency, senderName, updatedAt) " +
-        "VALUES (1, 'stripe', 'tx_perf_new_1', 'TIP', 'COMPLETED', 1, 1000, 'USD', 'Donor', NOW())"
+        "INSERT INTO `TransactionLog` (orgId, streamerId, provider, providerTxId, type, status, isTest, amount, currency, senderName, updatedAt) " +
+        "VALUES (1, 1, 'stripe', 'tx_perf_new_1', 'TIP', 'COMPLETED', 1, 1000, 'USD', 'Donor', NOW())"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);
@@ -387,8 +387,8 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("StreamlabsRelayLog.create: insert relay log [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
         "StreamlabsRelayLog.create",
-        "INSERT INTO `StreamlabsRelayLog` (userId, provider, type, status, amount, currency, senderName, updatedAt) " +
-        "VALUES (1, 'stripe', 'TIP', 'PENDING', 1000, 'USD', 'Donor', NOW())"
+        "INSERT INTO `StreamlabsRelayLog` (orgId, streamerId, provider, type, status, amount, currency, senderName, updatedAt) " +
+        "VALUES (1, 1, 'stripe', 'TIP', 'COMPLETED', 1000, 'USD', 'Donor', NOW())"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);

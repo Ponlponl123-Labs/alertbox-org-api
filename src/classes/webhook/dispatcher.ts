@@ -58,16 +58,19 @@ export class WebhookDispatcher {
   public static async recordTransaction(
     payload: DonationEventPayload,
   ): Promise<void> {
-    let targetUid: bigint;
+    let targetOrgId: bigint;
+    let targetStreamerId: bigint;
     try {
-      targetUid = BigInt(payload.userId);
+      targetOrgId = BigInt(payload.orgId);
+      targetStreamerId = BigInt(payload.streamerId);
     } catch {
       return;
     }
 
     await prisma.client.transactionLog.create({
       data: {
-        userId: targetUid,
+        orgId: targetOrgId,
+        streamerId: targetStreamerId,
         provider: payload.provider,
         providerTxId: payload.providerTxId,
         type: payload.type,
@@ -92,7 +95,7 @@ export class WebhookDispatcher {
         tsflag(
           "info",
           true,
-          s("Streamlabs relay skipped: User has no active Streamlabs connection.", {
+          s("Streamlabs relay skipped: Streamer has no active Streamlabs connection.", {
             color: "yellow",
           }),
         ),
@@ -122,7 +125,8 @@ export class WebhookDispatcher {
     );
 
     relayStreamlabsDonation({
-      userId: payload.userId,
+      orgId: payload.orgId,
+      streamerId: payload.streamerId,
       accessToken: secret,
       refreshToken: refreshToken,
       name: payload.senderName,
@@ -137,10 +141,10 @@ export class WebhookDispatcher {
   }
 
   /**
-   * Broadcast alert payload to all user's active ALERTBOX widgets via Redis Pub/Sub.
+   * Broadcast alert payload to all streamer's active ALERTBOX widgets via Redis Pub/Sub.
    */
   public static async dispatchAlerts(
-    userId: string | bigint,
+    streamerId: string | bigint,
     alertData: {
       type: DonationEventPayload["type"];
       name: string;
@@ -149,16 +153,16 @@ export class WebhookDispatcher {
       message: string | null;
     },
   ): Promise<void> {
-    let targetUid: bigint;
+    let targetStreamerId: bigint;
     try {
-      targetUid = BigInt(userId);
+      targetStreamerId = BigInt(streamerId);
     } catch {
       return;
     }
 
     const widgets = await prisma.client.widget.findMany({
       where: {
-        userId: targetUid,
+        streamerId: targetStreamerId,
         type: "ALERTBOX",
         deletedAt: null,
       },
@@ -171,7 +175,7 @@ export class WebhookDispatcher {
       tsflag(
         "info",
         true,
-        s(`Fetched ${widgets.length} active ALERTBOX widgets for user.`, {
+        s(`Fetched ${widgets.length} active ALERTBOX widgets for streamer.`, {
           color: "blue",
         }),
       ),
@@ -236,7 +240,7 @@ export class WebhookDispatcher {
         "info",
         true,
         s(
-          `Processing ${payload.provider} event ${payload.type} (Tx: ${payload.providerTxId}) for user ${payload.userId}`,
+          `Processing ${payload.provider} event ${payload.type} (Tx: ${payload.providerTxId}) for streamer ${payload.streamerId} (org ${payload.orgId})`,
           { color: "blue" },
         ),
       ),
@@ -244,7 +248,7 @@ export class WebhookDispatcher {
 
     await this.recordTransaction(payload);
     this.relayStreamlabs(payload);
-    await this.dispatchAlerts(payload.userId, {
+    await this.dispatchAlerts(payload.streamerId, {
       type: payload.type,
       name: payload.senderName,
       amount: payload.amount,

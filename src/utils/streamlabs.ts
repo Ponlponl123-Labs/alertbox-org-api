@@ -1,6 +1,6 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { setConnection } from "@/classes/me/connections";
+import { setConnection } from "@/classes/streamer";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import betterConsole, { tsflag, s } from "ts-better-console";
 import { TransactionStatus } from "@/generated/prisma/client";
@@ -29,20 +29,19 @@ export function formatStreamlabsName(name?: string | null): string {
     return fallback;
   }
 
-  let finalName = cleaned;
   if (chars.length > 25) {
-    finalName = chars.slice(0, 25).join("").trim();
+    return chars.slice(0, 25).join("");
   }
 
-  const isValid = /^[\p{L}\p{N} _]{2,25}$/u.test(finalName);
-  return isValid ? finalName : fallback;
+  return cleaned;
 }
 
 /**
  * Refreshes an expired Streamlabs OAuth access token using the stored refresh token.
  */
 export async function refreshStreamlabsToken(
-  userId: string | bigint,
+  streamerId: string | bigint,
+  orgId: string | bigint,
   refreshToken: string,
 ): Promise<string | null> {
   try {
@@ -70,7 +69,7 @@ export async function refreshStreamlabsToken(
       return null;
     }
 
-    await setConnection(userId, "streamlabs", {
+    await setConnection(streamerId, orgId, "streamlabs", {
       secret: data.access_token,
       refreshToken: data.refresh_token || refreshToken,
     });
@@ -82,7 +81,9 @@ export async function refreshStreamlabsToken(
 }
 
 export interface RelayStreamlabsDonationParams {
-  userId: string | bigint;
+  orgId: string | bigint;
+  streamerId: string | bigint;
+  userId?: string | bigint;
   accessToken: string;
   refreshToken?: string | null;
   name: string | null;
@@ -99,7 +100,8 @@ export interface RelayStreamlabsDonationParams {
  * Relays donation events to the Streamlabs API with automated retry on 401 token expiry.
  */
 export async function relayStreamlabsDonation({
-  userId,
+  orgId,
+  streamerId,
   accessToken,
   refreshToken,
   name,
@@ -112,11 +114,14 @@ export async function relayStreamlabsDonation({
   alertType,
 }: RelayStreamlabsDonationParams): Promise<void> {
   let relayLogId: bigint | null = null;
+  const targetOrgId = BigInt(orgId);
+  const targetStreamerId = BigInt(streamerId);
 
   try {
     const relayLog = await prisma.client.streamlabsRelayLog.create({
       data: {
-        userId: BigInt(userId),
+        orgId: targetOrgId,
+        streamerId: targetStreamerId,
         provider,
         providerTxId: providerTxId ?? null,
         type: alertType,
@@ -129,9 +134,9 @@ export async function relayStreamlabsDonation({
       },
     });
     relayLogId = relayLog.id;
-    await redis.redis.del(`redis:streamlabs-relay-logs:${userId}`);
+    await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
     await redis.redis.publish(
-      `alertbox-org:streamlabs-relay-logs:${userId}`,
+      `alertbox-org:streamlabs-relay-logs:${streamerId}`,
       JSON.stringify({ event: "created", log: relayLog }),
     );
   } catch (dbErr) {
@@ -171,7 +176,7 @@ export async function relayStreamlabsDonation({
       logDev(
         tsflag("info", true, s("Streamlabs access token expired (401), refreshing token...", { color: "yellow" })),
       );
-      const newToken = await refreshStreamlabsToken(userId, refreshToken);
+      const newToken = await refreshStreamlabsToken(streamerId, orgId, refreshToken);
       if (newToken) {
         currentToken = newToken;
         res = await sendReq(currentToken);
@@ -207,9 +212,9 @@ export async function relayStreamlabsDonation({
           errorMessage: isOk ? null : errText,
         },
       });
-      await redis.redis.del(`redis:streamlabs-relay-logs:${userId}`);
+      await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
       await redis.redis.publish(
-        `alertbox-org:streamlabs-relay-logs:${userId}`,
+        `alertbox-org:streamlabs-relay-logs:${streamerId}`,
         JSON.stringify({ event: "updated", log: updated }),
       );
     } catch (updateErr) {

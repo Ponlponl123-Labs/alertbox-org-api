@@ -7,14 +7,11 @@ import { MeOptions, SessionMetadata } from "@/types/me.types";
 import { createSession, destroySession, trackSessionUsage } from "./session";
 import { createAccount, isExist, deleteAccount, ensureUserWidgets } from "./account";
 import { getCachedUser, setCachedUser, filterUserSelection } from "./cache";
-import { registerURI, getURIOwner, updateProfile } from "./profile";
-import {
-  SupportedProvider,
-  setConnection,
-  removeConnection,
-  supported_providers,
-} from "./connections";
 import { listUserDevices, destroyUserDevice } from "./device";
+import { supported_providers } from "@/consts/providers";
+import { OrgPerm } from "@/utils/rbac";
+import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
+import { nanoid } from "nanoid";
 
 export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   public data: (Prisma.UserGetPayload<{ select: T }> & { id: bigint }) | null =
@@ -81,7 +78,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       const cached = await getCachedUser(session_info.userId);
       if (cached === "deleted") return false;
       const anyCached = cached as any;
-      if (anyCached && anyCached.widgets && anyCached.widgets.length > 0) {
+      if (anyCached && Array.isArray(anyCached.memberships)) {
         this.data = filterUserSelection(cached, select) as any;
         return this;
       }
@@ -124,7 +121,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       const cached = await getCachedUser(uid);
       if (cached === "deleted") return false;
       const anyCached = cached as any;
-      if (anyCached && anyCached.widgets && anyCached.widgets.length > 0) {
+      if (anyCached && Array.isArray(anyCached.memberships)) {
         this.data = filterUserSelection(cached, select) as any;
         return this;
       }
@@ -203,87 +200,6 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       },
     };
   }
-
-  /**
-   * Profile and URI management namespace.
-   */
-  public get profile() {
-    return {
-      registerURI: async (uri: string) => {
-        if (!this.data) {
-          throw new Error(
-            "User data not loaded. Use .use(), .load(), or .create() first.",
-          );
-        }
-        if (!this.currentSession) {
-          throw new Error(
-            "Current session token unknown. Use .use() to authenticate.",
-          );
-        }
-        return registerURI(this.data.id, uri, this.currentSession);
-      },
-      update: async (payload: {
-        displayname?: string;
-        bio?: string | null;
-        accentColor?: string | null;
-        socialDiscord?: string | null;
-        socialFacebook?: string | null;
-        socialReddit?: string | null;
-        socialTwitch?: string | null;
-        socialTwitter?: string | null;
-        socialYoutube?: string | null;
-        avatar?: File;
-        banner?: File;
-      }) => {
-        if (!this.data) {
-          throw new Error(
-            "User data not loaded. Use .use(), .load(), or .create() first.",
-          );
-        }
-        const updated = await updateProfile(
-          this.data.id,
-          this.data as any,
-          payload,
-        );
-        if (updated) {
-          // Re-load with exactly T to maintain internal type consistency
-          const reloaded = await this.load<T>(this.data.id, this.lastSelect as T);
-          if (reloaded && reloaded.data) {
-            this.data = reloaded.data as any;
-          }
-        }
-        return updated;
-      },
-    };
-  }
-
-  /**
-   * Connections management namespace.
-   */
-  public get connections() {
-    return {
-      set: async (
-        provider: SupportedProvider,
-        secret: Parameters<typeof setConnection>[2],
-      ) => {
-        if (!this.data) {
-          throw new Error(
-            "User data not loaded. Use .use(), .load(), or .create() first.",
-          );
-        }
-        return setConnection(this.data.id, provider, secret);
-      },
-      remove: async (provider: SupportedProvider) => {
-        if (!this.data) {
-          throw new Error(
-            "User data not loaded. Use .use(), .load(), or .create() first.",
-          );
-        }
-        return removeConnection(this.data.id, provider);
-      },
-    };
-  }
-
   /**
    * Active devices management namespace.
    */
@@ -353,10 +269,27 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   }
 
   /**
-   * Return the loaded data.
+   * Return the loaded data with fallback profile and widgets for backward compatibility.
    */
   public toJSON() {
-    return this.data;
+    const rawData = this.data as any;
+    if (!rawData) return rawData;
+
+    let primaryStreamer: any = null;
+    if (rawData.memberships && rawData.memberships.length > 0) {
+      for (const m of rawData.memberships) {
+        if (m.organization?.streamers && m.organization.streamers.length > 0) {
+          primaryStreamer = m.organization.streamers[0];
+          break;
+        }
+      }
+    }
+
+    return {
+      ...rawData,
+      profile: rawData.profile || primaryStreamer || null,
+      widgets: rawData.widgets || primaryStreamer?.widgets || [],
+    };
   }
 
   /**
@@ -378,26 +311,9 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   }
 
   /**
-   * Find owner of a URI.
-   */
-  public static async getURIOwner(uri: string) {
-    return getURIOwner(uri);
-  }
-
-  /**
-   * Run dynamic self-healing/migration checks on loaded user data.
-   * Can be extended in the future for other lazy data updates.
+   * Run dynamic checks on loaded user data.
    */
   private async selfHeal(user: any): Promise<any> {
-    if (!user) return user;
-
-    const anyUser = user as any;
-    if (!anyUser.widgets || anyUser.widgets.length === 0) {
-      anyUser.widgets = await ensureUserWidgets(anyUser.id, anyUser.widgets);
-    }
-
     return user;
   }
 }
-
-import { nanoid } from "nanoid";

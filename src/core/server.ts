@@ -102,13 +102,7 @@ class Server {
           return isAllowedOrigin(origin);
         },
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowedHeaders: [
-          "Content-Type",
-          "Authorization",
-          "X-Signature-SHA256",
-          "X-Requested-With",
-          "Accept",
-        ],
+        allowedHeaders: true,
         credentials: true,
       }),
     );

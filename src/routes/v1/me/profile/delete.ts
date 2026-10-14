@@ -1,37 +1,39 @@
 import Elysia, { t } from "elysia";
 import { prisma } from "@/core/prisma";
-import { auth } from "@/core/auth";
-import { sessionUserSelect, fullUserSelect } from "@/consts/session";
-import { setCachedUser } from "@/classes/me/cache";
+import { redis } from "@/core/redis";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
 
 /**
- * DELETE endpoint to unpublish/deactivate the user profile.
+ * DELETE endpoint to unpublish/deactivate the streamer profile.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .delete(
     "/",
-    async ({ getAuthenticatedUser }) => {
-      const user = await getAuthenticatedUser(sessionUserSelect);
+    async ({ org, set }) => {
+      if (!org) {
+        set.status = "Unauthorized";
+        return "Unauthorized";
+      }
+      if (!requireOrgPermission(org, OrgPerm.EDIT_STREAMER_PROFILE)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to edit streamer profile";
+      }
 
-      await prisma.client.profile.update({
+      await prisma.client.streamer.update({
         data: {
           publishedAt: null,
         },
         where: {
-          userId: user.data.id,
+          id: org.streamerId,
         },
       });
 
-      // Fetch full user for cache sync (must select fullUserSelect to maintain cache completeness)
-      const fullUser = await prisma.client.user.findUnique({
-        where: { id: user.data.id },
-        select: fullUserSelect,
-      });
-
-      if (fullUser) {
-        await setCachedUser(user.data.id, fullUser);
-      }
+      await Promise.all([
+        redis.redis.del(`streamer:${org.streamerId}:info`),
+        redis.redis.del(`streamer:${org.streamerId}:profile`),
+      ]);
 
       return "OK";
     },

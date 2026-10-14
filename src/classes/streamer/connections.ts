@@ -2,43 +2,28 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
+import {
+  supported_providers,
+  allowed_user_update_providers,
+  providerAliases,
+  type SupportedProvider,
+} from "@/consts/providers";
+import { resolveProvider } from "@/utils/connections";
+import { ConnectionSecretPayload } from "@/types/streamer.types";
 
-export const supported_providers = [
-  "stripe",
-  "buymeacoffee",
-  "kofi",
-  "xendit",
-  "feelfreepay",
-  "streamlabs",
-] as const;
-
-export const allowed_user_update_providers: SupportedProvider[] = [
-  "stripe",
-  "buymeacoffee",
-  "kofi",
-  "feelfreepay",
-] as const;
-
-export type SupportedProvider = (typeof supported_providers)[number];
-
-export const providerAliases: Record<string, string> = {
-  bmac: "buymeacoffee",
-  ffp: "feelfreepay",
+export {
+  supported_providers,
+  allowed_user_update_providers,
+  providerAliases,
+  resolveProvider,
 };
-
-/**
- * Resolve a provider name from an alias.
- */
-export function resolveProvider(name: string): SupportedProvider | null {
-  const normalized = name.toLowerCase();
-  const target = (providerAliases[normalized] ?? normalized) as any;
-  return supported_providers.includes(target) ? target : null;
-}
+export type { SupportedProvider };
 
 export async function setConnection(
-  uid: string | bigint,
+  streamerId: string | bigint,
+  orgId: string | bigint,
   provider: SupportedProvider,
-  payload: string | { username?: string | null; secret: string; refreshToken?: string | null },
+  payload: ConnectionSecretPayload,
 ) {
   const secret = typeof payload === "string" ? payload : payload.secret;
   const username = typeof payload === "string" ? null : (payload.username ?? null);
@@ -61,29 +46,32 @@ export async function setConnection(
     if (refreshToken !== undefined) data.streamlabsRefreshToken = refreshToken;
   }
 
-  let targetUid: bigint;
+  let targetStreamerId: bigint;
+  let targetOrgId: bigint;
   try {
-    targetUid = BigInt(uid);
+    targetStreamerId = BigInt(streamerId);
+    targetOrgId = BigInt(orgId);
   } catch {
     return null;
   }
 
   const updated = await prisma.client.integration.upsert({
-    where: { userId: targetUid },
+    where: { streamerId: targetStreamerId },
     update: data,
     create: {
-      userId: targetUid,
+      streamerId: targetStreamerId,
+      orgId: targetOrgId,
       ...data,
     },
   });
 
   await Promise.all([
     redis.redis.setex(
-      `user:${String(uid)}:connections:${provider}`,
+      `streamer:${String(streamerId)}:connections:${provider}`,
       day,
       secret,
     ),
-    redis.redis.del(`user:${String(uid)}:info`),
+    redis.redis.del(`streamer:${String(streamerId)}:info`),
   ]);
 
   if (provider === "buymeacoffee") {
@@ -94,12 +82,12 @@ export async function setConnection(
 }
 
 export async function removeConnection(
-  uid: string | bigint,
+  streamerId: string | bigint,
   provider: SupportedProvider,
 ) {
-  let targetUid: bigint;
+  let targetStreamerId: bigint;
   try {
-    targetUid = BigInt(uid);
+    targetStreamerId = BigInt(streamerId);
   } catch {
     return null;
   }
@@ -123,12 +111,12 @@ export async function removeConnection(
 
   const updated = await prisma.client.integration.update({
     data,
-    where: { userId: targetUid },
+    where: { streamerId: targetStreamerId },
   });
 
   await Promise.all([
-    redis.redis.del(`user:${String(uid)}:connections:${provider}`),
-    redis.redis.del(`user:${String(uid)}:info`),
+    redis.redis.del(`streamer:${String(streamerId)}:connections:${provider}`),
+    redis.redis.del(`streamer:${String(streamerId)}:info`),
   ]);
 
   if (provider === "buymeacoffee") {

@@ -1,18 +1,28 @@
 import Elysia, { t } from "elysia";
-import { Connections } from "@/types/account.types";
-import { auth } from "@/core/auth";
-import { integrationSelect } from "@/consts/session";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
+import { prisma } from "@/core/prisma";
 
 /**
- * GET endpoint to retrieve the third-party connections/integration secrets for the user.
+ * GET endpoint to retrieve the third-party connections/integration secrets for the active streamer.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .get(
     "/",
-    async ({ getAuthenticatedUser }) => {
-      const user = await getAuthenticatedUser(integrationSelect);
-      const integration = user.data.integration;
+    async ({ org, set }) => {
+      if (!org) {
+        set.status = "Forbidden";
+        return "No active organization found";
+      }
+      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to view integrations";
+      }
+
+      const integration = await prisma.client.integration.findUnique({
+        where: { streamerId: org.streamerId },
+      });
 
       return {
         stripe: integration?.stripeSecret ?? null,

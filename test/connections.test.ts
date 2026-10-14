@@ -4,7 +4,7 @@ import {
   allowed_user_update_providers,
   providerAliases,
   resolveProvider,
-} from "../src/classes/me/connections";
+} from "../src/classes/streamer";
 
 describe("Connections & Integrations Logic", () => {
   it("should list all supported payment & trigger providers", () => {

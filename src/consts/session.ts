@@ -1,28 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 
 /**
- * Selection for full user data including profile and widgets.
- */
-export const sessionUserSelect = {
-  id: true,
-  email: true,
-  createWith: true,
-  createdAt: true,
-  disabledAt: true,
-  deletedAt: true,
-  profile: true,
-  widgets: {
-    include: {
-      alertbox: {
-        include: {
-          events: true,
-        },
-      },
-    },
-  },
-} as const satisfies Prisma.UserSelect;
-
-/**
  * Minimal selection for presence checks.
  */
 export const basicUserSelect = {
@@ -30,11 +8,39 @@ export const basicUserSelect = {
 } as const satisfies Prisma.UserSelect;
 
 /**
- * Selection for integration secrets.
+ * Selection for full user data including organizations and streamers.
  */
-export const integrationSelect = {
+export const sessionUserSelect = {
   id: true,
-  integration: true,
+  email: true,
+  name: true,
+  avatar: true,
+  createWith: true,
+  createdAt: true,
+  disabledAt: true,
+  deletedAt: true,
+  memberships: {
+    include: {
+      organization: {
+        include: {
+          streamers: {
+            include: {
+              widgets: {
+                include: {
+                  alertbox: {
+                    include: {
+                      events: true,
+                    },
+                  },
+                },
+              },
+              integration: true,
+            },
+          },
+        },
+      },
+    },
+  },
 } as const satisfies Prisma.UserSelect;
 
 /**
@@ -43,17 +49,30 @@ export const integrationSelect = {
 export const fullUserSelect = {
   id: true,
   email: true,
+  name: true,
+  avatar: true,
   createWith: true,
   createdAt: true,
   disabledAt: true,
   deletedAt: true,
-  profile: true,
-  integration: true,
-  widgets: {
+  memberships: {
     include: {
-      alertbox: {
+      organization: {
         include: {
-          events: true,
+          streamers: {
+            include: {
+              widgets: {
+                include: {
+                  alertbox: {
+                    include: {
+                      events: true,
+                    },
+                  },
+                },
+              },
+              integration: true,
+            },
+          },
         },
       },
     },
@@ -61,12 +80,11 @@ export const fullUserSelect = {
 } as const satisfies Prisma.UserSelect;
 
 export const sessionUserInclude = {
-  profile: true,
-  widgets: {
+  memberships: {
     include: {
-      alertbox: {
+      organization: {
         include: {
-          events: true,
+          streamers: true,
         },
       },
     },
@@ -74,16 +92,26 @@ export const sessionUserInclude = {
 } as const satisfies Prisma.UserInclude;
 
 export const fullUserInclude = {
-  profile: true,
-  integration: true,
-  widgets: {
+  memberships: {
     include: {
-      alertbox: {
+      organization: {
         include: {
-          events: true,
+          streamers: {
+            include: {
+              widgets: {
+                include: {
+                  alertbox: {
+                    include: {
+                      events: true,
+                    },
+                  },
+                },
+              },
+              integration: true,
+            },
+          },
         },
       },
     },
   },
 } as const satisfies Prisma.UserInclude;
-

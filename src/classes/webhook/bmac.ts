@@ -27,7 +27,8 @@ export class BmacWebhook {
         deletedAt: null,
       },
       select: {
-        userId: true,
+        orgId: true,
+        streamerId: true,
         bmacSecret: true,
         streamlabsSecret: true,
         streamlabsRefreshToken: true,
@@ -75,7 +76,8 @@ export class BmacWebhook {
           const dbMatched = await prisma.client.integration.findFirst({
             where: { bmacSecret: token, deletedAt: null },
             select: {
-              userId: true,
+              orgId: true,
+              streamerId: true,
               bmacSecret: true,
               streamlabsSecret: true,
               streamlabsRefreshToken: true,
@@ -156,7 +158,8 @@ export class BmacWebhook {
         : StreamlabsOption.BMAC_MEMBERSHIP_SUCCESS;
 
       const result = await WebhookDispatcher.processDonation({
-        userId: matchedIntegration.userId,
+        orgId: matchedIntegration.orgId,
+        streamerId: matchedIntegration.streamerId,
         provider: "buymeacoffee",
         providerTxId,
         type: alertType,

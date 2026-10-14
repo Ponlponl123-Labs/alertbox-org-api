@@ -1,34 +1,34 @@
 import Elysia, { t } from "elysia";
-import { auth } from "@/core/auth";
+import { orgContext } from "@/core/org";
 import { sessionUserSelect } from "@/consts/session";
 import { Moderation } from "@/classes/moderation";
+import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
+import { Me } from "@/classes/me";
+import { processAvatar } from "@/utils/image";
+import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
+import { nanoid } from "nanoid";
 
 /**
- * PATCH endpoint to update the currently logged in user's profile.
+ * PATCH endpoint to update the currently logged in user's account name and avatar.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .patch(
     "/",
     async ({ getAuthenticatedUser, body, set }) => {
       const user = await getAuthenticatedUser(sessionUserSelect);
 
-      if (body.displayname) {
-        const check = await Moderation.moderateText(body.displayname);
+      const nameInput = (body as any).name || (body as any).userName || (body as any).displayName || body.displayname;
+      if (nameInput) {
+        const check = await Moderation.moderateText(nameInput);
         if (check.flagged) {
           set.status = "Unavailable For Legal Reasons";
-          return "Display name contains inappropriate content";
+          return "Name contains inappropriate content";
         }
       }
 
-      if (body.bio) {
-        const check = await Moderation.moderateText(body.bio);
-        if (check.flagged) {
-          set.status = "Unavailable For Legal Reasons";
-          return "Bio contains inappropriate content";
-        }
-      }
-
+      let avatarUpdated = false;
       if (body.avatar) {
         const buf = Buffer.from(await body.avatar.arrayBuffer());
         const check = await Moderation.moderateImage(buf);
@@ -36,100 +36,51 @@ export const endpoint = new Elysia()
           set.status = "Unavailable For Legal Reasons";
           return "Avatar contains inappropriate or NSFW content";
         }
+        try {
+          const processed = await processAvatar(buf);
+          const { url } = await saveProfileImage(String(user.data.id), "avatar", nanoid(), processed.buffer);
+          if (user.data.avatar) {
+            await deleteProfileImage(user.data.avatar).catch(() => {});
+          }
+          await prisma.client.user.update({
+            where: { id: user.data.id },
+            data: { avatar: url },
+          });
+          user.data.avatar = url;
+          avatarUpdated = true;
+        } catch {}
       }
 
-      if (body.banner) {
-        const buf = Buffer.from(await body.banner.arrayBuffer());
-        const check = await Moderation.moderateImage(buf);
-        if (check.flagged) {
-          set.status = "Unavailable For Legal Reasons";
-          return "Banner contains inappropriate or NSFW content";
-        }
+      let nameUpdated = false;
+      if (nameInput) {
+        const userName = nameInput.trim().slice(0, 64);
+        await prisma.client.user.update({
+          where: { id: user.data.id },
+          data: { name: userName },
+        });
+        user.data.name = userName;
+        nameUpdated = true;
       }
 
-      const updated = await user.profile.update(body);
-      if (!updated) return "No changes";
-      return user.toJSON();
+      if (!nameUpdated && !avatarUpdated) return "No changes";
+
+      await redis.redis.del(`user:${String(user.data.id)}:info`);
+      const freshUser = await new Me({ cache: false }).load(user.data.id, sessionUserSelect);
+      return freshUser ? freshUser.toJSON() : user.toJSON();
     },
     {
       detail: {
         tags: ["User Account"],
-        summary: "Update user profile and appearance",
+        summary: "Update user account profile",
         description:
-          "Updates profile details including display name, bio, HEX accent color, social handles, and optional avatar / banner image uploads. Accepts `multipart/form-data` when uploading files or `application/json` for text updates.",
+          "Updates user account name and avatar. Accepts `multipart/form-data` or `application/json`.",
       },
       body: t.Object(
         {
-          displayname: t.Optional(
-            t.String({
-              minLength: 1,
-              maxLength: 64,
-              description: "Public creator display name.",
-              examples: ["Ponlponl123"],
-            }),
-          ),
-          bio: t.Optional(
-            t.String({
-              maxLength: 1000,
-              description: "Short bio or tagline displayed on tipping pages.",
-              examples: ["Fullstack dev & open source creator."],
-            }),
-          ),
-          accentColor: t.Optional(
-            t.String({
-              pattern: "^$|^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
-              description: "Hex color code for theme highlights (with or without #).",
-              examples: ["#8B5CF6"],
-            }),
-          ),
-          socialDiscord: t.Optional(
-            t.String({
-              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "Discord username or invite code.",
-              examples: ["alertbox"],
-            }),
-          ),
-          socialFacebook: t.Optional(
-            t.String({
-              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "Facebook profile or page handle.",
-              examples: ["creator"],
-            }),
-          ),
-          socialReddit: t.Optional(
-            t.String({
-              pattern: "^$|^(u/)?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "Reddit username or profile handle.",
-              examples: ["u/creator"],
-            }),
-          ),
-          socialTwitch: t.Optional(
-            t.String({
-              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "Twitch channel name.",
-              examples: ["creator"],
-            }),
-          ),
-          socialTwitter: t.Optional(
-            t.String({
-              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "X / Twitter handle.",
-              examples: ["@creator"],
-            }),
-          ),
-          socialYoutube: t.Optional(
-            t.String({
-              pattern: "^$|^@?[a-zA-Z0-9_.-]{1,64}$",
-              maxLength: 64,
-              description: "YouTube channel handle.",
-              examples: ["@creator"],
-            }),
-          ),
+          name: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+          userName: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+          displayName: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+          displayname: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
           avatar: t.Optional(
             t.File({
               maxSize: "5m",
@@ -137,24 +88,6 @@ export const endpoint = new Elysia()
               description: "Avatar image file (PNG, JPEG, WebP, max 5MB).",
             }),
           ),
-          banner: t.Optional(
-            t.File({
-              maxSize: "10m",
-              type: ["image/png", "image/jpeg", "image/webp"],
-              description: "Banner cover image file (PNG, JPEG, WebP, max 10MB).",
-            }),
-          ),
-        },
-        {
-          description: "Profile fields to update.",
-          examples: [
-            {
-              displayname: "Ponlponl123",
-              bio: "Fullstack dev & open source creator.",
-              accentColor: "#8B5CF6",
-              socialTwitter: "@ponlponl123",
-            },
-          ],
         },
       ),
       response: {

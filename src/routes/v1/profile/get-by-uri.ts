@@ -1,5 +1,5 @@
 import Elysia, { t } from "elysia";
-import { Me } from "@/classes/me";
+import { Streamer } from "@/classes/streamer";
 import { isValidUri } from "@/utils/regex";
 
 /**
@@ -15,7 +15,7 @@ export const endpoint = new Elysia().get(
       set.status = "Bad Request";
       return "Bad Request";
     }
-    if (await Me.getURIOwner(parsedUri)) return "OK";
+    if (await Streamer.getURIOwner(parsedUri)) return "OK";
     set.status = "Not Found";
     return "Not Found";
   },

@@ -2,17 +2,28 @@ import Elysia, { t } from "elysia";
 import {
   allowed_user_update_providers,
   resolveProvider,
-} from "@/classes/me/connections";
-import { auth } from "@/core/auth";
+  setConnection,
+} from "@/classes/streamer";
+import { orgContext, requireOrgPermission } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
 
 /**
  * POST endpoint to connect/set integration configuration for a provider.
  */
 export const endpoint = new Elysia()
-  .use(auth)
+  .use(orgContext)
   .post(
     "/:provider",
-    async ({ getAuthenticatedUser, params, body, set }) => {
+    async ({ org, params, body, set }) => {
+      if (!org) {
+        set.status = "Forbidden";
+        return "No active organization found";
+      }
+      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to manage integrations";
+      }
+
       const provider = resolveProvider(params.provider ?? "");
       if (!provider || !allowed_user_update_providers.includes(provider)) {
         set.status = "Bad Request";
@@ -26,8 +37,7 @@ export const endpoint = new Elysia()
         }
       }
 
-      const user = await getAuthenticatedUser();
-      await user.connections.set(provider, body);
+      await setConnection(org.streamerId, org.orgId, provider, body as any);
       return "OK";
     },
     {

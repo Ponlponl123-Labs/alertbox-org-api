@@ -8,75 +8,167 @@ datasource db {
 }
 
 model User {
-  id                  BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
-  email               String               @unique @db.VarChar(256)
-  createWith          String               @db.VarChar(50)
-  secret              String               @unique @db.VarChar(255)
-  disabledAt          DateTime?            @db.Timestamp(0)
-  deletedAt           DateTime?            @db.Timestamp(0)
-  createdAt           DateTime             @default(now()) @db.Timestamp(0)
-  updatedAt           DateTime             @updatedAt @db.Timestamp(0)
-  integration         Integration?
-  profile             Profile?
-  reservedUris        ReservedUri[]
-  sessions            Session[]            @relation("UserSessions")
-  sessionUsages       SessionUsage[]
-  transactionLogs     TransactionLog[]
-  streamlabsRelayLogs StreamlabsRelayLog[]
-  widgets             Widget[]
+  id                 BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  email              String                 @unique @db.VarChar(256)
+  createWith         String                 @db.VarChar(50)
+  secret             String                 @unique @db.VarChar(255)
+  name               String?                @db.VarChar(64)
+  avatar             String?                @db.VarChar(512)
+  disabledAt         DateTime?              @db.Timestamp(0)
+  deletedAt          DateTime?              @db.Timestamp(0)
+  createdAt          DateTime               @default(now()) @db.Timestamp(0)
+  updatedAt          DateTime               @updatedAt @db.Timestamp(0)
+  sessions           Session[]              @relation("UserSessions")
+  sessionUsages      SessionUsage[]
+  ownedOrganizations Organization[]         @relation("OrgOwner")
+  memberships        OrganizationMember[]
+  invitesSent        OrganizationInvite[]   @relation("OrgInviter")
+  auditLogs          OrganizationAuditLog[]
 
   @@unique([id, secret])
 }
 
-model Profile {
-  id                     BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  userId                 BigInt    @unique @db.UnsignedBigInt
-  name                   String    @db.VarChar(64)
-  displayName            String    @db.VarChar(64)
-  bio                    String?   @db.Text
-  avatar                 String?   @db.VarChar(512)
-  banner                 String?   @db.VarChar(512)
-  options                Int       @default(0) @db.UnsignedInt
-  badges                 Int       @default(0) @db.UnsignedInt
-  accentColor            Int       @default(0) @db.UnsignedInt
-  uri                    String?   @unique @db.VarChar(64)
-  uriCooldownEnd         DateTime? @db.Timestamp(0)
-  publishedAt            DateTime? @db.Timestamp(0)
-  twitch                 String?   @db.VarChar(48)
-  youtube                String?   @db.VarChar(48)
-  twitter                String?   @db.VarChar(48)
-  facebook               String?   @db.VarChar(64)
-  reddit                 String?   @db.VarChar(48)
-  discord                String?   @db.VarChar(32)
-  defaultDonorName       String    @default("Anonymous") @db.VarChar(48)
-  defaultDonorAmount     Int       @default(1) @db.UnsignedSmallInt
-  defaultDonorAvatar     String?   @db.VarChar(512)
-  isDonorCanCustomAvatar DateTime? @default(now()) @db.Timestamp(0)
-  currency               Int?      @db.UnsignedSmallInt
-  minTipAmount           Int       @default(1) @db.UnsignedSmallInt
-  maxTipAmount           Int       @default(10000) @db.UnsignedSmallInt
-  deletedAt              DateTime? @db.Timestamp(0)
-  createdAt              DateTime  @default(now()) @db.Timestamp(0)
-  updatedAt              DateTime  @updatedAt @db.Timestamp(0)
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Organization {
+  id                  BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  slug                String                 @unique @db.VarChar(50)
+  name                String                 @db.VarChar(100)
+  avatar              String?                @db.VarChar(512)
+  banner              String?                @db.VarChar(512)
+  ownerId             BigInt                 @db.UnsignedBigInt
+  deletedAt           DateTime?              @db.Timestamp(0)
+  createdAt           DateTime               @default(now()) @db.Timestamp(0)
+  updatedAt           DateTime               @updatedAt @db.Timestamp(0)
+  owner               User                   @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members             OrganizationMember[]
+  invites             OrganizationInvite[]
+  rolePresets         OrganizationRolePreset[]
+  streamers           Streamer[]
+  widgets             Widget[]
+  integrations        Integration[]
+  transactionLogs     TransactionLog[]
+  streamlabsRelayLogs StreamlabsRelayLog[]
+  auditLogs           OrganizationAuditLog[]
 
+  @@index([ownerId])
+  @@index([deletedAt])
+}
+
+model OrganizationMember {
+  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId        BigInt       @db.UnsignedBigInt
+  userId       BigInt       @db.UnsignedBigInt
+  role         OrgRole      @default(MEMBER)
+  permissions  BigInt       @default(0) @db.UnsignedBigInt
+  createdAt    DateTime     @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime     @updatedAt @db.Timestamp(0)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId, orgId])
+  @@index([orgId, role])
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MANAGER
+  EDITOR
+  VIEWER
+  MEMBER
+}
+
+model OrganizationInvite {
+  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId        BigInt       @db.UnsignedBigInt
+  email        String       @db.VarChar(256)
+  role         OrgRole      @default(MEMBER)
+  permissions  BigInt       @default(0) @db.UnsignedBigInt
+  token        String       @unique @db.VarChar(128)
+  inviterId    BigInt       @db.UnsignedBigInt
+  expiresAt    DateTime     @db.Timestamp(0)
+  acceptedAt   DateTime?    @db.Timestamp(0)
+  createdAt    DateTime     @default(now()) @db.Timestamp(0)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  inviter      User         @relation("OrgInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, email])
+}
+
+model OrganizationAuditLog {
+  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId        BigInt       @db.UnsignedBigInt
+  userId       BigInt       @db.UnsignedBigInt
+  action       String       @db.VarChar(64)
+  targetType   String       @db.VarChar(32)
+  targetId     BigInt?      @db.UnsignedBigInt
+  payload      String?      @db.LongText
+  ipAddress    String       @db.VarChar(50)
+  createdAt    DateTime     @default(now()) @db.Timestamp(0)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
+
+model Streamer {
+  id                     BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId                  BigInt               @db.UnsignedBigInt
+  name                   String               @db.VarChar(64)
+  displayName            String               @db.VarChar(64)
+  bio                    String?              @db.Text
+  avatar                 String?              @db.VarChar(512)
+  banner                 String?              @db.VarChar(512)
+  options                Int                  @default(0) @db.UnsignedInt
+  badges                 Int                  @default(0) @db.UnsignedInt
+  accentColor            Int                  @default(0) @db.UnsignedInt
+  uri                    String?              @unique @db.VarChar(64)
+  uriCooldownEnd         DateTime?            @db.Timestamp(0)
+  publishedAt            DateTime?            @db.Timestamp(0)
+  twitch                 String?              @db.VarChar(48)
+  youtube                String?              @db.VarChar(48)
+  twitter                String?              @db.VarChar(48)
+  facebook               String?              @db.VarChar(64)
+  reddit                 String?              @db.VarChar(48)
+  discord                String?              @db.VarChar(32)
+  defaultDonorName       String               @default("Anonymous") @db.VarChar(48)
+  defaultDonorAmount     Int                  @default(1) @db.UnsignedSmallInt
+  defaultDonorAvatar     String?              @db.VarChar(512)
+  isDonorCanCustomAvatar DateTime?            @default(now()) @db.Timestamp(0)
+  currency               Int?                 @db.UnsignedSmallInt
+  minTipAmount           Int                  @default(1) @db.UnsignedSmallInt
+  maxTipAmount           Int                  @default(10000) @db.UnsignedSmallInt
+  deletedAt              DateTime?            @db.Timestamp(0)
+  createdAt              DateTime             @default(now()) @db.Timestamp(0)
+  updatedAt              DateTime             @updatedAt @db.Timestamp(0)
+  organization           Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integration            Integration?
+  widgets                Widget[]
+  reservedUris           ReservedUri[]
+  transactionLogs        TransactionLog[]
+  streamlabsRelayLogs    StreamlabsRelayLog[]
+
+  @@index([orgId, deletedAt])
   @@index([displayName])
   @@fulltext([bio])
 }
 
 model Widget {
-  id        BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  userId    BigInt           @db.UnsignedBigInt
-  type      WidgetType
-  token     String           @unique @db.VarChar(255)
-  deletedAt DateTime?        @db.Timestamp(0)
-  createdAt DateTime         @default(now()) @db.Timestamp(0)
-  updatedAt DateTime         @updatedAt @db.Timestamp(0)
-  alertbox  AlertboxSetting?
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenLogs WidgetTokenLog[]
+  id           BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId        BigInt           @db.UnsignedBigInt
+  streamerId   BigInt           @db.UnsignedBigInt
+  type         WidgetType
+  token        String           @unique @db.VarChar(255)
+  deletedAt    DateTime?        @db.Timestamp(0)
+  createdAt    DateTime         @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime         @updatedAt @db.Timestamp(0)
+  alertbox     AlertboxSetting?
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  streamer     Streamer         @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  tokenLogs    WidgetTokenLog[]
 
-  @@index([userId, type, deletedAt])
+  @@index([streamerId, type, deletedAt])
+  @@index([orgId, deletedAt])
 }
 
 model AlertboxSetting {
@@ -130,29 +222,32 @@ model AlertboxEvent {
 }
 
 model Integration {
-  id                     BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  userId                 BigInt    @unique @db.UnsignedBigInt
-  stripeSecret           String?   @db.VarChar(512)
-  stripeOptions          Int       @default(0) @db.UnsignedInt
-  bmacSecret             String?   @db.VarChar(512)
-  bmacOptions            Int       @default(0) @db.UnsignedInt
-  kofiSecret             String?   @db.VarChar(512)
-  kofiOptions            Int       @default(0) @db.UnsignedInt
-  xenditSecret           String?   @db.VarChar(512)
-  xenditOptions          Int       @default(0) @db.UnsignedInt
-  ffpSecret              String?   @db.VarChar(512)
-  ffpOptions             Int       @default(0) @db.UnsignedInt
-  streamlabsSecret       String?   @db.VarChar(2048)
-  streamlabsRefreshToken String?   @db.VarChar(2048)
-  streamlabsOptions      Int       @default(0) @db.UnsignedInt
-  deletedAt              DateTime? @db.Timestamp(0)
-  updatedAt              DateTime  @updatedAt @db.Timestamp(0)
-  bmacUsername           String?   @db.VarChar(64)
-  kofiUsername           String?   @db.VarChar(64)
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId                  BigInt       @db.UnsignedBigInt
+  streamerId             BigInt       @unique @db.UnsignedBigInt
+  stripeSecret           String?      @db.VarChar(512)
+  stripeOptions          Int          @default(0) @db.UnsignedInt
+  bmacSecret             String?      @db.VarChar(512)
+  bmacOptions            Int          @default(0) @db.UnsignedInt
+  kofiSecret             String?      @db.VarChar(512)
+  kofiOptions            Int          @default(0) @db.UnsignedInt
+  xenditSecret           String?      @db.VarChar(512)
+  xenditOptions          Int          @default(0) @db.UnsignedInt
+  ffpSecret              String?      @db.VarChar(512)
+  ffpOptions             Int          @default(0) @db.UnsignedInt
+  streamlabsSecret       String?      @db.VarChar(2048)
+  streamlabsRefreshToken String?      @db.VarChar(2048)
+  streamlabsOptions      Int          @default(0) @db.UnsignedInt
+  bmacUsername           String?      @db.VarChar(64)
+  kofiUsername           String?      @db.VarChar(64)
+  deletedAt              DateTime?    @db.Timestamp(0)
+  updatedAt              DateTime     @updatedAt @db.Timestamp(0)
+  organization           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  streamer               Streamer     @relation(fields: [streamerId], references: [id], onDelete: Cascade)
 
   @@index([kofiSecret, deletedAt])
   @@index([bmacSecret, deletedAt])
+  @@index([orgId, deletedAt])
 }
 
 model Session {
@@ -226,15 +321,15 @@ model SessionUsage {
 
 model ReservedUri {
   id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  userId          BigInt    @db.UnsignedBigInt
+  streamerId      BigInt    @db.UnsignedBigInt
   uri             String    @unique @db.VarChar(50)
   reservedByToken String    @db.VarChar(255)
   disabledAt      DateTime? @db.Timestamp(0)
   deletedAt       DateTime? @db.Timestamp(0)
   createdAt       DateTime  @default(now()) @db.Timestamp(0)
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer        Streamer  @relation(fields: [streamerId], references: [id], onDelete: Cascade)
 
-  @@index([userId, deletedAt, createdAt])
+  @@index([streamerId, deletedAt, createdAt])
 }
 
 model WebhookLog {
@@ -251,7 +346,8 @@ model WebhookLog {
 
 model TransactionLog {
   id           BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  userId       BigInt            @db.UnsignedBigInt
+  orgId        BigInt            @db.UnsignedBigInt
+  streamerId   BigInt            @db.UnsignedBigInt
   provider     String            @db.VarChar(50)
   providerTxId String?           @db.VarChar(255)
   type         AlertEventType
@@ -265,10 +361,12 @@ model TransactionLog {
   rawPayload   String?           @db.LongText
   createdAt    DateTime          @default(now()) @db.Timestamp(0)
   updatedAt    DateTime          @updatedAt @db.Timestamp(0)
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  streamer     Streamer          @relation(fields: [streamerId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerTxId])
-  @@index([userId, createdAt])
+  @@index([streamerId, createdAt])
+  @@index([orgId, createdAt])
 }
 
 enum WidgetType {
@@ -306,7 +404,8 @@ model WidgetTokenLog {
 
 model StreamlabsRelayLog {
   id           BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  userId       BigInt            @db.UnsignedBigInt
+  orgId        BigInt            @db.UnsignedBigInt
+  streamerId   BigInt            @db.UnsignedBigInt
   provider     String            @db.VarChar(50)
   providerTxId String?           @db.VarChar(255)
   type         AlertEventType
@@ -320,8 +419,24 @@ model StreamlabsRelayLog {
   errorMessage String?           @db.Text
   createdAt    DateTime          @default(now()) @db.Timestamp(0)
   updatedAt    DateTime          @updatedAt @db.Timestamp(0)
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  streamer     Streamer          @relation(fields: [streamerId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerTxId])
-  @@index([userId, createdAt])
+  @@index([streamerId, createdAt])
+  @@index([orgId, createdAt])
+}
+
+model OrganizationRolePreset {
+  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  orgId        BigInt       @db.UnsignedBigInt
+  name         String       @db.VarChar(64)
+  description  String?      @db.VarChar(255)
+  permissions  BigInt       @default(0) @db.UnsignedBigInt
+  color        String?      @db.VarChar(255)
+  createdAt    DateTime     @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime     @default(now()) @updatedAt @db.Timestamp(0)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
 }
