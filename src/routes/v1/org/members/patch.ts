@@ -4,7 +4,7 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { hasPermission, OrgPerm, RolePresets } from "@/utils/rbac";
 import { OrgRole } from "@/generated/prisma/client";
-import { resolveOrgId } from "@/core/org";
+import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
@@ -13,27 +13,15 @@ export const endpoint = new Elysia()
     "/:orgId/members/:memberId",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      let targetMemberId: bigint;
-      try {
-        targetMemberId = BigInt(params.memberId);
-      } catch {
-        set.status = "Bad Request";
-        return "Invalid ID parameters";
-      }
-      if (!orgId) {
+      const targetMemberId = parseBigIntParam(params.memberId);
+      if (!targetMemberId) {
         set.status = "Bad Request";
         return "Invalid ID parameters";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_ROLES)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to manage roles";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_ROLES_MANAGE, set, "manage roles");
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
+      const { orgId, role: callerRole } = authRes;
 
       const targetMember = await prisma.client.organizationMember.findUnique({
         where: { id: targetMemberId },
@@ -44,18 +32,23 @@ export const endpoint = new Elysia()
         return "Member not found";
       }
 
-      if (targetMember.role === "OWNER" && callerMember.role !== "OWNER") {
+      if (body.role === "OWNER") {
         set.status = "Forbidden";
-        return "Cannot modify OWNER member";
+        return "Cannot assign OWNER role via member update. Use ownership transfer.";
+      }
+
+      if (targetMember.role === "OWNER") {
+        set.status = "Forbidden";
+        return "Cannot modify OWNER member. Use ownership transfer.";
       }
 
       const updateData: any = {};
       if (body.role) {
         updateData.role = body.role;
-        updateData.permissions = RolePresets[body.role as OrgRole] ?? RolePresets.MEMBER;
+        updateData.permissions = (RolePresets[body.role as OrgRole] ?? RolePresets.MEMBER) & ~OrgPerm.ORG_DELETE;
       }
       if (body.permissions !== undefined) {
-        updateData.permissions = BigInt(body.permissions);
+        updateData.permissions = BigInt(body.permissions) & ~OrgPerm.ORG_DELETE;
       }
 
       const updated = await prisma.client.organizationMember.update({
@@ -63,7 +56,19 @@ export const endpoint = new Elysia()
         data: updateData,
       });
 
-      await redis.redis.del(`user:${String(targetMember.userId)}:orgs`);
+      if (body.streamerAssignments !== undefined) {
+        await redis.redis.set(
+          `org:${String(orgId)}:member:${String(targetMemberId)}:streamers`,
+          JSON.stringify(body.streamerAssignments),
+        );
+      }
+
+      await Promise.all([
+        redis.redis.del(`user:${String(targetMember.userId)}:org_list`),
+        redis.redis.del(`user:orgs:${String(targetMember.userId)}`),
+        redis.redis.del(`user:primary_org:${String(targetMember.userId)}`),
+        redis.redis.del(`org:${String(orgId)}:members`),
+      ]);
 
       await logOrgAudit({
         orgId,
@@ -71,7 +76,12 @@ export const endpoint = new Elysia()
         action: "MEMBER_ROLE_UPDATED",
         targetType: "MEMBER",
         targetId: targetMemberId,
-        payload: { targetUserId: String(targetMember.userId), role: updated.role, permissions: updated.permissions.toString() },
+        payload: {
+          targetUserId: String(targetMember.userId),
+          role: updated.role,
+          permissions: updated.permissions.toString(),
+          streamerAssignmentsCount: body.streamerAssignments ? body.streamerAssignments.length : undefined,
+        },
       });
 
       return {
@@ -79,17 +89,26 @@ export const endpoint = new Elysia()
         userId: String(updated.userId),
         role: updated.role,
         permissions: updated.permissions.toString(),
+        streamerAssignments: body.streamerAssignments,
       };
     },
     {
       detail: {
         tags: ["Organizations"],
         summary: "Update member role and permissions",
-        description: "Updates a team member's role or custom 64-bit bitmask permissions. Requires MANAGE_ROLES.",
+        description: "Updates a team member's role, custom bitmask permissions, and streamer assignments. Requires MANAGE_ROLES.",
       },
       body: t.Object({
         role: t.Optional(t.Enum(OrgRole)),
         permissions: t.Optional(t.String()),
+        streamerAssignments: t.Optional(
+          t.Array(
+            t.Object({
+              streamerId: t.String(),
+              permissions: t.Array(t.String()),
+            }),
+          ),
+        ),
       }),
     },
   );

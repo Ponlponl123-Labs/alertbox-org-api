@@ -16,7 +16,7 @@ export const endpoint = new Elysia()
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      if (!requireOrgPermission(org, OrgPerm.EDIT_STREAMER_PROFILE)) {
+      if (!requireOrgPermission(org, OrgPerm.STREAMER_MANAGE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to edit streamer profile";
       }

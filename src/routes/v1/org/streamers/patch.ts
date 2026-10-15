@@ -2,11 +2,11 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/utils/rbac";
 import { hexColorToNumber } from "@/utils/color";
 import { isValidUri } from "@/utils/regex";
 import { registerURI } from "@/classes/streamer";
-import { resolveOrgId, resolveStreamerId } from "@/core/org";
+import { authorizeStreamer } from "@/core/org";
 import { Moderation } from "@/classes/moderation";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
@@ -20,25 +20,19 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-      const streamerId = await resolveStreamerId(orgId, params.streamerId);
-      if (!streamerId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.EDIT_STREAMER_PROFILE)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to edit streamer channel";
-      }
+      const authRes = await authorizeStreamer(
+        params.orgId,
+        params.streamerId,
+        user.data.id,
+        {
+          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
+          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
+          actionDescription: "edit streamer channel",
+        },
+        set,
+      );
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
+      const { orgId, streamerId } = authRes;
 
       const streamer = await prisma.client.streamer.findFirst({
         where: { id: streamerId, orgId, deletedAt: null },
@@ -150,12 +144,21 @@ export const endpoint = new Elysia()
         data,
       });
 
-      await Promise.all([
-        redis.redis.del(`streamer:${String(streamerId)}:info`),
-        redis.redis.del(`streamer:${String(streamerId)}:profile`),
-        redis.redis.del(`org:${String(orgId)}:primary_streamer`),
-        redis.redis.del(`user:${String(user.data.id)}:info`),
-      ]);
+      const members = await prisma.client.organizationMember.findMany({
+        where: { orgId },
+        select: { userId: true },
+      });
+
+      const keysToDelete = [
+        `streamer:${String(streamerId)}:info`,
+        `streamer:${String(streamerId)}:profile`,
+        `org:${String(orgId)}:streamers`,
+        `org:${String(orgId)}:primary_streamer`,
+        `org:${String(orgId)}:members`,
+        ...members.map((m) => `user:${String(m.userId)}:org_list`),
+      ];
+
+      await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
 
       await logOrgAudit({
         orgId,
@@ -231,25 +234,19 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId/uri",
     async ({ getAuthenticatedUser, params, headers, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-      const streamerId = await resolveStreamerId(orgId, params.streamerId);
-      if (!streamerId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.EDIT_STREAMER_PROFILE)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to edit streamer profile";
-      }
+      const authRes = await authorizeStreamer(
+        params.orgId,
+        params.streamerId,
+        user.data.id,
+        {
+          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
+          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
+          actionDescription: "edit streamer handle",
+        },
+        set,
+      );
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
+      const { orgId, streamerId } = authRes;
 
       const parsedUri = String(body ?? "").trim().toLowerCase();
       if (!parsedUri || parsedUri.length >= 50 || !isValidUri(parsedUri)) {

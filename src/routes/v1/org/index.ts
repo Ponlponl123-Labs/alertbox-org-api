@@ -9,6 +9,7 @@ import orgInvitesEndpoint from "./invites/index";
 import orgPermissionsEndpoint from "./permissions/index";
 import orgStreamersEndpoint from "./streamers/index";
 import orgAuditEndpoint from "./audit/index";
+import transferOrgEndpoint from "./transfer";
 
 export const OrgRouter = new Elysia({ prefix: "/org" })
   .use(listOrgsEndpoint)
@@ -16,6 +17,7 @@ export const OrgRouter = new Elysia({ prefix: "/org" })
   .use(orgDetailsEndpoint)
   .use(patchOrgEndpoint)
   .use(deleteOrgEndpoint)
+  .use(transferOrgEndpoint)
   .use(orgMembersEndpoint)
   .use(orgInvitesEndpoint)
   .use(orgPermissionsEndpoint)

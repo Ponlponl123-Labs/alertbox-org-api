@@ -1,8 +1,9 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId } from "@/core/org";
+import { authorizeOrg, resolveOrgId } from "@/core/org";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -10,19 +11,15 @@ export const endpoint = new Elysia()
     "/:orgId/members",
     async ({ getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_VIEW, set, "view organization");
+      if (typeof authRes === "string") return set.status === "Forbidden" ? "Access denied" : authRes;
+      const { orgId } = authRes;
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.VIEW_ORG)) {
-        set.status = "Forbidden";
-        return "Access denied";
+      const cachedMembers = await redis.redis.get(`org:${String(orgId)}:members`);
+      if (cachedMembers) {
+        try {
+          return JSON.parse(cachedMembers);
+        } catch {}
       }
 
       const [org, members] = await Promise.all([
@@ -59,18 +56,50 @@ export const endpoint = new Elysia()
         avatar: s.avatar,
       }));
 
-      return members.map((m) => ({
-        id: String(m.id),
-        userId: String(m.userId),
-        email: m.user.email,
-        name: m.user.name,
-        avatar: m.user.avatar,
-        role: m.role,
-        status: m.user.disabledAt ? "Offline" : "Active",
-        permissions: m.permissions.toString(),
-        joinedAt: m.createdAt,
-        streamers: allStreamers,
-      }));
+      const fullStreamerPerms = [
+        "READ_STREAMER_BASIC",
+        "WRITE_STREAMER_BASIC",
+        "READ_STREAMER_TRANSACTION",
+        "READ_STREAMER_ANALISTIC",
+        "MANAGE_STREAMER_WIDGETS",
+        "MANAGE_STREAMER_INTEGRATIONS",
+      ];
+
+      const assignmentKeys = members.map((m) => `org:${String(orgId)}:member:${String(m.id)}:streamers`);
+      const cachedAssignments = assignmentKeys.length > 0 ? await redis.redis.mget(assignmentKeys) : [];
+
+      const result = members.map((m, idx) => {
+        const isFull = m.role === "OWNER" || m.role === "ADMIN";
+        let assignments: { streamerId: string; permissions: string[] }[] = [];
+        if (isFull) {
+          assignments = allStreamers.map((s) => ({ streamerId: s.id, permissions: fullStreamerPerms }));
+        } else if (cachedAssignments[idx]) {
+          try {
+            assignments = JSON.parse(cachedAssignments[idx]!);
+          } catch {}
+        }
+
+        const memberStreamers = isFull
+          ? allStreamers
+          : allStreamers.filter((s) => assignments.some((a) => a.streamerId === s.id));
+
+        return {
+          id: String(m.id),
+          userId: String(m.userId),
+          email: m.user.email,
+          name: m.user.name,
+          avatar: m.user.avatar,
+          role: m.role,
+          status: m.user.disabledAt ? "Offline" : "Active",
+          permissions: m.permissions.toString(),
+          joinedAt: m.createdAt,
+          streamerAssignments: assignments,
+          streamers: memberStreamers,
+        };
+      });
+
+      void redis.redis.setex(`org:${String(orgId)}:members`, 3600, JSON.stringify(result)).catch(() => {});
+      return result;
     },
     {
       detail: {

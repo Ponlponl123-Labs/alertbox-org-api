@@ -17,53 +17,51 @@ export async function getCachedUser(uid: string | bigint): Promise<any | null> {
   if (cachedData === "deleted") return "deleted";
 
   try {
-    return JSON.parse(cachedData);
+    const parsed = JSON.parse(cachedData);
+    if (parsed && parsed.id != null) {
+      parsed.id = BigInt(parsed.id);
+    }
+    return parsed;
   } catch {
     return null;
   }
 }
 
 /**
- * Updates the user master cache in Redis with the complete user object.
- * Extracts and sets separate URI mapping values in Redis for rapid public routing.
+ * Updates the user identity cache in Redis with strictly pure user scalar attributes.
+ * Prevents garbage cache accumulation and stale multi-tenant organizational drift.
  * 
  * @param uid - The unique user identifier.
- * @param user - The complete user object retrieved from the database.
- * @returns The sanitized user object without the authentication secret.
+ * @param user - The user object retrieved from the database or caller.
+ * @returns The sanitized pure user identity object.
  */
 export async function setCachedUser(uid: string | bigint, user: any): Promise<any> {
   const userKey = String(uid);
-  const { secret, ...cacheableUser } = user;
+  const pureUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatar: user.avatar ?? null,
+    createWith: user.createWith,
+    createdAt: user.createdAt,
+    disabledAt: user.disabledAt ?? null,
+    deletedAt: user.deletedAt ?? null,
+  };
   
   await redis.redis.setex(
     "user:" + userKey + ":info",
     day,
-    JSON.stringify(cacheableUser),
+    JSON.stringify(pureUser),
   );
 
-  const profile = user.profile;
-  if (profile?.uri) {
-    await redis.redis.setex("user:" + uid + ":uri", day, profile.uri);
-  }
-  if (profile?.uriCooldownEnd) {
-    const cooldownMs = profile.uriCooldownEnd.getTime 
-      ? profile.uriCooldownEnd.getTime() 
-      : new Date(profile.uriCooldownEnd).getTime();
-    await redis.redis.setex(
-      "user:" + uid + ":uri_cooldown",
-      day,
-      String(cooldownMs),
-    );
-  }
-
-  return cacheableUser;
+  return pureUser;
 }
 
 /**
- * Filters the complete cached user object in-memory to only include the fields
+ * Filters the user object in-memory to only include the fields
  * specified by the query selection.
  * 
- * @param user - The complete cached user object.
+ * @param user - The user object.
  * @param select - The fields to select.
  * @returns The filtered user object.
  */
@@ -72,9 +70,10 @@ export function filterUserSelection(user: any, select: Prisma.UserSelect): any {
 
   const filtered: Record<string, any> = { id: user.id };
   for (const key in select) {
-    if ((select as any)[key]) {
+    if ((select as any)[key] && key in user) {
       filtered[key] = user[key];
     }
   }
   return filtered;
 }
+

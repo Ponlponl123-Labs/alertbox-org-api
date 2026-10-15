@@ -1,7 +1,7 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { Prisma } from "@/generated/prisma/client";
-import { basicUserSelect, fullUserSelect } from "@/consts/session";
+import { basicUserSelect, pureUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
 import { MeOptions, SessionMetadata } from "@/types/me.types";
 import { createSession, destroySession, trackSessionUsage } from "./session";
@@ -9,7 +9,7 @@ import { createAccount, isExist, deleteAccount, ensureUserWidgets } from "./acco
 import { getCachedUser, setCachedUser, filterUserSelection } from "./cache";
 import { listUserDevices, destroyUserDevice } from "./device";
 import { supported_providers } from "@/consts/providers";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm, hasPermission, StreamerPerm, parseStreamerPermissions } from "@/utils/rbac";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 
@@ -23,6 +23,193 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   constructor(options: MeOptions = { cache: true }) {
     this.options = options;
   }
+
+  /**
+   * Helper to fetch active memberships, organizations, and streamers.
+   */
+  private async fetchUserMemberships(userId: bigint): Promise<any[]> {
+    const rawMemberships = await prisma.client.organizationMember.findMany({
+      where: {
+        userId,
+        organization: { deletedAt: null },
+      },
+      include: {
+        organization: {
+          include: {
+            streamers: {
+              where: { deletedAt: null },
+              include: {
+                widgets: {
+                  where: { deletedAt: null },
+                  select: {
+                    id: true,
+                    streamerId: true,
+                    type: true,
+                    token: true,
+                    createdAt: true,
+                    updatedAt: true,
+                  },
+                },
+                integration: {
+                  select: {
+                    id: true,
+                    orgId: true,
+                    streamerId: true,
+                    stripeSecret: true,
+                    bmacSecret: true,
+                    kofiSecret: true,
+                    xenditSecret: true,
+                    ffpSecret: true,
+                    streamlabsSecret: true,
+                    kofiUsername: true,
+                    bmacUsername: true,
+                  },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const memberAssignmentKeys = rawMemberships.map((m) => `org:${String(m.orgId)}:member:${String(m.id)}:streamers`);
+    const cachedMemberAssignments = memberAssignmentKeys.length > 0 ? await redis.redis.mget(memberAssignmentKeys) : [];
+
+    const memberships = rawMemberships.map((m, idx) => {
+      const isOwnerOrAdmin = m.role === "OWNER" || m.role === "ADMIN";
+      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.STREAMER_VIEW);
+      const hasOrgEditProfile = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.STREAMER_MANAGE);
+      const hasOrgViewTransactions = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.TRANSACTION_VIEW);
+      const hasOrgViewAnalytics = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.ANALYTICS_VIEW);
+      const hasOrgManageWidgets =
+        isOwnerOrAdmin ||
+        hasPermission(m.permissions, OrgPerm.WIDGET_MANAGE) ||
+        hasPermission(m.permissions, OrgPerm.WIDGET_VIEW);
+      const hasOrgManageIntegrations =
+        isOwnerOrAdmin ||
+        hasPermission(m.permissions, OrgPerm.INTEGRATION_MANAGE) ||
+        hasPermission(m.permissions, OrgPerm.INTEGRATION_VIEW);
+
+      let assignmentsMap = new Map<string, number>();
+      let assignedStreamerIds: string[] = [];
+      if (!isOwnerOrAdmin && cachedMemberAssignments[idx]) {
+        try {
+          const parsed = JSON.parse(cachedMemberAssignments[idx]!);
+          for (const a of parsed) {
+            assignmentsMap.set(String(a.streamerId), parseStreamerPermissions(a.permissions));
+          }
+          assignedStreamerIds = parsed.map((a: any) => String(a.streamerId));
+        } catch {}
+      }
+
+      const allOrgStreamers = (m.organization?.streamers || []).map((s) => {
+        const { integration, ...streamerRest } = s as any;
+        const sId = String(s.id);
+        const assignedBits = assignmentsMap.get(sId) || 0;
+
+        let perms = 0;
+        if (isOwnerOrAdmin) {
+          perms = StreamerPerm.ALL;
+        } else {
+          perms = assignedBits;
+          if (hasOrgViewStreamers) perms |= StreamerPerm.STREAMER_VIEW;
+          if (hasOrgEditProfile) perms |= StreamerPerm.STREAMER_MANAGE;
+          if (hasOrgViewTransactions) perms |= StreamerPerm.STREAMER_TRANSACTION_VIEW;
+          if (hasOrgViewAnalytics) perms |= StreamerPerm.STREAMER_ANALYTICS_VIEW;
+          if (hasOrgManageWidgets) perms |= StreamerPerm.STREAMER_WIDGET_MANAGE;
+          if (hasOrgManageIntegrations) perms |= StreamerPerm.STREAMER_INTEGRATION_MANAGE;
+        }
+
+        return {
+          ...streamerRest,
+          permissions: perms,
+          isAssigned: isOwnerOrAdmin || assignmentsMap.has(sId),
+          integration: integration
+            ? {
+                id: String(integration.id),
+                orgId: String(integration.orgId),
+                streamerId: String(integration.streamerId),
+                stripe: Boolean(integration.stripeSecret),
+                bmac: Boolean(integration.bmacSecret),
+                kofi: Boolean(integration.kofiSecret),
+                xendit: Boolean(integration.xenditSecret),
+                ffp: Boolean(integration.ffpSecret),
+                streamlabs: Boolean(integration.streamlabsSecret),
+                kofiUsername: integration.kofiUsername,
+                bmacUsername: integration.bmacUsername,
+              }
+            : null,
+        };
+      });
+
+      const visibleStreamers = hasOrgViewStreamers
+        ? allOrgStreamers
+        : allOrgStreamers.filter((s: any) => assignedStreamerIds.includes(String(s.id)));
+
+      return {
+        ...m,
+        organization: m.organization
+          ? {
+              ...m.organization,
+              streamers: visibleStreamers,
+            }
+          : m.organization,
+      };
+    });
+
+    if (this.options.cache && memberships.length > 0) {
+      const userKey = String(userId);
+      const pipeline = redis.redis.pipeline();
+
+      for (const m of memberships) {
+        pipeline.hset(
+          `user:${userKey}:orgs`,
+          String(m.orgId),
+          `${m.role}:${m.permissions.toString()}`,
+        );
+
+        const org = m.organization;
+        if (org) {
+          const orgInfo = {
+            id: String(org.id),
+            name: org.name,
+            slug: org.slug,
+            avatar: org.avatar,
+            banner: org.banner,
+            ownerId: String(org.ownerId),
+            createdAt: org.createdAt,
+          };
+          pipeline.setex(`org:${String(org.id)}:info`, day, JSON.stringify(orgInfo));
+
+          if (org.streamers && org.streamers.length > 0) {
+            const streamerList = org.streamers.map((s: any) => ({
+              id: String(s.id),
+              name: s.name,
+              displayName: s.displayName,
+              avatar: s.avatar,
+              uri: s.uri,
+              publishedAt: s.publishedAt,
+              widgets: (s.widgets || []).map((w: any) => ({
+                ...w,
+                id: String(w.id),
+              })),
+              integration: s.integration,
+              createdAt: s.createdAt,
+            }));
+            pipeline.setex(`org:${String(org.id)}:streamers`, 3600, JSON.stringify(streamerList));
+          }
+        }
+      }
+
+      pipeline.expire(`user:${userKey}:orgs`, day);
+      void pipeline.exec().catch(() => {});
+    }
+
+    return memberships;
+  }
+
 
   /**
    * Authenticate and load user data using a session token.
@@ -74,37 +261,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       return false;
     }
 
-    if (this.options.cache) {
-      const cached = await getCachedUser(session_info.userId);
-      if (cached === "deleted") return false;
-      const anyCached = cached as any;
-      if (anyCached && Array.isArray(anyCached.memberships)) {
-        this.data = filterUserSelection(cached, select) as any;
-        return this;
-      }
-    }
-
-    // Re-fetch with full user selection if not cached
-    const user = await prisma.client.user.findUnique({
-      where: {
-        id: session_info.userId,
-      },
-      select: fullUserSelect,
-    });
-
-    if (!user) return null;
-
-    if (user.deletedAt) {
-      await redis.redis.setex("user:" + session_info.userId + ":info", day, "deleted");
-      return false;
-    }
-
-    // Run dynamic self-healing/migration checks on loaded user data
-    const healedUser = await this.selfHeal(user);
-
-    const cacheableUser = await setCachedUser(session_info.userId, healedUser);
-    this.data = filterUserSelection(cacheableUser, select) as any;
-    return this;
+    return this.load(session_info.userId, select);
   }
 
   /**
@@ -117,15 +274,6 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   public async load(uid: string | bigint): Promise<Me<T> | false | null>;
   public async load(uid: string | bigint, select: any = basicUserSelect): Promise<any> {
     this.lastSelect = select;
-    if (this.options.cache) {
-      const cached = await getCachedUser(uid);
-      if (cached === "deleted") return false;
-      const anyCached = cached as any;
-      if (anyCached && Array.isArray(anyCached.memberships)) {
-        this.data = filterUserSelection(cached, select) as any;
-        return this;
-      }
-    }
 
     let bigUid: bigint;
     try {
@@ -134,25 +282,37 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       return null;
     }
 
-    const user = await prisma.client.user.findUnique({
-      where: {
-        id: bigUid,
-      },
-      select: fullUserSelect,
-    });
+    const needsMemberships = Boolean(select && ("memberships" in select));
 
-    if (!user) return null;
-
-    if (user.deletedAt) {
-      await redis.redis.setex("user:" + uid + ":info", day, "deleted");
-      return false;
+    let pureUser: any = null;
+    if (this.options.cache) {
+      pureUser = await getCachedUser(bigUid);
+      if (pureUser === "deleted") return false;
     }
 
-    // Run dynamic self-healing/migration checks on loaded user data
-    const healedUser = await this.selfHeal(user);
+    if (!pureUser || pureUser.id == null) {
+      pureUser = await prisma.client.user.findUnique({
+        where: { id: bigUid },
+        select: pureUserSelect,
+      });
 
-    const cacheableUser = await setCachedUser(uid, healedUser);
-    this.data = filterUserSelection(cacheableUser, select) as any;
+      if (!pureUser) return null;
+
+      if (pureUser.deletedAt) {
+        await redis.redis.setex("user:" + uid + ":info", day, "deleted");
+        return false;
+      }
+
+      await setCachedUser(bigUid, pureUser);
+    }
+
+    if (!needsMemberships) {
+      this.data = filterUserSelection(pureUser, select) as any;
+      return this;
+    }
+
+    const memberships = await this.fetchUserMemberships(bigUid);
+    this.data = filterUserSelection({ ...pureUser, memberships }, select) as any;
     return this;
   }
 
@@ -176,10 +336,16 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     const user = await createAccount(data);
     if (!user) return false;
 
-    const cacheableUser = await setCachedUser(user.id, user);
-    this.data = filterUserSelection(cacheableUser, select) as any;
+    await setCachedUser(user.id, user);
+
+    if (select && ("memberships" in select)) {
+      return this.load(user.id, select);
+    }
+
+    this.data = filterUserSelection(user, select) as any;
     return this;
   }
+
 
   /**
    * Session management namespace.

@@ -8,6 +8,20 @@ export const basicUserSelect = {
 } as const satisfies Prisma.UserSelect;
 
 /**
+ * Pure user scalar attributes for lightweight, isolated user cache.
+ */
+export const pureUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  avatar: true,
+  createWith: true,
+  createdAt: true,
+  disabledAt: true,
+  deletedAt: true,
+} as const satisfies Prisma.UserSelect;
+
+/**
  * Selection for full user data including organizations and streamers.
  */
 export const sessionUserSelect = {

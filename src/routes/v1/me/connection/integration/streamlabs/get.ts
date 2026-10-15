@@ -34,7 +34,7 @@ export const endpoint = new Elysia()
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+      if (!requireOrgPermission(org, OrgPerm.INTEGRATION_VIEW)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view integrations";
       }
@@ -61,7 +61,7 @@ export const endpoint = new Elysia()
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+      if (!requireOrgPermission(org, OrgPerm.INTEGRATION_MANAGE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to configure integrations";
       }
@@ -93,7 +93,7 @@ export const endpoint = new Elysia()
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+      if (!requireOrgPermission(org, OrgPerm.INTEGRATION_VIEW)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view integration logs";
       }
@@ -114,10 +114,17 @@ export const endpoint = new Elysia()
         },
       });
 
-      // Cache for 60 seconds (1 minute)
-      await redis.redis.set(cacheKey, JSON.stringify(logs), "EX", 60);
+      const formattedLogs = logs.map((l) => ({
+        ...l,
+        id: String(l.id),
+        orgId: String(l.orgId),
+        streamerId: String(l.streamerId),
+      }));
 
-      return logs;
+      // Cache for 60 seconds (1 minute)
+      await redis.redis.set(cacheKey, JSON.stringify(formattedLogs), "EX", 60);
+
+      return formattedLogs;
     },
     {
       detail: {

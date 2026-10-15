@@ -3,7 +3,7 @@ import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId } from "@/core/org";
+import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
@@ -12,27 +12,15 @@ export const endpoint = new Elysia()
     "/:orgId/members/:memberId",
     async ({ getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      let targetMemberId: bigint;
-      try {
-        targetMemberId = BigInt(params.memberId);
-      } catch {
-        set.status = "Bad Request";
-        return "Invalid ID parameters";
-      }
-      if (!orgId) {
+      const targetMemberId = parseBigIntParam(params.memberId);
+      if (!targetMemberId) {
         set.status = "Bad Request";
         return "Invalid ID parameters";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_MEMBERS)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to remove members";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBERS_MANAGE, set, "remove members");
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
+      const { orgId } = authRes;
 
       const targetMember = await prisma.client.organizationMember.findUnique({
         where: { id: targetMemberId },
@@ -52,7 +40,12 @@ export const endpoint = new Elysia()
         where: { id: targetMemberId },
       });
 
-      await redis.redis.del(`user:${String(targetMember.userId)}:orgs`);
+      await Promise.all([
+        redis.redis.del(`user:${String(targetMember.userId)}:orgs`),
+        redis.redis.del(`user:${String(targetMember.userId)}:org_list`),
+        redis.redis.del(`org:${String(orgId)}:members`),
+        redis.redis.del(`org:${String(orgId)}:info`),
+      ]);
 
       await logOrgAudit({
         orgId,

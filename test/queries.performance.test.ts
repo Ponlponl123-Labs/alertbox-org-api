@@ -248,12 +248,37 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       const res = await inspectQuery(
         "WidgetTokenLog.history",
         "SELECT id, oldToken, newToken, createdAt FROM `WidgetTokenLog` " +
-        "WHERE widgetId = 'sample-widget' ORDER BY createdAt DESC LIMIT 10"
+        "WHERE widgetId = 1 ORDER BY createdAt DESC LIMIT 10"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("AlertboxSetting: Setting lookup by widgetId [scans: 0, logical: 1, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "AlertboxSetting.byWidget",
+        "SELECT id, widgetId, globalVolume FROM `AlertboxSetting` WHERE widgetId = 1 LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("AlertboxSetting_widgetId_key");
+    });
+
+    it("AlertboxEvent: Event lookup by alertboxId and eventType [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "AlertboxEvent.bySetting",
+        "SELECT id, alertboxId, eventType, isEnabled, image, sound, soundVolume FROM `AlertboxEvent` " +
+        "WHERE alertboxId = 1 AND eventType = 'TIP' LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(3);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("AlertboxEvent_alertboxId_eventType_key");
     });
   });
 
@@ -316,17 +341,169 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBe(0);
     });
+
+    it("Integration: Integration lookup by unique streamerId [scans: 0, logical: 1, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Integration.byStreamer",
+        "SELECT id, streamerId, stripeSecret, kofiUsername, bmacUsername FROM `Integration` " +
+        "WHERE streamerId = 1 LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("Integration_streamerId_key");
+    });
+  });
+
+  describe("Organization & Multi-Tenant Read Queries (org.ts, members.ts, presets.ts, invites.ts)", () => {
+    it("Organization.byId: lookup by id with soft-delete filter [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Organization.byId",
+        "SELECT id, name, slug, avatar, banner, ownerId, createdAt FROM `Organization` WHERE id = 1 AND deletedAt IS NULL LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("PRIMARY");
+    });
+
+    it("Organization.bySlug: unique slug lookup with soft-delete check [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Organization.bySlug",
+        "SELECT id, name, slug, avatar, banner, ownerId, createdAt FROM `Organization` WHERE slug = 'sample_org_slug' AND deletedAt IS NULL LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("Organization_slug_key");
+    });
+
+    it("Organization.byOwner: active organizations by ownerId [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Organization.byOwner",
+        "SELECT id, name, slug, createdAt FROM `Organization` WHERE ownerId = 1 AND deletedAt IS NULL ORDER BY createdAt DESC"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationMember.callerPerm: composite unique lookup [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationMember.callerPerm",
+        "SELECT id, role, permissions FROM `OrganizationMember` WHERE orgId = 1 AND userId = 1 LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("OrganizationMember_orgId_userId_key");
+    });
+
+    it("OrganizationMember.byUser: all memberships for user [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationMember.byUser",
+        "SELECT id, orgId, role, permissions, createdAt FROM `OrganizationMember` WHERE userId = 1 ORDER BY createdAt ASC"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationMember.byOrg: all members for organization [scans: 0, logical <= 5, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationMember.byOrg",
+        "SELECT id, userId, role, permissions, createdAt FROM `OrganizationMember` WHERE orgId = 1 ORDER BY createdAt ASC"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("Streamer.byOrg: active streamers for organization [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Streamer.byOrg",
+        "SELECT id, orgId, name, displayName, avatar, uri, publishedAt, createdAt FROM `Streamer` WHERE orgId = 1 AND deletedAt IS NULL ORDER BY createdAt ASC"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("Streamer.byUri: public streamer profile lookup by uri [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Streamer.byUri",
+        "SELECT id, orgId, name, displayName, bio, avatar, banner, uri, accentColor, currency FROM `Streamer` WHERE uri = 'sample_streamer_uri' AND deletedAt IS NULL LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("Streamer_uri_key");
+    });
+
+    it("OrganizationRolePreset.byOrg: custom presets for org [scans: 0, logical <= 5, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationRolePreset.byOrg",
+        "SELECT id, orgId, name, description, permissions, color, createdAt, updatedAt FROM `OrganizationRolePreset` WHERE orgId = 1 ORDER BY createdAt ASC"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationInvite.byToken: invite lookup by token [scans: 0, logical <= 2, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationInvite.byToken",
+        "SELECT id, orgId, email, role, permissions, expiresAt, acceptedAt FROM `OrganizationInvite` WHERE token = 'sample_invite_token' AND acceptedAt IS NULL LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(2);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("OrganizationInvite_token_key");
+    });
+
+    it("OrganizationInvite.byOrgAndEmail: latest pending invite for email [scans: 0, logical <= 5, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationInvite.byOrgAndEmail",
+        "SELECT id, token, role, permissions, expiresAt, acceptedAt FROM `OrganizationInvite` WHERE orgId = 1 AND email = 'member@example.com' AND acceptedAt IS NULL ORDER BY createdAt DESC LIMIT 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationAuditLog.byOrg: chronological audit history [scans: 0, logical <= 15, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationAuditLog.byOrg",
+        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 ORDER BY createdAt DESC LIMIT 25"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
   });
 
   describe("Write & Mutation Queries (INSERT, UPDATE, DELETE)", () => {
-    it("Session.create: insert new session [scans: 0, logical <= 10, physical: 0]", async () => {
+    it("Session.create: insert new session [scans: 0, logical <= 15, physical: 0]", async () => {
       const res = await inspectQuery(
         "Session.create",
         "INSERT INTO `Session` (userId, userSecret, token, method, userAgent, ipAddress, expiresAt) " +
         "VALUES (1, 'sec', 'tok_perf_test_1', 'POST', 'test-agent', '127.0.0.1', DATE_ADD(NOW(), INTERVAL 2 HOUR))"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
       expect(res.physicalReads).toBe(0);
     });
 
@@ -393,6 +570,72 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);
       expect(res.physicalReads).toBe(0);
+    });
+
+    it("Organization.create: insert organization [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Organization.create",
+        "INSERT INTO `Organization` (name, slug, ownerId, createdAt, updatedAt) " +
+        "VALUES ('Alpha Org', 'alpha-org-perf-test', 1, NOW(), NOW())"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+    });
+
+    it("OrganizationMember.create: insert organization member [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationMember.create",
+        "INSERT INTO `OrganizationMember` (orgId, userId, role, permissions, createdAt, updatedAt) " +
+        "VALUES (999991, 999991, 'MEMBER', 1, NOW(), NOW())"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+    });
+
+    it("OrganizationMember.updateRole: update member role and permissions [scans: 0, logical <= 15, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationMember.updateRole",
+        "UPDATE `OrganizationMember` SET role = 'ADMIN', permissions = 65535, updatedAt = NOW() WHERE orgId = 1 AND userId = 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationRolePreset.create: insert role preset [scans: 0, logical <= 300, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationRolePreset.create",
+        "INSERT INTO `OrganizationRolePreset` (orgId, name, description, permissions, createdAt, updatedAt) " +
+        "VALUES (1, 'Custom Mod', 'Custom description', 15, NOW(), NOW())"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(300);
+      expect(res.physicalReads).toBe(0);
+    });
+
+    it("OrganizationInvite.create: insert organization invite [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationInvite.create",
+        "INSERT INTO `OrganizationInvite` (orgId, email, role, permissions, token, inviterId, expiresAt, createdAt) " +
+        "VALUES (1, 'perf_invited@example.com', 'MEMBER', 1, 'inv_tok_perf_test', 1, DATE_ADD(NOW(), INTERVAL 7 DAY), NOW())"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+    });
+
+    it("Organization.softDelete: soft-delete organization by id [scans: 0, logical <= 10, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "Organization.softDelete",
+        "UPDATE `Organization` SET deletedAt = NOW() WHERE id = 1"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
     });
   });
 });

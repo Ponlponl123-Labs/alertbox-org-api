@@ -1,6 +1,7 @@
 import { prisma } from "@/core/prisma";
 import betterConsole, { tsflag, s } from "ts-better-console";
 import { logDev } from "@/utils/log";
+import { timingSafeEqualString } from "@/utils/security";
 import {
   parseKofiPayload,
   isKofiTest,
@@ -10,7 +11,51 @@ import {
 import type { WebhookResponse, KofiPayload } from "@/types/webhook.types";
 import { WebhookDispatcher } from "./dispatcher";
 
+export interface KofiIntegrationRecord {
+  orgId: bigint | string;
+  streamerId: bigint | string;
+  kofiSecret: string | null;
+  streamlabsSecret: string | null;
+  streamlabsRefreshToken?: string | null;
+  streamlabsOptions: number;
+}
+
+let cachedIntegrations: KofiIntegrationRecord[] | null = null;
+let lastCacheSync = 0;
+const CACHE_TTL_MS = 60_000;
+
 export class KofiWebhook {
+  public static async getIntegrations(forceRefresh = false): Promise<KofiIntegrationRecord[]> {
+    const now = Date.now();
+    if (!forceRefresh && cachedIntegrations && now - lastCacheSync < CACHE_TTL_MS) {
+      return cachedIntegrations;
+    }
+
+    const integrations = await prisma.client.integration.findMany({
+      where: {
+        kofiSecret: { not: null },
+        deletedAt: null,
+      },
+      select: {
+        orgId: true,
+        streamerId: true,
+        kofiSecret: true,
+        streamlabsSecret: true,
+        streamlabsRefreshToken: true,
+        streamlabsOptions: true,
+      },
+    });
+
+    cachedIntegrations = integrations;
+    lastCacheSync = now;
+    return integrations;
+  }
+
+  public static invalidateIntegrations(): void {
+    cachedIntegrations = null;
+    lastCacheSync = 0;
+  }
+
   public static async handle(body: any): Promise<WebhookResponse> {
     const rawPayload = typeof body === "string" ? body : JSON.stringify(body ?? {});
     let eventType = "unknown";
@@ -31,20 +76,31 @@ export class KofiWebhook {
       }
 
       const verificationToken = payload.verification_token;
-      const matchedIntegration = await prisma.client.integration.findFirst({
-        where: {
-          kofiSecret: verificationToken,
-          deletedAt: null,
-        },
-        select: {
-          orgId: true,
-          streamerId: true,
-          kofiSecret: true,
-          streamlabsSecret: true,
-          streamlabsRefreshToken: true,
-          streamlabsOptions: true,
-        },
-      });
+      const integrations = await this.getIntegrations();
+      let matchedIntegration: KofiIntegrationRecord | null =
+        integrations.find((i) => timingSafeEqualString(i.kofiSecret, verificationToken)) ?? null;
+
+      if (!matchedIntegration) {
+        const dbMatched = await prisma.client.integration.findFirst({
+          where: {
+            kofiSecret: verificationToken,
+            deletedAt: null,
+          },
+          select: {
+            orgId: true,
+            streamerId: true,
+            kofiSecret: true,
+            streamlabsSecret: true,
+            streamlabsRefreshToken: true,
+            streamlabsOptions: true,
+          },
+        });
+
+        if (dbMatched && timingSafeEqualString(dbMatched.kofiSecret, verificationToken)) {
+          matchedIntegration = dbMatched;
+          this.invalidateIntegrations();
+        }
+      }
 
       if (!matchedIntegration) {
         status = "UNAUTHORIZED: Invalid verification token";

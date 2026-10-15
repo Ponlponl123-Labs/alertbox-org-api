@@ -7,7 +7,7 @@ import betterConsole, { tsflag } from "ts-better-console";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 
 import { OrgPerm } from "@/utils/rbac";
-import { fullUserSelect } from "@/consts/session";
+import { pureUserSelect } from "@/consts/session";
 
 /**
  * Create a new user in the database with their primary organization, streamer profile, and widgets.
@@ -40,53 +40,9 @@ export async function createAccount(data: {
           },
         });
 
-        const org = await tx.organization.create({
-          data: {
-            ownerId: newUser.id,
-            name: `${data.name}'s Org`,
-            slug: orgSlug,
-            members: {
-              create: {
-                userId: newUser.id,
-                role: "OWNER",
-                permissions: OrgPerm.ALL,
-              },
-            },
-          },
-        });
-
-        await tx.streamer.create({
-          data: {
-            orgId: org.id,
-            name: data.name,
-            displayName: data.name,
-            widgets: {
-              create: {
-                orgId: org.id,
-                type: "ALERTBOX",
-                token: widgetToken,
-                alertbox: {
-                  create: {
-                    events: {
-                      createMany: {
-                        data: DEFAULT_ALERTBOX_EVENTS,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            integration: {
-              create: {
-                orgId: org.id,
-              },
-            },
-          },
-        });
-
         return await tx.user.findUnique({
           where: { id: newUser.id },
-          select: fullUserSelect,
+          select: pureUserSelect,
         });
       });
 

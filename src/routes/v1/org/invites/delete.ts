@@ -27,7 +27,7 @@ export const endpoint = new Elysia()
         where: { orgId_userId: { orgId, userId: user.data.id } },
       });
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_MEMBERS)) {
+      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBERS_MANAGE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to delete invites";
       }

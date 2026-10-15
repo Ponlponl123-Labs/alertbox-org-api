@@ -25,17 +25,21 @@ export const endpoint = new Elysia()
         where: { orgId_userId: { orgId, userId: user.data.id } },
       });
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_MEMBERS)) {
+      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBERS_MANAGE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to invite members";
       }
 
       const cleanEmail = body.email.trim().toLowerCase();
+      if (body.role === "OWNER") {
+        set.status = "Forbidden";
+        return "Cannot invite a user as OWNER";
+      }
       const role = body.role ?? OrgRole.MEMBER;
-      let permissions = RolePresets[role] ?? RolePresets.MEMBER;
+      let permissions = (RolePresets[role] ?? RolePresets.MEMBER) & ~OrgPerm.ORG_DELETE;
       if (body.permissions !== undefined) {
         try {
-          permissions = BigInt(body.permissions);
+          permissions = BigInt(body.permissions) & ~OrgPerm.ORG_DELETE;
         } catch {
           // fallback to role default
         }
@@ -59,9 +63,9 @@ export const endpoint = new Elysia()
         return "User is already a member of this organization";
       }
 
-      // Expire older unaccepted invites to guarantee single active code per org
+      // Expire older unaccepted invites for this specific email
       await prisma.client.organizationInvite.updateMany({
-        where: { orgId, acceptedAt: null },
+        where: { orgId, email: cleanEmail, acceptedAt: null },
         data: { expiresAt: new Date() },
       });
 

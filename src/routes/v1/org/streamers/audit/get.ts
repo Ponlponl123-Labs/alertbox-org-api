@@ -25,7 +25,7 @@ export const endpoint = new Elysia()
         where: { orgId_userId: { orgId, userId: user.data.id } },
       });
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.VIEW_STREAMERS)) {
+      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.STREAMER_VIEW)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view streamer audit logs";
       }

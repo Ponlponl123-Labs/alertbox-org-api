@@ -20,7 +20,7 @@ export const endpoint = new Elysia()
         where: { orgId_userId: { orgId, userId: user.data.id } },
       });
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.VIEW_ORG)) {
+      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_VIEW)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view audit logs";
       }

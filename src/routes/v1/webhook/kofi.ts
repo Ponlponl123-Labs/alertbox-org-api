@@ -1,5 +1,8 @@
 import Elysia, { t } from "elysia";
-import { Webhook } from "@/classes/webhook";
+import { Webhook, KofiWebhook } from "@/classes/webhook";
+
+export const getKofiIntegrations = KofiWebhook.getIntegrations.bind(KofiWebhook);
+export const invalidateKofiIntegrations = KofiWebhook.invalidateIntegrations.bind(KofiWebhook);
 
 export const endpoint = new Elysia().post(
   "/kofi",

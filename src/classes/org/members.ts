@@ -84,7 +84,7 @@ export async function updateOrgMemberRole(
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),
-    redis.redis.del(`user:${String(targetUserId)}:info`),
+    redis.redis.del(`user:${String(targetUserId)}:orgs`),
   ]);
 
   return {
@@ -114,7 +114,8 @@ export async function removeOrgMember(
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),
-    redis.redis.del(`user:${String(targetUserId)}:info`),
+    redis.redis.del(`user:${String(targetUserId)}:orgs`),
+    redis.redis.del(`user:${String(targetUserId)}:org_list`),
   ]);
 
   return true;

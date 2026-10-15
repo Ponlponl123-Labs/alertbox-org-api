@@ -111,9 +111,12 @@ export async function deleteOrganization(orgId: bigint, userId: bigint) {
   });
 
   await Promise.all([
+    redis.redis.del(`org:${String(orgId)}:info`),
     redis.redis.del(`org:${String(orgId)}:members`),
+    redis.redis.del(`org:${String(orgId)}:streamers`),
     redis.redis.del(`org:${String(orgId)}:primary_streamer`),
-    redis.redis.del(`user:${String(userId)}:info`),
+    redis.redis.del(`user:${String(userId)}:orgs`),
+    redis.redis.del(`user:${String(userId)}:org_list`),
   ]);
 
   return true;

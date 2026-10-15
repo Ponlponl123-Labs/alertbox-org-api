@@ -161,7 +161,7 @@ export async function acceptOrgInviteCode(code: string, userId: bigint) {
 
   await Promise.all([
     redis.redis.del(`org:${String(invite.orgId)}:members`),
-    redis.redis.del(`user:${String(userId)}:info`),
+    redis.redis.del(`user:${String(userId)}:orgs`),
   ]);
 
   return {

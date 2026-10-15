@@ -12,6 +12,12 @@ import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 import openapi from "@elysia/openapi";
 import staticPlugin from "@elysiajs/static";
 
+if (!("toJSON" in BigInt.prototype)) {
+  (BigInt.prototype as any).toJSON = function (): string {
+    return this.toString();
+  };
+}
+
 class Server {
   public app: Elysia;
   public port: number;

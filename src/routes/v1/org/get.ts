@@ -1,6 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
+import { day } from "@/consts/time";
 
 export const listOrgsEndpoint = new Elysia()
   .use(auth)
@@ -8,6 +10,14 @@ export const listOrgsEndpoint = new Elysia()
     "/",
     async ({ getAuthenticatedUser }) => {
       const user = await getAuthenticatedUser();
+      const cacheKey = `user:${String(user.data.id)}:org_list`;
+      const cached = await redis.redis.get(cacheKey);
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch {}
+      }
+
       const memberships = await prisma.client.organizationMember.findMany({
         where: { userId: user.data.id, organization: { deletedAt: null } },
         include: {
@@ -30,21 +40,39 @@ export const listOrgsEndpoint = new Elysia()
         orderBy: { createdAt: "asc" },
       });
 
-      return memberships.map((m) => ({
-        id: String(m.organization.id),
-        name: m.organization.name,
-        slug: m.organization.slug,
-        avatar: m.organization.avatar,
-        banner: m.organization.banner,
-        role: m.role,
-        permissions: m.permissions.toString(),
-        memberCount: m.organization._count.members,
-        streamers: m.organization.streamers.map((s) => ({
-          ...s,
-          id: String(s.id),
-        })),
-        joinedAt: m.createdAt,
-      }));
+      const result = memberships.map((m) => {
+        const org = m.organization;
+        // write-through centralized org info
+        const orgInfo = {
+          id: String(org.id),
+          name: org.name,
+          slug: org.slug,
+          avatar: org.avatar,
+          banner: org.banner,
+          ownerId: String(org.ownerId),
+          createdAt: org.createdAt,
+        };
+        void redis.redis.setex(`org:${String(org.id)}:info`, day, JSON.stringify(orgInfo)).catch(() => {});
+
+        return {
+          id: String(org.id),
+          name: org.name,
+          slug: org.slug,
+          avatar: org.avatar,
+          banner: org.banner,
+          role: m.role,
+          permissions: m.permissions.toString(),
+          memberCount: org._count.members,
+          streamers: org.streamers.map((s) => ({
+            ...s,
+            id: String(s.id),
+          })),
+          joinedAt: m.createdAt,
+        };
+      });
+
+      await redis.redis.setex(cacheKey, 3600, JSON.stringify(result));
+      return result;
     },
     {
       detail: {

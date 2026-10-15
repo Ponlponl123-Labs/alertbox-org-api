@@ -116,8 +116,10 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
     alertbox: widget.alertbox,
   };
 
-  await redis.redis.setex(cacheKey, TOKEN_CACHE_TTL_SEC, JSON.stringify(result));
-  await redis.redis.setex(`widget:token:${token}`, TOKEN_CACHE_TTL_SEC, String(widget.id));
+  await Promise.all([
+    redis.redis.setex(cacheKey, TOKEN_CACHE_TTL_SEC, JSON.stringify(result)),
+    redis.redis.setex(`widget:token:${token}`, TOKEN_CACHE_TTL_SEC, String(widget.id)),
+  ]);
 
   return result;
 }
@@ -149,12 +151,13 @@ export async function broadcastWidgetSettingsUpdate(
     select: { token: true },
   });
 
+  const actions: Promise<any>[] = [
+    redis.redis.publish(`${ALERTS_PREFIX}${widgetId}`, JSON.stringify(payload)),
+  ];
   if (widget?.token) {
-    await redis.redis.del(`widget:settings:token:${widget.token}`);
+    actions.push(redis.redis.del(`widget:settings:token:${widget.token}`));
   }
-
-  // Publish to Redis channel so all instances broadcast to connected WebSockets
-  await redis.redis.publish(`${ALERTS_PREFIX}${widgetId}`, JSON.stringify(payload));
+  await Promise.all(actions);
 }
 
 export const widgetRouter = new Elysia()

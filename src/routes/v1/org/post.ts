@@ -4,7 +4,6 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { nanoid } from "nanoid";
 import { OrgPerm } from "@/utils/rbac";
-import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 
 export const createOrgEndpoint = new Elysia()
   .use(auth)
@@ -29,10 +28,7 @@ export const createOrgEndpoint = new Elysia()
         return "Organization slug already in use";
       }
 
-      const timestamp = Date.now();
-      const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
-
-      const created = await prisma.client.$transaction(async (tx) => {
+      const createdOrg = await prisma.client.$transaction(async (tx) => {
         const org = await tx.organization.create({
           data: {
             ownerId: user.data.id,
@@ -48,46 +44,19 @@ export const createOrgEndpoint = new Elysia()
           },
         });
 
-        const streamer = await tx.streamer.create({
-          data: {
-            orgId: org.id,
-            name,
-            displayName: name,
-            widgets: {
-              create: {
-                orgId: org.id,
-                type: "ALERTBOX",
-                token: widgetToken,
-                alertbox: {
-                  create: {
-                    events: {
-                      createMany: {
-                        data: DEFAULT_ALERTBOX_EVENTS,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            integration: {
-              create: {
-                orgId: org.id,
-              },
-            },
-          },
-        });
-
-        return { org, streamer };
+        return org;
       });
 
       // Invalidate user orgs cache
-      await redis.redis.del(`user:${String(user.data.id)}:orgs`);
+      await Promise.all([
+        redis.redis.del(`user:${String(user.data.id)}:orgs`),
+        redis.redis.del(`user:${String(user.data.id)}:org_list`),
+      ]);
 
       return {
-        id: String(created.org.id),
-        name: created.org.name,
-        slug: created.org.slug,
-        streamerId: String(created.streamer.id),
+        id: String(createdOrg.id),
+        name: createdOrg.name,
+        slug: createdOrg.slug,
       };
     },
     {
@@ -95,7 +64,7 @@ export const createOrgEndpoint = new Elysia()
         tags: ["Organizations"],
         summary: "Create a new organization",
         description:
-          "Creates an organization, assigns caller as OWNER with full permissions, and provisions the default streamer channel and alertbox widget.",
+          "Creates an organization and assigns caller as OWNER with full permissions.",
       },
       body: t.Object({
         name: t.String({ minLength: 2, maxLength: 100 }),
@@ -108,7 +77,7 @@ export const createOrgEndpoint = new Elysia()
           id: t.String(),
           name: t.String(),
           slug: t.String(),
-          streamerId: t.String(),
+          streamerId: t.Optional(t.String()),
         }),
         409: t.String(),
       },

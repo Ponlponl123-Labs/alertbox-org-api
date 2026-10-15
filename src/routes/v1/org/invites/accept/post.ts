@@ -31,7 +31,7 @@ export const endpoint = new Elysia()
       }
 
       const latestOrgInvite = await prisma.client.organizationInvite.findFirst({
-        where: { orgId: invite.orgId, acceptedAt: null, expiresAt: { gt: new Date() } },
+        where: { orgId: invite.orgId, email: invite.email, acceptedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: "desc" },
       });
 
@@ -67,8 +67,8 @@ export const endpoint = new Elysia()
       ]);
 
       await Promise.all([
-        redis.redis.del(`user:${String(user.data.id)}:info`),
         redis.redis.del(`user:${String(user.data.id)}:orgs`),
+        redis.redis.del(`user:${String(user.data.id)}:org_list`),
         redis.redis.del(`org:${String(invite.orgId)}:members`),
       ]);
 
@@ -132,8 +132,8 @@ export const endpoint = new Elysia()
       ]);
 
       await Promise.all([
-        redis.redis.del(`user:${String(user.data.id)}:info`),
         redis.redis.del(`user:${String(user.data.id)}:orgs`),
+        redis.redis.del(`user:${String(user.data.id)}:org_list`),
         redis.redis.del(`org:${String(invite.orgId)}:members`),
       ]);
 

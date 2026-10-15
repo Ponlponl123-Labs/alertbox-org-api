@@ -137,6 +137,7 @@ export async function updateProfile(
   await Promise.all([
     redis.redis.del(`streamer:${String(streamerId)}:profile`),
     redis.redis.del(`streamer:${String(streamerId)}:info`),
+    redis.redis.del(`org:${String(updated.orgId)}:streamers`),
     redis.redis.del(`org:${String(updated.orgId)}:primary_streamer`),
   ]);
 

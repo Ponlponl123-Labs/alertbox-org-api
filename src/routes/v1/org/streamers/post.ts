@@ -2,10 +2,10 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/utils/rbac";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
-import { resolveOrgId, resolveStreamerId } from "@/core/org";
+import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -13,20 +13,9 @@ export const endpoint = new Elysia()
     "/:orgId/streamers",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
-      }
-
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.CREATE_STREAMER)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to create streamer channel";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.STREAMER_CREATE, set, "create streamer channel");
+      if (typeof authRes === "string") return authRes;
+      const { orgId } = authRes;
 
       const name = body.name.trim();
       const displayName = (body.displayName?.trim() || name).slice(0, 64);
@@ -66,7 +55,19 @@ export const endpoint = new Elysia()
         return created;
       });
 
-      await redis.redis.del(`user:${String(user.data.id)}:info`);
+      const members = await prisma.client.organizationMember.findMany({
+        where: { orgId },
+        select: { userId: true },
+      });
+
+      const keysToDelete = [
+        `org:${String(orgId)}:streamers`,
+        `org:${String(orgId)}:primary_streamer`,
+        `org:${String(orgId)}:members`,
+        ...members.map((m) => `user:${String(m.userId)}:org_list`),
+      ];
+
+      await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
 
       return {
         id: String(streamer.id),
@@ -97,25 +98,19 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId/publish",
     async ({ getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-      const streamerId = await resolveStreamerId(orgId, params.streamerId);
-      if (!streamerId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.EDIT_STREAMER_PROFILE)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to publish streamer channel";
-      }
+      const authRes = await authorizeStreamer(
+        params.orgId,
+        params.streamerId,
+        user.data.id,
+        {
+          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
+          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
+          actionDescription: "publish streamer channel",
+        },
+        set,
+      );
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
+      const { orgId, streamerId } = authRes;
 
       const updated = await prisma.client.streamer.update({
         where: { id: streamerId },
@@ -125,8 +120,8 @@ export const endpoint = new Elysia()
       await Promise.all([
         redis.redis.del(`streamer:${String(streamerId)}:info`),
         redis.redis.del(`streamer:${String(streamerId)}:profile`),
+        redis.redis.del(`org:${String(orgId)}:streamers`),
         redis.redis.del(`org:${String(orgId)}:primary_streamer`),
-        redis.redis.del(`user:${String(user.data.id)}:info`),
       ]);
 
       return { publishedAt: updated.publishedAt };

@@ -137,7 +137,15 @@ export async function relayStreamlabsDonation({
     await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
     await redis.redis.publish(
       `alertbox-org:streamlabs-relay-logs:${streamerId}`,
-      JSON.stringify({ event: "created", log: relayLog }),
+      JSON.stringify({
+        event: "created",
+        log: {
+          ...relayLog,
+          id: String(relayLog.id),
+          orgId: String(relayLog.orgId),
+          streamerId: String(relayLog.streamerId),
+        },
+      }),
     );
   } catch (dbErr) {
     betterConsole.error(
@@ -215,7 +223,15 @@ export async function relayStreamlabsDonation({
       await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
       await redis.redis.publish(
         `alertbox-org:streamlabs-relay-logs:${streamerId}`,
-        JSON.stringify({ event: "updated", log: updated }),
+        JSON.stringify({
+          event: "updated",
+          log: {
+            ...updated,
+            id: String(updated.id),
+            orgId: String(updated.orgId),
+            streamerId: String(updated.streamerId),
+          },
+        }),
       );
     } catch (updateErr) {
       betterConsole.error(

@@ -28,7 +28,8 @@ export const endpoint = new Elysia()
         }
       }
 
-      let avatarUpdated = false;
+      const updateData: { avatar?: string; name?: string } = {};
+
       if (body.avatar) {
         const buf = Buffer.from(await body.avatar.arrayBuffer());
         const check = await Moderation.moderateImage(buf);
@@ -42,27 +43,21 @@ export const endpoint = new Elysia()
           if (user.data.avatar) {
             await deleteProfileImage(user.data.avatar).catch(() => {});
           }
-          await prisma.client.user.update({
-            where: { id: user.data.id },
-            data: { avatar: url },
-          });
-          user.data.avatar = url;
-          avatarUpdated = true;
+          updateData.avatar = url;
         } catch {}
       }
 
-      let nameUpdated = false;
       if (nameInput) {
-        const userName = nameInput.trim().slice(0, 64);
-        await prisma.client.user.update({
-          where: { id: user.data.id },
-          data: { name: userName },
-        });
-        user.data.name = userName;
-        nameUpdated = true;
+        updateData.name = nameInput.trim().slice(0, 64);
       }
 
-      if (!nameUpdated && !avatarUpdated) return "No changes";
+      if (Object.keys(updateData).length === 0) return "No changes";
+
+      await prisma.client.user.update({
+        where: { id: user.data.id },
+        data: updateData,
+      });
+      Object.assign(user.data, updateData);
 
       await redis.redis.del(`user:${String(user.data.id)}:info`);
       const freshUser = await new Me({ cache: false }).load(user.data.id, sessionUserSelect);

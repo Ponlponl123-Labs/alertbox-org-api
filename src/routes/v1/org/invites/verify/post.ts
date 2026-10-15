@@ -36,9 +36,9 @@ export const endpoint = new Elysia()
         return "Invalid or expired invitation code";
       }
 
-      // Verify this is the latest unaccepted invite for the organization
+      // Verify this is the latest unaccepted invite for this email
       const latestOrgInvite = await prisma.client.organizationInvite.findFirst({
-        where: { orgId: invite.orgId, acceptedAt: null, expiresAt: { gt: new Date() } },
+        where: { orgId: invite.orgId, email: invite.email, acceptedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: "desc" },
       });
 

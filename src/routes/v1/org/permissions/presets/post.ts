@@ -1,10 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
-import { redis } from "@/core/redis";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId } from "@/core/org";
-import { nanoid } from "nanoid";
+import { OrgPerm } from "@/utils/rbac";
+import { authorizeOrg } from "@/core/org";
+import { createOrgRolePreset } from "@/classes/org/presets";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -12,20 +10,9 @@ export const endpoint = new Elysia()
     "/:orgId/permissions/presets",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
-      }
-
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_ROLES)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to manage roles and presets";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_ROLES_MANAGE, set, "manage roles and presets");
+      if (typeof authRes === "string") return authRes;
+      const { orgId } = authRes;
 
       const cleanName = body.name.trim();
       if (!cleanName) {
@@ -33,20 +20,20 @@ export const endpoint = new Elysia()
         return "Preset name cannot be empty";
       }
 
-      const raw = await redis.redis.get(`org:${String(orgId)}:permissions:presets`);
-      const existing: any[] = raw ? JSON.parse(raw) : [];
+      let perms = 0n;
+      try {
+        perms = BigInt(body.permissions) & ~OrgPerm.ORG_DELETE;
+      } catch {
+        set.status = "Bad Request";
+        return "Invalid permissions bitmask";
+      }
 
-      const newPreset = {
-        id: nanoid(10),
+      const newPreset = await createOrgRolePreset(orgId, {
         name: cleanName,
         description: body.description?.trim() || null,
         color: body.color || "text-primary",
-        permissions: body.permissions,
-        createdAt: new Date().toISOString(),
-      };
-
-      existing.push(newPreset);
-      await redis.redis.set(`org:${String(orgId)}:permissions:presets`, JSON.stringify(existing));
+        permissions: perms,
+      });
 
       return newPreset;
     },

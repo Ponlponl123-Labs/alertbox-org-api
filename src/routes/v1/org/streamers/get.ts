@@ -1,8 +1,9 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId, resolveStreamerId } from "@/core/org";
+import { redis } from "@/core/redis";
+import { OrgPerm, StreamerPerm, hasPermission } from "@/utils/rbac";
+import { authorizeOrg, authorizeStreamer, resolveOrgId } from "@/core/org";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -16,39 +17,76 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const member = await prisma.client.organizationMember.findUnique({
+      const callerMember = await prisma.client.organizationMember.findUnique({
         where: { orgId_userId: { orgId, userId: user.data.id } },
+        select: { id: true, permissions: true, role: true },
       });
 
-      if (!member || !hasPermission(member.permissions, OrgPerm.VIEW_STREAMERS)) {
+      if (!callerMember) {
         set.status = "Forbidden";
         return "Insufficient permissions to view streamers";
       }
 
-      const streamers = await prisma.client.streamer.findMany({
-        where: { orgId, deletedAt: null },
-        include: {
-          widgets: {
-            where: { deletedAt: null },
-            select: { id: true, type: true, token: true },
-          },
-        },
-        orderBy: { createdAt: "asc" },
-      });
+      const isOwnerOrAdmin = callerMember.role === "OWNER" || callerMember.role === "ADMIN";
+      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(callerMember.permissions, OrgPerm.STREAMER_VIEW);
 
-      return streamers.map((s) => ({
-        id: String(s.id),
-        name: s.name,
-        displayName: s.displayName,
-        avatar: s.avatar,
-        uri: s.uri,
-        publishedAt: s.publishedAt,
-        widgets: s.widgets.map((w) => ({
-          ...w,
-          id: String(w.id),
-        })),
-        createdAt: s.createdAt,
-      }));
+      let assignedStreamerIds: string[] = [];
+      if (!isOwnerOrAdmin) {
+        const cached = await redis.redis.get(`org:${String(orgId)}:member:${String(callerMember.id)}:streamers`);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            assignedStreamerIds = parsed.map((a: any) => String(a.streamerId));
+          } catch {}
+        }
+      }
+
+      if (!hasOrgViewStreamers && assignedStreamerIds.length === 0) {
+        set.status = "Forbidden";
+        return "Insufficient permissions to view streamers";
+      }
+
+      const cacheKey = `org:${String(orgId)}:streamers`;
+      let streamersData: any[] = [];
+      const cached = await redis.redis.get(cacheKey);
+      if (cached) {
+        try {
+          streamersData = JSON.parse(cached);
+        } catch {}
+      }
+
+      if (!streamersData.length) {
+        const streamers = await prisma.client.streamer.findMany({
+          where: { orgId, deletedAt: null },
+          include: {
+            widgets: {
+              where: { deletedAt: null },
+              select: { id: true, type: true, token: true },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        });
+
+        streamersData = streamers.map((s) => ({
+          id: String(s.id),
+          name: s.name,
+          displayName: s.displayName,
+          avatar: s.avatar,
+          uri: s.uri,
+          publishedAt: s.publishedAt,
+          widgets: s.widgets.map((w) => ({
+            ...w,
+            id: String(w.id),
+          })),
+          createdAt: s.createdAt,
+        }));
+
+        await redis.redis.setex(cacheKey, 3600, JSON.stringify(streamersData));
+      }
+
+      return hasOrgViewStreamers
+        ? streamersData
+        : streamersData.filter((s) => assignedStreamerIds.includes(String(s.id)));
     },
     {
       detail: {
@@ -62,24 +100,26 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId",
     async ({ getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
-      const streamerId = await resolveStreamerId(orgId, params.streamerId);
-      if (!streamerId) {
-        set.status = "Bad Request";
-        return "Invalid organization or streamer ID";
-      }
+      const authRes = await authorizeStreamer(
+        params.orgId,
+        params.streamerId,
+        user.data.id,
+        {
+          requiredOrgPerm: OrgPerm.STREAMER_VIEW,
+          requiredStreamerPerm: StreamerPerm.STREAMER_VIEW,
+          actionDescription: "view streamer channel",
+        },
+        set,
+      );
+      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
+      const { orgId, streamerId } = authRes;
 
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.VIEW_STREAMERS)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to view streamer channel";
+      const cacheKey = `streamer:${String(streamerId)}:info`;
+      const cached = await redis.redis.get(cacheKey);
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch {}
       }
 
       const streamer = await prisma.client.streamer.findFirst({
@@ -102,7 +142,7 @@ export const endpoint = new Elysia()
         return "Streamer channel not found";
       }
 
-      return {
+      const result = {
         id: String(streamer.id),
         orgId: String(streamer.orgId),
         name: streamer.name,
@@ -125,17 +165,40 @@ export const endpoint = new Elysia()
           id: String(w.id),
           orgId: String(w.orgId),
           streamerId: String(w.streamerId),
+          alertbox: w.alertbox
+            ? {
+                ...w.alertbox,
+                id: String(w.alertbox.id),
+                widgetId: String(w.alertbox.widgetId),
+                events: (w.alertbox.events || []).map((ev) => ({
+                  ...ev,
+                  id: String(ev.id),
+                  alertboxId: String(ev.alertboxId),
+                })),
+              }
+            : null,
         })),
         integration: streamer.integration
           ? {
-              ...streamer.integration,
               id: String(streamer.integration.id),
               orgId: String(streamer.integration.orgId),
               streamerId: String(streamer.integration.streamerId),
+              stripe: !!streamer.integration.stripeSecret,
+              bmac: !!streamer.integration.bmacSecret,
+              kofi: !!streamer.integration.kofiSecret,
+              xendit: !!streamer.integration.xenditSecret,
+              ffp: !!streamer.integration.ffpSecret,
+              streamlabs: !!streamer.integration.streamlabsSecret,
+              kofiUsername: streamer.integration.kofiUsername,
+              bmacUsername: streamer.integration.bmacUsername,
             }
           : null,
       };
+
+      await redis.redis.setex(cacheKey, 3600, JSON.stringify(result));
+      return result;
     },
+
     {
       detail: {
         tags: ["Organizations"],

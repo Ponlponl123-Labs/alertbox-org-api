@@ -1,9 +1,8 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
-import { redis } from "@/core/redis";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId } from "@/core/org";
+import { OrgPerm } from "@/utils/rbac";
+import { authorizeOrg } from "@/core/org";
+import { deleteOrgRolePreset } from "@/classes/org/presets";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -11,28 +10,10 @@ export const endpoint = new Elysia()
     "/:orgId/permissions/presets/:presetId",
     async ({ getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_ROLES_MANAGE, set, "manage roles and presets");
+      if (typeof authRes === "string") return authRes;
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.MANAGE_ROLES)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to manage roles and presets";
-      }
-
-      const raw = await redis.redis.get(`org:${String(orgId)}:permissions:presets`);
-      if (!raw) return "OK";
-
-      const existing: any[] = JSON.parse(raw);
-      const filtered = existing.filter((p) => p.id !== params.presetId);
-
-      await redis.redis.set(`org:${String(orgId)}:permissions:presets`, JSON.stringify(filtered));
+      await deleteOrgRolePreset(authRes.orgId, params.presetId);
 
       return "OK";
     },

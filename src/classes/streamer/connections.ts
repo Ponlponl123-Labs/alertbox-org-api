@@ -2,6 +2,7 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
+import { invalidateKofiIntegrations } from "@/routes/v1/webhook/kofi";
 import {
   supported_providers,
   allowed_user_update_providers,
@@ -77,6 +78,9 @@ export async function setConnection(
   if (provider === "buymeacoffee") {
     invalidateBmacIntegrations();
   }
+  if (provider === "kofi") {
+    invalidateKofiIntegrations();
+  }
 
   return updated;
 }
@@ -121,6 +125,9 @@ export async function removeConnection(
 
   if (provider === "buymeacoffee") {
     invalidateBmacIntegrations();
+  }
+  if (provider === "kofi") {
+    invalidateKofiIntegrations();
   }
 
   return updated;

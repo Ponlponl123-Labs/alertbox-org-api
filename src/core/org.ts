@@ -2,7 +2,13 @@ import Elysia from "elysia";
 import { auth } from "./auth";
 import { prisma } from "./prisma";
 import { redis } from "./redis";
-import { hasPermission } from "@/utils/rbac";
+import {
+  hasPermission,
+  OrgPerm,
+  StreamerPerm,
+  parseStreamerPermissions,
+  hasStreamerPermission,
+} from "@/utils/rbac";
 import { OrgRole } from "@/generated/prisma/client";
 
 export interface OrgContext {
@@ -17,9 +23,14 @@ export async function resolveOrgId(param?: string | null): Promise<bigint | null
   const trimmed = param.trim();
   if (/^\d+$/.test(trimmed)) {
     try {
+      const cached = await redis.redis.get(`org:${trimmed}:info`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.id) return BigInt(parsed.id);
+      }
       const numericId = BigInt(trimmed);
-      const exists = await prisma.client.organization.findUnique({
-        where: { id: numericId },
+      const exists = await prisma.client.organization.findFirst({
+        where: { id: numericId, deletedAt: null },
         select: { id: true },
       });
       if (exists) return exists.id;
@@ -152,24 +163,13 @@ export const orgContext = new Elysia({ name: "org-context" })
     }
 
     if (!targetStreamerId) {
-      // Find primary/first streamer in this org (with cache)
-      const cachedStreamerId = await redis.redis.get(`org:${membership.orgId}:primary_streamer`);
-      if (cachedStreamerId) {
-        targetStreamerId = BigInt(cachedStreamerId);
-      } else {
-        const streamer = await prisma.client.streamer.findFirst({
-          where: { orgId: membership.orgId, deletedAt: null },
-          select: { id: true },
-          orderBy: { createdAt: "asc" },
-        });
-        if (streamer) {
-          targetStreamerId = streamer.id;
-          await redis.redis.setex(
-            `org:${membership.orgId}:primary_streamer`,
-            3600,
-            String(streamer.id),
-          );
-        }
+      const streamer = await prisma.client.streamer.findFirst({
+        where: { orgId: membership.orgId, deletedAt: null },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (streamer) {
+        targetStreamerId = streamer.id;
       }
     }
 
@@ -193,4 +193,181 @@ export const orgContext = new Elysia({ name: "org-context" })
 export function requireOrgPermission(org: OrgContext | null, requiredPerm: bigint): boolean {
   if (!org) return false;
   return hasPermission(org.permissions, requiredPerm);
+}
+
+export interface OrgCallerContext {
+  orgId: bigint;
+  role: OrgRole;
+  permissions: bigint;
+}
+
+export function parseBigIntParam(val?: string | null): bigint | null {
+  if (!val) return null;
+  try {
+    return BigInt(val);
+  } catch {
+    return null;
+  }
+}
+
+export async function getMemberPermissions(
+  orgId: bigint,
+  userId: bigint,
+): Promise<{ role: OrgRole; permissions: bigint } | null> {
+  const cached = await redis.redis.hget(`user:${userId}:orgs`, String(orgId));
+  if (cached) {
+    const parts = cached.split(":");
+    if (parts.length === 2) {
+      return { role: parts[0] as OrgRole, permissions: BigInt(parts[1]) };
+    }
+  }
+
+  const callerMember = await prisma.client.organizationMember.findUnique({
+    where: { orgId_userId: { orgId, userId } },
+    select: { permissions: true, role: true },
+  });
+
+  if (callerMember) {
+    void redis.redis
+      .hset(
+        `user:${userId}:orgs`,
+        String(orgId),
+        `${callerMember.role}:${callerMember.permissions.toString()}`,
+      )
+      .catch(() => {});
+    return { role: callerMember.role, permissions: callerMember.permissions };
+  }
+
+  return null;
+}
+
+export async function authorizeOrg(
+  orgParam: string | null | undefined,
+  userId: bigint,
+  requiredPerm: bigint,
+  set: { status?: any },
+  actionDescription = "perform this action",
+): Promise<OrgCallerContext | string> {
+  const orgId = await resolveOrgId(orgParam);
+  if (!orgId) {
+    set.status = "Bad Request";
+    return "Invalid organization ID";
+  }
+
+  const member = await getMemberPermissions(orgId, userId);
+  if (!member || !hasPermission(member.permissions, requiredPerm)) {
+    set.status = "Forbidden";
+    return `Insufficient permissions to ${actionDescription}`;
+  }
+
+  return { orgId, role: member.role, permissions: member.permissions };
+}
+
+export interface StreamerCallerContext {
+  orgId: bigint;
+  streamerId: bigint;
+  role: OrgRole;
+  permissions: bigint;
+  streamerPermissions: number;
+}
+
+export async function authorizeStreamer(
+  orgParam: string | null | undefined,
+  streamerParam: string | null | undefined,
+  userId: bigint,
+  options: {
+    requiredOrgPerm?: bigint;
+    requiredStreamerPerm?: number;
+    actionDescription?: string;
+  },
+  set: { status?: any },
+): Promise<StreamerCallerContext | string> {
+  const orgId = await resolveOrgId(orgParam);
+  if (!orgId) {
+    set.status = "Bad Request";
+    return "Invalid organization ID";
+  }
+
+  const streamerId = await resolveStreamerId(orgId, streamerParam);
+  if (!streamerId) {
+    set.status = "Bad Request";
+    return "Invalid organization or streamer ID";
+  }
+
+  const callerMember = await prisma.client.organizationMember.findUnique({
+    where: { orgId_userId: { orgId, userId } },
+    select: { id: true, permissions: true, role: true },
+  });
+
+  if (!callerMember) {
+    set.status = "Forbidden";
+    return `Insufficient permissions to ${options.actionDescription || "access channel"}`;
+  }
+
+  const isOwnerOrAdmin = callerMember.role === "OWNER" || callerMember.role === "ADMIN";
+  if (isOwnerOrAdmin) {
+    return {
+      orgId,
+      streamerId,
+      role: callerMember.role,
+      permissions: callerMember.permissions,
+      streamerPermissions: StreamerPerm.ALL,
+    };
+  }
+
+  const hasGlobalOrgPerm = options.requiredOrgPerm
+    ? hasPermission(callerMember.permissions, options.requiredOrgPerm)
+    : false;
+
+  let streamerPerms = 0;
+  const cachedAssignments = await redis.redis.get(`org:${String(orgId)}:member:${String(callerMember.id)}:streamers`);
+  if (cachedAssignments) {
+    try {
+      const parsed = JSON.parse(cachedAssignments);
+      const assignment = parsed.find((a: any) => String(a.streamerId) === String(streamerId));
+      if (assignment) {
+        streamerPerms = parseStreamerPermissions(assignment.permissions);
+      }
+    } catch {}
+  }
+
+  // Inherit channel perms from org permissions if granted
+  if (hasPermission(callerMember.permissions, OrgPerm.STREAMER_VIEW)) {
+    streamerPerms |= StreamerPerm.STREAMER_VIEW;
+  }
+  if (hasPermission(callerMember.permissions, OrgPerm.STREAMER_MANAGE)) {
+    streamerPerms |= StreamerPerm.STREAMER_MANAGE;
+  }
+  if (hasPermission(callerMember.permissions, OrgPerm.TRANSACTION_VIEW)) {
+    streamerPerms |= StreamerPerm.STREAMER_TRANSACTION_VIEW;
+  }
+  if (hasPermission(callerMember.permissions, OrgPerm.ANALYTICS_VIEW)) {
+    streamerPerms |= StreamerPerm.STREAMER_ANALYTICS_VIEW;
+  }
+  if (
+    hasPermission(callerMember.permissions, OrgPerm.WIDGET_MANAGE) ||
+    hasPermission(callerMember.permissions, OrgPerm.WIDGET_VIEW)
+  ) {
+    streamerPerms |= StreamerPerm.STREAMER_WIDGET_MANAGE;
+  }
+  if (hasPermission(callerMember.permissions, OrgPerm.INTEGRATION_MANAGE)) {
+    streamerPerms |= StreamerPerm.STREAMER_INTEGRATION_MANAGE;
+  }
+
+  const hasChannelPerm = options.requiredStreamerPerm !== undefined
+    ? hasStreamerPermission(streamerPerms, options.requiredStreamerPerm)
+    : streamerPerms > 0;
+
+  if (!hasGlobalOrgPerm && !hasChannelPerm) {
+    set.status = "Forbidden";
+    return `Insufficient permissions to ${options.actionDescription || "access channel"}`;
+  }
+
+  return {
+    orgId,
+    streamerId,
+    role: callerMember.role,
+    permissions: callerMember.permissions,
+    streamerPermissions: streamerPerms,
+  };
 }

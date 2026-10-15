@@ -1,8 +1,9 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { resolveOrgId } from "@/core/org";
+import { redis } from "@/core/redis";
+import { OrgPerm } from "@/utils/rbac";
+import { authorizeOrg } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
@@ -15,20 +16,9 @@ export const endpoint = new Elysia()
     "/:orgId",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
-      }
-
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
-
-      if (!member || !hasPermission(member.permissions, OrgPerm.MANAGE_SETTINGS)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to manage organization settings";
-      }
+      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MANAGE, set, "manage organization settings");
+      if (typeof authRes === "string") return authRes;
+      const { orgId } = authRes;
 
       const org = await prisma.client.organization.findUnique({
         where: { id: orgId },
@@ -100,6 +90,18 @@ export const endpoint = new Elysia()
         where: { id: orgId },
         data,
       });
+
+      const members = await prisma.client.organizationMember.findMany({
+        where: { orgId },
+        select: { userId: true },
+      });
+
+      const keysToDelete = [
+        `org:${String(orgId)}:info`,
+        ...members.map((m) => `user:${String(m.userId)}:org_list`),
+      ];
+
+      await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
 
       await logOrgAudit({
         orgId,

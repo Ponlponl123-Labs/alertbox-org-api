@@ -41,7 +41,7 @@ export const endpoint = new Elysia()
         set.status = "Unauthorized";
         return "Unauthorized";
       }
-      if (!requireOrgPermission(org, OrgPerm.MANAGE_INTEGRATIONS)) {
+      if (!requireOrgPermission(org, OrgPerm.INTEGRATION_MANAGE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to manage integrations";
       }

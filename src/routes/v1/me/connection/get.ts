@@ -15,7 +15,7 @@ export const endpoint = new Elysia()
         set.status = "Forbidden";
         return "No active organization found";
       }
-      if (!requireOrgPermission(org, OrgPerm.VIEW_INTEGRATIONS)) {
+      if (!requireOrgPermission(org, OrgPerm.INTEGRATION_VIEW)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view integrations";
       }
