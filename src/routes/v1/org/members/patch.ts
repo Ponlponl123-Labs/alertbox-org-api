@@ -6,6 +6,7 @@ import { hasPermission, OrgPerm, RolePresets } from "@/utils/rbac";
 import { OrgRole } from "@/generated/prisma/client";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import { updateMemberCache } from "@/utils/cache-sync";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -63,12 +64,10 @@ export const endpoint = new Elysia()
         );
       }
 
-      await Promise.all([
-        redis.redis.del(`user:${String(targetMember.userId)}:org_list`),
-        redis.redis.del(`user:orgs:${String(targetMember.userId)}`),
-        redis.redis.del(`user:primary_org:${String(targetMember.userId)}`),
-        redis.redis.del(`org:${String(orgId)}:members`),
-      ]);
+      await updateMemberCache(orgId, targetMemberId, targetMember.userId, {
+        role: updated.role,
+        permissions: updated.permissions.toString(),
+      });
 
       await logOrgAudit({
         orgId,

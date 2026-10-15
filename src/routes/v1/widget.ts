@@ -8,6 +8,7 @@ import { logger } from "@/utils/log";
 
 const ALERTS_PREFIX = "alertbox-org:alerts:";
 const LOGS_PREFIX = "alertbox-org:streamlabs-relay-logs:";
+const TX_PREFIX = "alertbox-org:tx:";
 const TOKEN_CACHE_TTL_SEC = 300;
 
 export const subRedis = redis.redis.duplicate();
@@ -40,6 +41,7 @@ if (tomlConfig.redis?.enabled) {
       subRedis.psubscribe(
         `${ALERTS_PREFIX}*`,
         `${LOGS_PREFIX}*`,
+        `${TX_PREFIX}*`,
         (err) => {
           if (err) {
             logger.error(
@@ -76,6 +78,12 @@ subRedis.on("pmessage", (_pattern: string, channel: string, message: string) => 
   } else if (channel.startsWith(LOGS_PREFIX)) {
     const userId = channel.slice(LOGS_PREFIX.length);
     bunServer.publish(`streamlabs-relay-logs:${userId}`, message);
+  } else if (channel.startsWith(TX_PREFIX)) {
+    const target = channel.slice(TX_PREFIX.length);
+    const [orgId, streamerId] = target.split(":");
+    if (orgId && streamerId) {
+      bunServer.publish(`org:${orgId}:streamer:${streamerId}:transactions`, message);
+    }
   }
 });
 
@@ -145,7 +153,7 @@ export async function broadcastWidgetSettingsUpdate(
     return;
   }
 
-  // Find token to invalidate token-based cache
+  // Find token to write-through update token-based cache
   const widget = await prisma.client.widget.findUnique({
     where: { id: targetWidgetId },
     select: { token: true },
@@ -155,7 +163,18 @@ export async function broadcastWidgetSettingsUpdate(
     redis.redis.publish(`${ALERTS_PREFIX}${widgetId}`, JSON.stringify(payload)),
   ];
   if (widget?.token) {
-    actions.push(redis.redis.del(`widget:settings:token:${widget.token}`));
+    const updatedSettings: CachedWidgetSettings = {
+      widgetId: String(widgetId),
+      type: "ALERTBOX",
+      alertbox: alertboxSettings,
+    };
+    actions.push(
+      redis.redis.setex(
+        `widget:settings:token:${widget.token}`,
+        TOKEN_CACHE_TTL_SEC,
+        JSON.stringify(updatedSettings),
+      ),
+    );
   }
   await Promise.all(actions);
 }

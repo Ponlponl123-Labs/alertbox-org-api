@@ -45,6 +45,7 @@ export const listOrgsEndpoint = new Elysia()
         // write-through centralized org info
         const orgInfo = {
           id: String(org.id),
+          type: org.type,
           name: org.name,
           slug: org.slug,
           avatar: org.avatar,
@@ -56,6 +57,7 @@ export const listOrgsEndpoint = new Elysia()
 
         return {
           id: String(org.id),
+          type: org.type,
           name: org.name,
           slug: org.slug,
           avatar: org.avatar,
@@ -84,6 +86,7 @@ export const listOrgsEndpoint = new Elysia()
         200: t.Array(
           t.Object({
             id: t.String(),
+            type: t.String(),
             name: t.String(),
             slug: t.String(),
             avatar: t.Nullable(t.String()),

@@ -39,6 +39,7 @@ export async function setCachedUser(uid: string | bigint, user: any): Promise<an
   const userKey = String(uid);
   const pureUser = {
     id: user.id,
+    type: user.type ?? "REGULAR",
     email: user.email,
     name: user.name,
     avatar: user.avatar ?? null,

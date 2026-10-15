@@ -3,7 +3,7 @@ import { join, dirname } from "node:path";
 import { existsSync } from "node:fs";
 
 const STORAGE_PATH = process.env.STORAGE_PATH || join(process.cwd(), "public", "uploads");
-const CDN_BASE_URL = process.env.CDN_BASE_URL || "https://static.alertbox.org";
+const CDN_BASE_URL = process.env.CDN_BASE_URL || "http://127.0.0.1:3001/public/uploads";
 
 export async function saveProfileImage(
   uid: string,

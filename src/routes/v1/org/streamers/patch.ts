@@ -13,6 +13,7 @@ import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { nanoid } from "nanoid";
 import { inflateSync } from "node:zlib";
 import { logOrgAudit } from "@/core/audit";
+import { updateStreamerCache } from "@/utils/cache-sync";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -46,7 +47,13 @@ export const endpoint = new Elysia()
       const data: any = {};
       const newName = body.name?.trim();
       const newDisplayName = body.displayName?.trim() || body.displayname?.trim();
-      if (newName) data.name = newName.slice(0, 64);
+      if (newName) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
+          set.status = "Bad Request";
+          return "Channel name can only contain alphanumeric characters, hyphens, and underscores";
+        }
+        data.name = newName.slice(0, 64);
+      }
       if (newDisplayName) data.displayName = newDisplayName.slice(0, 64);
       if (body.bio !== undefined) data.bio = body.bio ? body.bio.trim().slice(0, 1000) : null;
 
@@ -149,16 +156,26 @@ export const endpoint = new Elysia()
         select: { userId: true },
       });
 
-      const keysToDelete = [
-        `streamer:${String(streamerId)}:info`,
-        `streamer:${String(streamerId)}:profile`,
-        `org:${String(orgId)}:streamers`,
-        `org:${String(orgId)}:primary_streamer`,
-        `org:${String(orgId)}:members`,
-        ...members.map((m) => `user:${String(m.userId)}:org_list`),
-      ];
-
-      await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
+      await updateStreamerCache(
+        {
+          id: updated.id,
+          orgId,
+          name: updated.name,
+          displayName: updated.displayName,
+          bio: updated.bio,
+          avatar: updated.avatar,
+          banner: updated.banner,
+          accentColor: updated.accentColor,
+          twitch: updated.twitch,
+          youtube: updated.youtube,
+          twitter: updated.twitter,
+          facebook: updated.facebook,
+          reddit: updated.reddit,
+          discord: updated.discord,
+          uri: updated.uri,
+        },
+        members.map((m) => m.userId),
+      );
 
       await logOrgAudit({
         orgId,
@@ -192,7 +209,7 @@ export const endpoint = new Elysia()
         description: "Updates streamer channel metadata and images. Requires EDIT_STREAMER_PROFILE.",
       },
       body: t.Object({
-        name: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+        name: t.Optional(t.String({ pattern: "^[a-zA-Z0-9_\\-]+$", minLength: 1, maxLength: 64 })),
         displayName: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
         displayname: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
         bio: t.Optional(t.String({ maxLength: 1000 })),

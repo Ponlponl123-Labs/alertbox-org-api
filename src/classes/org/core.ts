@@ -31,6 +31,7 @@ export async function getOrganizationDetails(orgId: bigint, userId: bigint) {
 
   return {
     id: String(member.organization.id),
+    type: member.organization.type,
     name: member.organization.name,
     slug: member.organization.slug,
     avatar: member.organization.avatar,
@@ -71,6 +72,7 @@ export async function listUserOrganizations(userId: bigint) {
 
   return memberships.map((m) => ({
     id: String(m.organization.id),
+    type: m.organization.type,
     name: m.organization.name,
     slug: m.organization.slug,
     avatar: m.organization.avatar,

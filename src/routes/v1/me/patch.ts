@@ -5,6 +5,7 @@ import { Moderation } from "@/classes/moderation";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { Me } from "@/classes/me";
+import { setCachedUser } from "@/classes/me/cache";
 import { processAvatar } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { nanoid } from "nanoid";
@@ -59,9 +60,8 @@ export const endpoint = new Elysia()
       });
       Object.assign(user.data, updateData);
 
-      await redis.redis.del(`user:${String(user.data.id)}:info`);
-      const freshUser = await new Me({ cache: false }).load(user.data.id, sessionUserSelect);
-      return freshUser ? freshUser.toJSON() : user.toJSON();
+      await setCachedUser(user.data.id, user.data);
+      return user.toJSON();
     },
     {
       detail: {

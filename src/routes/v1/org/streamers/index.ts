@@ -5,6 +5,7 @@ import { endpoint as PatchEndpoint } from "./patch";
 import { endpoint as DeleteEndpoint } from "./delete";
 import { endpoint as ConnectionsEndpoint } from "./connections/index";
 import { endpoint as AuditEndpoint } from "./audit/index";
+import { endpoint as TransactionsEndpoint } from "./transactions/index";
 
 export const endpoint = new Elysia()
   .use(GetEndpoint)
@@ -12,6 +13,7 @@ export const endpoint = new Elysia()
   .use(PatchEndpoint)
   .use(DeleteEndpoint)
   .use(ConnectionsEndpoint)
-  .use(AuditEndpoint);
+  .use(AuditEndpoint)
+  .use(TransactionsEndpoint);
 
 export default endpoint;

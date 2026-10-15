@@ -7,6 +7,7 @@ import { authorizeOrg } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
+import { updateOrgCache } from "@/utils/cache-sync";
 import { Moderation } from "@/classes/moderation";
 import { nanoid } from "nanoid";
 
@@ -96,12 +97,19 @@ export const endpoint = new Elysia()
         select: { userId: true },
       });
 
-      const keysToDelete = [
-        `org:${String(orgId)}:info`,
-        ...members.map((m) => `user:${String(m.userId)}:org_list`),
-      ];
-
-      await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
+      await updateOrgCache(
+        {
+          id: updated.id,
+          type: updated.type,
+          name: updated.name,
+          slug: updated.slug,
+          avatar: updated.avatar,
+          banner: updated.banner,
+          ownerId: updated.ownerId,
+          createdAt: updated.createdAt,
+        },
+        members.map((m) => m.userId),
+      );
 
       await logOrgAudit({
         orgId,
@@ -114,6 +122,7 @@ export const endpoint = new Elysia()
 
       return {
         id: String(updated.id),
+        type: updated.type,
         name: updated.name,
         slug: updated.slug,
         avatar: updated.avatar,

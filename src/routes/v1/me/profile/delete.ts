@@ -3,6 +3,7 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/utils/rbac";
+import { updateStreamerCache } from "@/utils/cache-sync";
 
 /**
  * DELETE endpoint to unpublish/deactivate the streamer profile.
@@ -30,10 +31,10 @@ export const endpoint = new Elysia()
         },
       });
 
-      await Promise.all([
-        redis.redis.del(`streamer:${org.streamerId}:info`),
-        redis.redis.del(`streamer:${org.streamerId}:profile`),
-      ]);
+      await updateStreamerCache({
+        id: org.streamerId,
+        orgId: org.orgId,
+      });
 
       return "OK";
     },

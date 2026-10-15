@@ -11,6 +11,7 @@ import { isAllowedOrigin } from "@/utils/security";
 import { smallerBannerAsciiArt } from "@/consts/ascii-arts/alertbox-org";
 import openapi from "@elysia/openapi";
 import staticPlugin from "@elysiajs/static";
+import { isAlertboxProduction } from "@/utils/instance";
 
 if (!("toJSON" in BigInt.prototype)) {
   (BigInt.prototype as any).toJSON = function (): string {
@@ -177,6 +178,15 @@ class Server {
     this.app.get("/health", ({ set }) => {
       set.headers["cache-control"] = "public, max-age=5, s-maxage=10, stale-while-revalidate=5";
       return { status: "ok" };
+    });
+
+    this.app.get("/instance", ({ set }) => {
+      if (isAlertboxProduction()) {
+        set.status = 200;
+        return "OK";
+      }
+      set.status = 404;
+      return "Not Found";
     });
 
     this.app.ws("/health/ws", {

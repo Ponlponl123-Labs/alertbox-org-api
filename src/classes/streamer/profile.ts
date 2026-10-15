@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { inflateSync } from "zlib";
 import { hexColorToNumber } from "@/utils/color";
+import { updateStreamerCache } from "@/utils/cache-sync";
 
 /**
  * Update streamer profile data and/or media assets.
@@ -134,12 +135,23 @@ export async function updateProfile(
     where: { id: targetStreamerId },
   });
 
-  await Promise.all([
-    redis.redis.del(`streamer:${String(streamerId)}:profile`),
-    redis.redis.del(`streamer:${String(streamerId)}:info`),
-    redis.redis.del(`org:${String(updated.orgId)}:streamers`),
-    redis.redis.del(`org:${String(updated.orgId)}:primary_streamer`),
-  ]);
+  await updateStreamerCache({
+    id: updated.id,
+    orgId: updated.orgId,
+    name: updated.name,
+    displayName: updated.displayName,
+    bio: updated.bio,
+    avatar: updated.avatar,
+    banner: updated.banner,
+    accentColor: updated.accentColor,
+    twitch: updated.twitch,
+    youtube: updated.youtube,
+    twitter: updated.twitter,
+    facebook: updated.facebook,
+    reddit: updated.reddit,
+    discord: updated.discord,
+    uri: updated.uri,
+  });
 
   return updated;
 }

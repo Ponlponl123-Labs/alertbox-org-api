@@ -6,6 +6,8 @@ import betterConsole, { tsflag, s } from "ts-better-console";
 import { logDev } from "@/utils/log";
 import { relayStreamlabsDonation } from "@/utils/streamlabs";
 import type { DonationEventPayload } from "@/types/webhook.types";
+import { broadcastStreamerTransaction } from "@/routes/v1/org/streamers/transactions/broadcast";
+import { getBunServer } from "@/core/bun-server";
 
 export class WebhookDispatcher {
   /**
@@ -67,7 +69,7 @@ export class WebhookDispatcher {
       return;
     }
 
-    await prisma.client.transactionLog.create({
+    const tx = await prisma.client.transactionLog.create({
       data: {
         orgId: targetOrgId,
         streamerId: targetStreamerId,
@@ -84,6 +86,23 @@ export class WebhookDispatcher {
         rawPayload: payload.rawPayload,
       },
     });
+
+    broadcastStreamerTransaction(targetOrgId, targetStreamerId, {
+      type: "transaction:new",
+      transaction: {
+        id: String(tx.id),
+        provider: tx.provider,
+        type: tx.type,
+        status: tx.status,
+        isTest: tx.isTest,
+        amount: tx.amount,
+        currency: tx.currency,
+        senderName: tx.senderName,
+        message: tx.message,
+        createdAt: tx.createdAt.toISOString(),
+        isDeleted: false,
+      },
+    }).catch(() => {});
   }
 
   /**
@@ -203,10 +222,22 @@ export class WebhookDispatcher {
         ),
       );
 
-      await redis.redis.publish(
-        `alertbox-org:alerts:${widget.id}`,
-        JSON.stringify(alertPayload),
-      );
+      const strPayload = JSON.stringify(alertPayload);
+      const bunServer = getBunServer();
+      if (bunServer) {
+        bunServer.publish(`widget:${widget.id}`, strPayload);
+      }
+
+      try {
+        if (redis.redis.status === "ready") {
+          await redis.redis.publish(
+            `alertbox-org:alerts:${widget.id}`,
+            strPayload,
+          );
+        }
+      } catch {
+        // ignore redis error
+      }
     }
   }
 

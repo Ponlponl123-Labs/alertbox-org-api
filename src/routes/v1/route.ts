@@ -5,6 +5,7 @@ import ProfileRouter from "./profile";
 import WebhookRouter from "./webhook";
 import WidgetRouter from "./widget";
 import OrgRouter from "./org";
+import InstanceRouter from "./instance";
 
 export const router = new Elysia({ prefix: "v1" })
   .use(AuthRouter)
@@ -12,6 +13,7 @@ export const router = new Elysia({ prefix: "v1" })
   .use(OrgRouter)
   .use(ProfileRouter)
   .use(WebhookRouter)
-  .use(WidgetRouter);
+  .use(WidgetRouter)
+  .use(InstanceRouter);
 
 export default router;

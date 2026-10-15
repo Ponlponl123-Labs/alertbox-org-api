@@ -6,6 +6,7 @@ import { OrgPerm, StreamerPerm } from "@/utils/rbac";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
+import { isSelfHosted } from "@/utils/instance";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -17,7 +18,27 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return authRes;
       const { orgId } = authRes;
 
+      // Limit community organizations to 1 channel on production; community self-hosted is unlocked
+      const orgRecord = await prisma.client.organization.findUnique({
+        where: { id: orgId },
+        select: { type: true },
+      });
+
+      if (!isSelfHosted() && (!orgRecord || orgRecord.type === "COMMUNITY")) {
+        const activeStreamersCount = await prisma.client.streamer.count({
+          where: { orgId, deletedAt: null },
+        });
+        if (activeStreamersCount >= 1) {
+          set.status = "Forbidden";
+          return "Community organizations can only create one channel";
+        }
+      }
+
       const name = body.name.trim();
+      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        set.status = "Bad Request";
+        return "Channel name can only contain alphanumeric characters, hyphens, and underscores";
+      }
       const displayName = (body.displayName?.trim() || name).slice(0, 64);
       const timestamp = Date.now();
       const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
@@ -89,7 +110,7 @@ export const endpoint = new Elysia()
         description: "Provisions a new streamer channel with dedicated AlertBox widget.",
       },
       body: t.Object({
-        name: t.String({ minLength: 1, maxLength: 64 }),
+        name: t.String({ pattern: "^[a-zA-Z0-9_\\-]+$", minLength: 1, maxLength: 64 }),
         displayName: t.Optional(t.String({ maxLength: 64 })),
       }),
     },

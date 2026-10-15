@@ -12,6 +12,7 @@ export const basicUserSelect = {
  */
 export const pureUserSelect = {
   id: true,
+  type: true,
   email: true,
   name: true,
   avatar: true,
@@ -26,6 +27,7 @@ export const pureUserSelect = {
  */
 export const sessionUserSelect = {
   id: true,
+  type: true,
   email: true,
   name: true,
   avatar: true,
@@ -62,6 +64,7 @@ export const sessionUserSelect = {
  */
 export const fullUserSelect = {
   id: true,
+  type: true,
   email: true,
   name: true,
   avatar: true,
