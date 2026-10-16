@@ -17,7 +17,6 @@ export async function updateProfile(
   streamerId: string | bigint,
   currentData: { avatar?: string | null; banner?: string | null },
   payload: {
-    displayname?: string;
     displayName?: string;
     name?: string;
     bio?: string | null;
@@ -34,7 +33,7 @@ export async function updateProfile(
 ) {
   const data: any = {};
 
-  const displayNameVal = payload.displayname || payload.displayName || payload.name;
+  const displayNameVal = payload.displayName || payload.name;
   if (displayNameVal) data.displayName = displayNameVal.trim().slice(0, 64);
   if (payload.name) data.name = payload.name.trim().slice(0, 64);
   if (payload.bio !== undefined) data.bio = payload.bio ? payload.bio.trim().slice(0, 1000) : null;

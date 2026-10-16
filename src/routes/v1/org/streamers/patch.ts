@@ -45,12 +45,12 @@ export const endpoint = new Elysia()
       }
 
       const data: any = {};
-      const newName = body.name?.trim();
-      const newDisplayName = body.displayName?.trim() || body.displayname?.trim();
+      const newName = body.name?.trim().toLowerCase();
+      const newDisplayName = body.displayName?.trim();
       if (newName) {
-        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
+        if (!/^[a-z0-9_-]+$/.test(newName)) {
           set.status = "Bad Request";
-          return "Channel name can only contain alphanumeric characters, hyphens, and underscores";
+          return "Channel name can only contain lowercase alphanumeric characters, hyphens, and underscores";
         }
         data.name = newName.slice(0, 64);
       }
@@ -137,7 +137,7 @@ export const endpoint = new Elysia()
       }
 
       if (body.accentColor !== undefined) {
-        data.accentColor = typeof body.accentColor === "number" ? body.accentColor : hexColorToNumber(body.accentColor);
+        data.accentColor = body.accentColor === null ? null : typeof body.accentColor === "number" ? body.accentColor : hexColorToNumber(body.accentColor);
       }
       if (body.twitch !== undefined || body.socialTwitch !== undefined) data.twitch = body.twitch ?? body.socialTwitch;
       if (body.youtube !== undefined || body.socialYoutube !== undefined) data.youtube = body.youtube ?? body.socialYoutube;
@@ -209,11 +209,10 @@ export const endpoint = new Elysia()
         description: "Updates streamer channel metadata and images. Requires EDIT_STREAMER_PROFILE.",
       },
       body: t.Object({
-        name: t.Optional(t.String({ pattern: "^[a-zA-Z0-9_\\-]+$", minLength: 1, maxLength: 64 })),
+        name: t.Optional(t.String({ pattern: "^[a-z0-9_\\-]+$", minLength: 1, maxLength: 64 })),
         displayName: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
-        displayname: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
-        bio: t.Optional(t.String({ maxLength: 1000 })),
-        accentColor: t.Optional(t.Union([t.String(), t.Number()])),
+        bio: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+        accentColor: t.Optional(t.Nullable(t.Union([t.String(), t.Number()]))),
         avatar: t.Optional(
           t.Union([
             t.File({

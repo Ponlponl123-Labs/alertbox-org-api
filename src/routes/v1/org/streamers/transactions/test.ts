@@ -30,7 +30,7 @@ export const endpoint = new Elysia()
       const { orgId, streamerId } = authRes;
 
       const provider = body.provider.toUpperCase().trim();
-      const amount = Math.max(1, Math.round(Number(body.amount) || 50));
+      const amount = Math.max(100, Math.round((Number(body.amount) || 50) * 100));
       const currency = (body.currency || "THB").toUpperCase().trim();
       const senderName = (body.senderName || "Test Supporter").trim();
       const message = body.message?.trim() || "This is a test tip alert!";
@@ -73,7 +73,7 @@ export const endpoint = new Elysia()
         WebhookDispatcher.dispatchAlerts(streamerId, {
           type: "TIP",
           name: senderName,
-          amount,
+          amount: amount / 100,
           currency,
           message,
         }),

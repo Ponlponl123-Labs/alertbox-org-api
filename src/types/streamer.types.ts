@@ -3,7 +3,6 @@ import { SupportedProvider } from "@/consts/providers";
 export type { SupportedProvider };
 
 export interface StreamerProfilePayload {
-  displayname?: string;
   displayName?: string;
   name?: string;
   bio?: string | null;

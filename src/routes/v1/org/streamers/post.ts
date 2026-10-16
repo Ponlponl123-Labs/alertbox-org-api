@@ -34,10 +34,10 @@ export const endpoint = new Elysia()
         }
       }
 
-      const name = body.name.trim();
-      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      const name = body.name.trim().toLowerCase();
+      if (!/^[a-z0-9_-]+$/.test(name)) {
         set.status = "Bad Request";
-        return "Channel name can only contain alphanumeric characters, hyphens, and underscores";
+        return "Channel name can only contain lowercase alphanumeric characters, hyphens, and underscores";
       }
       const displayName = (body.displayName?.trim() || name).slice(0, 64);
       const timestamp = Date.now();
@@ -110,7 +110,7 @@ export const endpoint = new Elysia()
         description: "Provisions a new streamer channel with dedicated AlertBox widget.",
       },
       body: t.Object({
-        name: t.String({ pattern: "^[a-zA-Z0-9_\\-]+$", minLength: 1, maxLength: 64 }),
+        name: t.String({ pattern: "^[a-z0-9_\\-]+$", minLength: 1, maxLength: 64 }),
         displayName: t.Optional(t.String({ maxLength: 64 })),
       }),
     },
