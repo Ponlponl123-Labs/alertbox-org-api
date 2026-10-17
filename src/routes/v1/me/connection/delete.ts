@@ -5,7 +5,7 @@ import {
   removeConnection,
 } from "@/classes/streamer";
 import { orgContext, requireOrgPermission } from "@/core/org";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 
 /**
  * DELETE endpoint to remove integration configuration for a provider.

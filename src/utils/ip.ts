@@ -1,10 +1,7 @@
 import { redis } from "@/core/redis";
 import { week } from "@/consts/time";
 import type { GeoIPResponse } from "@/types/geo-ip";
-
-export const reserved_IPs = ["::1", "127.0.0.1", "0.0.0.0"];
-
-export const private_IPs = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
+import { reserved_IPs, private_IPs } from "@/consts/ip";
 
 export function isReservedIP(ip: string): boolean {
   return reserved_IPs.includes(ip);

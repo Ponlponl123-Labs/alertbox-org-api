@@ -1,14 +1,6 @@
 import type { ModerationConfig } from "@/types";
 import betterConsole, { Card, rgb, tsflag } from "ts-better-console";
-
-export const DEFAULT_MODERATION_CONFIG: ModerationConfig = {
-  enabled: true,
-  textEnabled: true,
-  imageEnabled: true,
-  apiUrl: "",
-  cacheTtlSec: 604800,
-  timeoutMs: 5000,
-};
+import { DEFAULT_MODERATION_CONFIG } from "@/consts/moderation";
 
 export class ModerationConfigManager {
   private static warned = false;

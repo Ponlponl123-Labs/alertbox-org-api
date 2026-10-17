@@ -1,7 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
-import { hasPermission, OrgPerm, RolePresets } from "@/utils/rbac";
+import { hasPermission } from "@/utils/rbac";
+import { OrgPerm, RolePresets } from "@/consts/permission";
 import { OrgRole } from "@/generated/prisma/client";
 import { customAlphabet } from "nanoid";
 import { resolveOrgId } from "@/core/org";
@@ -25,7 +26,7 @@ export const endpoint = new Elysia()
         where: { orgId_userId: { orgId, userId: user.data.id } },
       });
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBERS_MANAGE)) {
+      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBER_ADD)) {
         set.status = "Forbidden";
         return "Insufficient permissions to invite members";
       }

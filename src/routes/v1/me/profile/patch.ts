@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { isValidUri } from "@/utils/regex";
 import { orgContext, requireOrgPermission } from "@/core/org";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { registerURI } from "@/classes/streamer";
 import { prisma } from "@/core/prisma";
 

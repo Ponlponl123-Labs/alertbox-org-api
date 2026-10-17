@@ -1,7 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
+import { hasPermission } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId, resolveStreamerId } from "@/core/org";
 
 export const endpoint = new Elysia()

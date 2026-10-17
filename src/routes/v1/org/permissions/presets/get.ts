@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { listOrgRolePresets } from "@/classes/org/presets";
 

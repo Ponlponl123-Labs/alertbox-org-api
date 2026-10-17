@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { isAllowedOrigin } from "@/utils/security";
 import { authorizeStreamer } from "@/core/org";
-import { OrgPerm, StreamerPerm } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
 
 export const endpoint = new Elysia()
   .use(ip({ headersFirst: true }))

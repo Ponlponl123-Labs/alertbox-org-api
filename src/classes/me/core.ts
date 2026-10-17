@@ -9,7 +9,8 @@ import { createAccount, isExist, deleteAccount, ensureUserWidgets } from "./acco
 import { getCachedUser, setCachedUser, filterUserSelection } from "./cache";
 import { listUserDevices, destroyUserDevice } from "./device";
 import { supported_providers } from "@/consts/providers";
-import { OrgPerm, hasPermission, StreamerPerm, parseStreamerPermissions } from "@/utils/rbac";
+import { hasPermission, parseStreamerPermissions } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 

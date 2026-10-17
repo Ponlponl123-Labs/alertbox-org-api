@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { orgContext, requireOrgPermission } from "@/core/org";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { redis } from "@/core/redis";
 import { prisma } from "@/core/prisma";

@@ -2,7 +2,8 @@ import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { hasPermission, OrgPerm } from "@/utils/rbac";
+import { hasPermission } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg, parseBigIntParam, resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 
@@ -35,7 +36,7 @@ export const endpoint = new Elysia()
 
       const isSelf = targetMember.userId === user.data.id;
       if (!isSelf) {
-        const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBERS_MANAGE, set, "remove members");
+        const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBER_REMOVE, set, "remove members");
         if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
       }
 

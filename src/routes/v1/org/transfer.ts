@@ -2,7 +2,7 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { RolePresets } from "@/utils/rbac";
+import { RolePresets } from "@/consts/permission";
 import { OrgRole } from "@/generated/prisma/client";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";

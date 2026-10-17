@@ -236,7 +236,7 @@ describe("Centralized Multi-Tenant Entity Architecture", () => {
   });
 
   it("should verify precomputed SYSTEM_PRESETS correctness and zero-cost retrieval", async () => {
-    const { SYSTEM_PRESETS } = await import("../src/routes/v1/org/permissions/get");
+    const { SYSTEM_PRESETS } = await import("../src/consts/permission");
     expect(SYSTEM_PRESETS).toBeDefined();
     expect(Array.isArray(SYSTEM_PRESETS)).toBe(true);
 
@@ -244,8 +244,9 @@ describe("Centralized Multi-Tenant Entity Architecture", () => {
     expect(ownerPreset).toBeDefined();
     expect(ownerPreset?.isSystem).toBe(true);
     expect(ownerPreset?.grantedKeys.length).toBeGreaterThan(10);
-    expect(ownerPreset?.grantedKeys).toContain("ORG_VIEW");
-    expect(ownerPreset?.grantedKeys).toContain("ORG_MEMBERS_MANAGE");
+    expect(ownerPreset?.grantedKeys).toContain("ORG_MEMBER_ADD");
+    expect(ownerPreset?.grantedKeys).toContain("ORG_MEMBER_MODIFY");
+    expect(ownerPreset?.grantedKeys).toContain("ORG_MEMBER_REMOVE");
 
     const memberPreset = SYSTEM_PRESETS.find((p) => p.role === "MEMBER");
     expect(memberPreset).toBeDefined();

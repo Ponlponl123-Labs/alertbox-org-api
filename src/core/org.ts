@@ -2,13 +2,8 @@ import Elysia from "elysia";
 import { auth } from "./auth";
 import { prisma } from "./prisma";
 import { redis } from "./redis";
-import {
-  hasPermission,
-  OrgPerm,
-  StreamerPerm,
-  parseStreamerPermissions,
-  hasStreamerPermission,
-} from "@/utils/rbac";
+import { hasPermission, parseStreamerPermissions, hasStreamerPermission } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { OrgRole } from "@/generated/prisma/client";
 
 export interface OrgContext {

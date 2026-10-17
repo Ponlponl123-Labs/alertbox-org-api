@@ -2,7 +2,7 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { OrgPerm, StreamerPerm } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";

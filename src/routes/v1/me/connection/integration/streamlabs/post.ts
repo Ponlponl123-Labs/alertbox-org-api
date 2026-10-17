@@ -2,7 +2,7 @@ import Elysia, { t } from "elysia";
 import { setConnection } from "@/classes/streamer";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { orgContext, requireOrgPermission } from "@/core/org";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 
 const postValidation = {
   detail: {

@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
-import { OrgPerm, StreamerPerm } from "@/utils/rbac";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import {
   resolveProvider,

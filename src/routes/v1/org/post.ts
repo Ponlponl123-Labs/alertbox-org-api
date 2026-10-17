@@ -3,7 +3,7 @@ import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { nanoid } from "nanoid";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { pureUserSelect } from "@/consts/session";
 import { OrgRole, OrgType } from "@/generated/prisma/client";
 import { isSelfHosted } from "@/utils/instance";

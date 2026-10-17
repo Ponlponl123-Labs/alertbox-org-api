@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { pureUserSelect } from "@/consts/session";
 
 /**

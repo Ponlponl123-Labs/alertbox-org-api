@@ -1,12 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import {
-  OrgPerm,
-  RolePresets,
-  hasPermission,
-  hasAnyPermission,
-  combinePermissions,
-  removePermissions,
-} from "../src/utils/rbac";
+import { hasPermission, hasAnyPermission, combinePermissions, removePermissions } from "../src/utils/rbac";
+import { OrgPerm, RolePresets } from "../src/consts/permission";
 if (!("toJSON" in BigInt.prototype)) {
   (BigInt.prototype as any).toJSON = function (): string {
     return this.toString();
@@ -17,9 +11,12 @@ describe("Organization & Multi-Tenant RBAC Bitmask Engine", () => {
   it("should have correct bitmask values for all permission flags", () => {
     expect(OrgPerm.ORG_VIEW).toBe(1n << 0n);
     expect(OrgPerm.ORG_MANAGE).toBe(1n << 1n);
-    expect(OrgPerm.ORG_MEMBERS_MANAGE).toBe(1n << 2n);
-    expect(OrgPerm.ORG_ROLES_MANAGE).toBe(1n << 3n);
-    expect(OrgPerm.ORG_DELETE).toBe(1n << 4n);
+    expect(OrgPerm.ORG_MEMBER_ADD).toBe(1n << 2n);
+    expect(OrgPerm.ORG_MEMBER_MODIFY).toBe(1n << 3n);
+    expect(OrgPerm.ORG_MEMBER_REMOVE).toBe(1n << 4n);
+    expect(OrgPerm.ORG_ROLES_MANAGE).toBe(1n << 5n);
+    expect(OrgPerm.ORG_DELETE).toBe(1n << 6n);
+    expect(OrgPerm.ORG_MEMBERS_MANAGE).toBe(OrgPerm.ORG_MEMBER_ADD | OrgPerm.ORG_MEMBER_MODIFY | OrgPerm.ORG_MEMBER_REMOVE);
     expect(OrgPerm.STREAMER_VIEW).toBe(1n << 10n);
     expect(OrgPerm.STREAMER_CREATE).toBe(1n << 11n);
     expect(OrgPerm.STREAMER_MANAGE).toBe(1n << 12n);

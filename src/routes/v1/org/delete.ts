@@ -2,7 +2,7 @@ import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 
 export const endpoint = new Elysia()

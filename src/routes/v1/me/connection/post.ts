@@ -5,7 +5,7 @@ import {
   setConnection,
 } from "@/classes/streamer";
 import { orgContext, requireOrgPermission } from "@/core/org";
-import { OrgPerm } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 
 /**
  * POST endpoint to connect/set integration configuration for a provider.

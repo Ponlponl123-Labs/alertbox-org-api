@@ -1,6 +1,7 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
-import { isValidUri, allowed_social } from "@/utils/regex";
+import { isValidUri } from "@/utils/regex";
+import { allowed_social } from "@/consts/regex";
 import { week } from "@/consts/time";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";

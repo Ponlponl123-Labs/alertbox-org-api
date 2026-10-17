@@ -3,7 +3,8 @@ import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
-import { hasAnyPermission, OrgPerm } from "@/utils/rbac";
+import { hasAnyPermission } from "@/utils/rbac";
+import { OrgPerm } from "@/consts/permission";
 
 export type OrgAnalyticsResponse = {
   timeframe: string;

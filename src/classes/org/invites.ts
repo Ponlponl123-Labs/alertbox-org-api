@@ -1,7 +1,7 @@
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { OrgRole } from "@/generated/prisma/client";
-import { RolePresets } from "@/utils/rbac";
+import { RolePresets } from "@/consts/permission";
 import { customAlphabet } from "nanoid";
 import { logOrgAudit } from "@/core/audit";
 
