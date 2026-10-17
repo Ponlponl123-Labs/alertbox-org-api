@@ -49,11 +49,17 @@ export const endpoint = new Elysia()
 
       const cacheKey = `org:${String(orgId)}:streamers`;
       let streamersData: any[] = [];
-      const cached = await redis.redis.get(cacheKey);
-      if (cached) {
-        try {
-          streamersData = JSON.parse(cached);
-        } catch {}
+      try {
+        const cachedVals = await redis.redis.hvals(cacheKey);
+        if (cachedVals && cachedVals.length > 0) {
+          try {
+            streamersData = cachedVals.map((v) => JSON.parse(v));
+          } catch {}
+        }
+      } catch (err: any) {
+        if (err?.message?.includes("WRONGTYPE")) {
+          await redis.redis.del(cacheKey).catch(() => {});
+        }
       }
 
       if (!streamersData.length) {
@@ -82,7 +88,21 @@ export const endpoint = new Elysia()
           createdAt: s.createdAt,
         }));
 
-        await redis.redis.setex(cacheKey, 3600, JSON.stringify(streamersData));
+        if (streamersData.length > 0) {
+          const map: Record<string, string> = {};
+          for (const s of streamersData) {
+            map[s.id] = JSON.stringify(s);
+          }
+          try {
+            await redis.redis.hset(cacheKey, map);
+          } catch (err: any) {
+            if (err?.message?.includes("WRONGTYPE")) {
+              await redis.redis.del(cacheKey).catch(() => {});
+              await redis.redis.hset(cacheKey, map).catch(() => {});
+            }
+          }
+          await redis.redis.expire(cacheKey, 3600).catch(() => {});
+        }
       }
 
       return hasOrgViewStreamers

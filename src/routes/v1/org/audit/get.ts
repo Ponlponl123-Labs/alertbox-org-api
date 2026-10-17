@@ -5,6 +5,15 @@ import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
 
+function safeJsonParse(val: string | null): unknown {
+  if (!val) return null;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return null;
+  }
+}
+
 export const endpoint = new Elysia()
   .use(auth)
   .get(
@@ -26,7 +35,7 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to view audit logs";
       }
 
-      const limit = Math.min(Math.max(Number(query.limit || 50), 1), 100);
+      const limit = Math.min(Math.max(Number(query.limit || 10), 1), 100);
       const offset = Math.max(Number(query.offset || 0), 0);
       const where: any = { orgId };
 
@@ -41,7 +50,15 @@ export const endpoint = new Elysia()
         prisma.client.organizationAuditLog.count({ where }),
         prisma.client.organizationAuditLog.findMany({
           where,
-          include: {
+          select: {
+            id: true,
+            orgId: true,
+            action: true,
+            targetType: true,
+            targetId: true,
+            payload: true,
+            ipAddress: true,
+            createdAt: true,
             user: {
               select: {
                 id: true,
@@ -67,7 +84,7 @@ export const endpoint = new Elysia()
           action: l.action,
           targetType: l.targetType,
           targetId: l.targetId ? String(l.targetId) : null,
-          payload: l.payload ? JSON.parse(l.payload) : null,
+          payload: safeJsonParse(l.payload),
           ipAddress: l.ipAddress,
           createdAt: l.createdAt.toISOString(),
           user: {
@@ -87,7 +104,7 @@ export const endpoint = new Elysia()
       },
       query: t.Object({
         action: t.Optional(t.String()),
-        targetType: t.Optional(t.String()),
+        targetType: t.Optional(t.Union([t.Literal("MEMBER"), t.Literal("STREAMER"), t.Literal("ORGANIZATION")])),
         limit: t.Optional(t.String()),
         offset: t.Optional(t.String()),
       }),

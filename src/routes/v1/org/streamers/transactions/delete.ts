@@ -4,6 +4,7 @@ import { prisma } from "@/core/prisma";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -37,7 +38,14 @@ export const endpoint = new Elysia()
 
       const tx = await prisma.client.transactionLog.findFirst({
         where: { id: txIdBig, orgId, streamerId },
-        select: { id: true, isDeleted: true },
+        select: {
+          id: true,
+          isDeleted: true,
+          senderName: true,
+          amount: true,
+          currency: true,
+          provider: true,
+        },
       });
 
       if (!tx) {
@@ -45,7 +53,8 @@ export const endpoint = new Elysia()
         return "Transaction not found";
       }
 
-      const nextDeletedDate = tx.isDeleted ? null : new Date();
+      const isRestoring = tx.isDeleted !== null;
+      const nextDeletedDate = isRestoring ? null : new Date();
 
       const updated = await prisma.client.transactionLog.update({
         where: { id: tx.id },
@@ -55,11 +64,28 @@ export const endpoint = new Elysia()
 
       const isDeletedBool = updated.isDeleted !== null;
 
-      await broadcastStreamerTransaction(orgId, streamerId, {
-        type: "transaction:updated",
-        transactionId: String(updated.id),
-        isDeleted: isDeletedBool,
-      });
+      await Promise.all([
+        broadcastStreamerTransaction(orgId, streamerId, {
+          type: "transaction:updated",
+          transactionId: String(updated.id),
+          isDeleted: isDeletedBool,
+        }),
+        logOrgAudit({
+          orgId,
+          userId: user.data.id,
+          action: isRestoring ? "TRANSACTION_RESTORED" : "TRANSACTION_DELETED",
+          targetType: "STREAMER",
+          targetId: streamerId,
+          payload: {
+            transactionId: String(updated.id),
+            streamerId: String(streamerId),
+            senderName: tx.senderName,
+            amount: tx.amount,
+            currency: tx.currency,
+            provider: tx.provider,
+          },
+        }),
+      ]);
 
       return {
         id: String(updated.id),

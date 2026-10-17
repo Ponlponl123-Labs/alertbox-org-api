@@ -8,6 +8,7 @@ import {
   allowed_user_update_providers,
   setConnection,
 } from "@/classes/streamer";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -42,7 +43,42 @@ export const endpoint = new Elysia()
         }
       }
 
+      const existing = await prisma.client.integration.findUnique({
+        where: { streamerId },
+      });
+      const wasConfigured = existing
+        ? Boolean(
+            provider === "stripe"
+              ? existing.stripeSecret
+              : provider === "buymeacoffee"
+                ? existing.bmacSecret
+                : provider === "kofi"
+                  ? existing.kofiSecret
+                  : provider === "xendit"
+                    ? existing.xenditSecret
+                    : provider === "feelfreepay"
+                      ? existing.ffpSecret
+                      : provider === "streamlabs"
+                        ? existing.streamlabsSecret
+                        : false,
+          )
+        : false;
+
       await setConnection(streamerId, orgId, provider, body as any);
+
+      await logOrgAudit({
+        orgId,
+        userId: user.data.id,
+        action: wasConfigured ? "INTEGRATION_UPDATED" : "INTEGRATION_CONNECTED",
+        targetType: "STREAMER",
+        targetId: streamerId,
+        payload: {
+          streamerId: String(streamerId),
+          platform: provider,
+          username: typeof body === "object" && body && "username" in body ? body.username : undefined,
+        },
+      });
+
       return "OK";
     },
     {

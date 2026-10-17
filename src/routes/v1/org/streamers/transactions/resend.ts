@@ -6,6 +6,7 @@ import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
 import { WebhookDispatcher } from "@/classes/webhook/dispatcher";
 import { recordActivityTransaction } from "@/routes/v1/org/transactions/activity";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -95,6 +96,22 @@ export const endpoint = new Elysia()
           message: duplicatedTx.message,
         }),
         recordActivityTransaction(orgId, duplicatedTx.isTest),
+        logOrgAudit({
+          orgId,
+          userId: user.data.id,
+          action: "TRANSACTION_RESENT",
+          targetType: "STREAMER",
+          targetId: streamerId,
+          payload: {
+            transactionId: String(tx.id),
+            newTransactionId: String(duplicatedTx.id),
+            streamerId: String(streamerId),
+            senderName: duplicatedTx.senderName,
+            amount: duplicatedTx.amount,
+            currency: duplicatedTx.currency,
+            provider: duplicatedTx.provider,
+          },
+        }),
       ]);
 
       return {

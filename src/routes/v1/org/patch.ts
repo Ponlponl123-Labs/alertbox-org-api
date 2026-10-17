@@ -117,7 +117,20 @@ export const endpoint = new Elysia()
         action: "ORG_SETTINGS_UPDATED",
         targetType: "ORGANIZATION",
         targetId: orgId,
-        payload: { changedFields: Object.keys(data) },
+        payload: {
+          name: updated.name,
+          slug: updated.slug,
+          changedFields: Object.keys(data),
+          changes: Object.fromEntries(
+            Object.keys(data).map((k) => [
+              k,
+              {
+                from: (org as any)[k] !== undefined ? ((org as any)[k] ?? null) : null,
+                to: (updated as any)[k] !== undefined ? ((updated as any)[k] ?? null) : null,
+              },
+            ]),
+          ),
+        },
       });
 
       return {

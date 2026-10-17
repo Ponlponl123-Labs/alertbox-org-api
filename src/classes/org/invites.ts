@@ -60,7 +60,7 @@ export async function createOrgInvite(
     orgId: targetOrgId,
     userId: inviterId,
     action: "MEMBER_INVITED",
-    targetType: "USER",
+    targetType: "MEMBER",
     targetId: targetUser.id,
     payload: { email: cleanEmail, role, expiresAt: expiresAt.toISOString() },
   });

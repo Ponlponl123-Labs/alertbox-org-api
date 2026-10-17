@@ -115,32 +115,40 @@ export async function updateStreamerCache(
         const merged = { ...info, ...streamer, id: streamerIdStr, orgId: orgIdStr };
         await redis.redis.setex(infoKey, DEFAULT_CACHE_TTL, JSON.stringify(merged));
       } catch {}
+
+      const pubKey = `streamer:${streamerIdStr}:public_details`;
+      const pubCached = await redis.redis.get(pubKey);
+      if (pubCached) {
+        try {
+          const parsed = JSON.parse(pubCached);
+          const merged = { ...parsed, ...streamer };
+          await redis.redis.setex(pubKey, 3600, JSON.stringify(merged));
+        } catch {}
+      }
     })(),
   );
 
-  // Update org:orgId:streamers list in-place if cached
+  // Update org:orgId:streamers hash in-place if cached
   tasks.push(
     (async () => {
       const streamersKey = `org:${orgIdStr}:streamers`;
-      const cached = await redis.redis.get(streamersKey);
-      if (!cached) return;
       try {
-        const list: any[] = JSON.parse(cached);
-        let changed = false;
-        for (const s of list) {
-          if (String(s.id) === streamerIdStr) {
-            if (streamer.name !== undefined) s.name = streamer.name;
-            if (streamer.displayName !== undefined) s.displayName = streamer.displayName;
-            if (streamer.avatar !== undefined) s.avatar = streamer.avatar;
-            if (streamer.uri !== undefined) s.uri = streamer.uri;
-            changed = true;
-            break;
-          }
+        const cached = await redis.redis.hget(streamersKey, streamerIdStr);
+        if (!cached) return;
+        const current = JSON.parse(cached);
+        const merged = {
+          ...current,
+          ...(streamer.name !== undefined ? { name: streamer.name } : {}),
+          ...(streamer.displayName !== undefined ? { displayName: streamer.displayName } : {}),
+          ...(streamer.avatar !== undefined ? { avatar: streamer.avatar } : {}),
+          ...(streamer.uri !== undefined ? { uri: streamer.uri } : {}),
+        };
+        await redis.redis.hset(streamersKey, streamerIdStr, JSON.stringify(merged));
+      } catch (err: any) {
+        if (err?.message?.includes("WRONGTYPE")) {
+          await redis.redis.del(streamersKey).catch(() => {});
         }
-        if (changed) {
-          await redis.redis.setex(streamersKey, DEFAULT_CACHE_TTL, JSON.stringify(list));
-        }
-      } catch {}
+      }
     })(),
   );
 

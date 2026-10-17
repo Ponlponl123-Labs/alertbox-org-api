@@ -126,6 +126,7 @@ model OrganizationAuditLog {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([orgId, createdAt])
+  @@index([orgId, targetType, targetId, createdAt])
 }
 
 model Streamer {

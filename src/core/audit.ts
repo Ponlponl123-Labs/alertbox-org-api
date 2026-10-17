@@ -1,10 +1,12 @@
 import { prisma } from "@/core/prisma";
 
+export type OrgAuditTargetType = "MEMBER" | "STREAMER" | "ORGANIZATION";
+
 export async function logOrgAudit(params: {
   orgId: bigint;
   userId: bigint;
   action: string;
-  targetType: string;
+  targetType: OrgAuditTargetType;
   targetId?: bigint;
   payload?: any;
   ipAddress?: string;

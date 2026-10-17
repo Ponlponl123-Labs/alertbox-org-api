@@ -183,7 +183,21 @@ export const endpoint = new Elysia()
         action: "STREAMER_UPDATED",
         targetType: "STREAMER",
         targetId: streamerId,
-        payload: { changedFields: Object.keys(data), streamerName: updated.name },
+        payload: {
+          streamerId: String(streamerId),
+          name: updated.name,
+          displayName: updated.displayName,
+          changedFields: Object.keys(data),
+          changes: Object.fromEntries(
+            Object.keys(data).map((k) => [
+              k,
+              {
+                from: (streamer as any)[k] !== undefined ? ((streamer as any)[k] ?? null) : null,
+                to: (updated as any)[k] !== undefined ? ((updated as any)[k] ?? null) : null,
+              },
+            ]),
+          ),
+        },
       });
 
       return {

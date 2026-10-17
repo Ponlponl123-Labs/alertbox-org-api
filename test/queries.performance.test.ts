@@ -501,13 +501,35 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
       expect(res.hasFullTableScan).toBe(false);
     });
 
-    it("OrganizationAuditLog.byOrg: chronological audit history [scans: 0, logical <= 10, physical: 0]", async () => {
+    it("OrganizationAuditLog.count: count total entries for pagination [scans: 0, logical <= 5, physical: 0]", async () => {
       const res = await inspectQuery(
-        "OrganizationAuditLog.byOrg",
-        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 ORDER BY createdAt DESC LIMIT 5"
+        "OrganizationAuditLog.count",
+        "SELECT COUNT(*) as count FROM `OrganizationAuditLog` WHERE orgId = 1"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationAuditLog.byOrg: chronological audit history (PAGE_SIZE = 10) [scans: 0, logical <= 25, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationAuditLog.byOrg",
+        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 ORDER BY createdAt DESC LIMIT 10"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(25);
+      expect(res.physicalReads).toBe(0);
+      expect(res.hasFullTableScan).toBe(false);
+    });
+
+    it("OrganizationAuditLog.byStreamer: streamer scoped audit history (PAGE_SIZE = 10) [scans: 0, logical <= 15, physical: 0]", async () => {
+      const res = await inspectQuery(
+        "OrganizationAuditLog.byStreamer",
+        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 AND targetType = 'STREAMER' AND targetId = 1 ORDER BY createdAt DESC LIMIT 10"
+      );
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
       expect(res.physicalReads).toBe(0);
       expect(res.hasFullTableScan).toBe(false);
     });

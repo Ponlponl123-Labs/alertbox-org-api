@@ -36,6 +36,14 @@ class Server {
       (request as any)._clientIp = ip;
       (request as any)._clientOrigin = origin;
 
+      try {
+        const u = new URL(request.url);
+        if (u.pathname.startsWith("//")) {
+          u.pathname = u.pathname.replace(/\/+/g, "/");
+          Object.defineProperty(request, "url", { value: u.toString(), writable: true });
+        }
+      } catch {}
+
       if (logger.isTrafficPending()) {
         let pathname = "";
         try {

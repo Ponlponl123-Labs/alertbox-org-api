@@ -114,8 +114,10 @@ export const endpoint = new Elysia()
         targetId: orgId,
         payload: {
           previousOwnerId: String(user.data.id),
+          previousOwnerUserId: String(user.data.id),
           newOwnerMemberId: String(targetMemberId),
           newOwnerUserId: String(targetMember.userId),
+          targetUserId: String(targetMember.userId),
         },
       });
 

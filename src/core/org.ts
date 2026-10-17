@@ -100,7 +100,14 @@ export const orgContext = new Elysia({ name: "org-context" })
     let membership: { role: OrgRole; permissions: bigint; orgId: bigint } | null = null;
 
     if (targetOrgId) {
-      const cached = await redis.redis.hget(`user:${userKey}:orgs`, String(targetOrgId));
+      let cached: string | null = null;
+      try {
+        cached = await redis.redis.hget(`user:${userKey}:orgs`, String(targetOrgId));
+      } catch (err: any) {
+        if (err?.message?.includes("WRONGTYPE")) {
+          await redis.redis.del(`user:${userKey}:orgs`).catch(() => {});
+        }
+      }
       if (cached) {
         try {
           const [roleStr, permStr] = cached.split(":");
@@ -131,12 +138,23 @@ export const orgContext = new Elysia({ name: "org-context" })
           role: memberRecord.role,
           permissions: memberRecord.permissions,
         };
-        await redis.redis.hset(
-          `user:${userKey}:orgs`,
-          String(memberRecord.orgId),
-          `${memberRecord.role}:${memberRecord.permissions.toString()}`,
-        );
-        await redis.redis.expire(`user:${userKey}:orgs`, 86400);
+        try {
+          await redis.redis.hset(
+            `user:${userKey}:orgs`,
+            String(memberRecord.orgId),
+            `${memberRecord.role}:${memberRecord.permissions.toString()}`,
+          );
+        } catch (err: any) {
+          if (err?.message?.includes("WRONGTYPE")) {
+            await redis.redis.del(`user:${userKey}:orgs`).catch(() => {});
+            await redis.redis.hset(
+              `user:${userKey}:orgs`,
+              String(memberRecord.orgId),
+              `${memberRecord.role}:${memberRecord.permissions.toString()}`,
+            ).catch(() => {});
+          }
+        }
+        await redis.redis.expire(`user:${userKey}:orgs`, 86400).catch(() => {});
       }
     }
 
@@ -203,7 +221,14 @@ export async function getMemberPermissions(
   orgId: bigint,
   userId: bigint,
 ): Promise<{ role: OrgRole; permissions: bigint } | null> {
-  const cached = await redis.redis.hget(`user:${userId}:orgs`, String(orgId));
+  let cached: string | null = null;
+  try {
+    cached = await redis.redis.hget(`user:${userId}:orgs`, String(orgId));
+  } catch (err: any) {
+    if (err?.message?.includes("WRONGTYPE")) {
+      await redis.redis.del(`user:${userId}:orgs`).catch(() => {});
+    }
+  }
   if (cached) {
     const parts = cached.split(":");
     if (parts.length === 2) {
@@ -217,13 +242,24 @@ export async function getMemberPermissions(
   });
 
   if (callerMember && !callerMember.isDeleted) {
-    void redis.redis
-      .hset(
-        `user:${userId}:orgs`,
-        String(orgId),
-        `${callerMember.role}:${callerMember.permissions.toString()}`,
-      )
-      .catch(() => {});
+    (async () => {
+      try {
+        await redis.redis.hset(
+          `user:${userId}:orgs`,
+          String(orgId),
+          `${callerMember.role}:${callerMember.permissions.toString()}`,
+        );
+      } catch (err: any) {
+        if (err?.message?.includes("WRONGTYPE")) {
+          await redis.redis.del(`user:${userId}:orgs`).catch(() => {});
+          await redis.redis.hset(
+            `user:${userId}:orgs`,
+            String(orgId),
+            `${callerMember.role}:${callerMember.permissions.toString()}`,
+          ).catch(() => {});
+        }
+      }
+    })().catch(() => {});
     return { role: callerMember.role, permissions: callerMember.permissions };
   }
 

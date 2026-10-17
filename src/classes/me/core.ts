@@ -200,7 +200,14 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
               integration: s.integration,
               createdAt: s.createdAt,
             }));
-            pipeline.setex(`org:${String(org.id)}:streamers`, 3600, JSON.stringify(streamerList));
+            if (streamerList.length > 0) {
+              const map: Record<string, string> = {};
+              for (const s of streamerList) {
+                map[s.id] = JSON.stringify(s);
+              }
+              pipeline.hset(`org:${String(org.id)}:streamers`, map);
+              pipeline.expire(`org:${String(org.id)}:streamers`, 3600);
+            }
           }
         }
       }

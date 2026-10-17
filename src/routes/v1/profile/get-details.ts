@@ -1,5 +1,6 @@
 import Elysia, { t } from "elysia";
 import { prisma } from "@/core/prisma";
+import { redis } from "@/core/redis";
 import { Streamer } from "@/classes/streamer";
 import { isValidUri } from "@/utils/regex";
 
@@ -30,6 +31,14 @@ export const endpoint = new Elysia().get(
     } catch {
       set.status = "Not Found";
       return "Not Found";
+    }
+
+    const cacheKey = `streamer:${String(targetStreamerId)}:public_details`;
+    const cached = await redis.redis.get(cacheKey).catch(() => null);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
 
     const streamer = await prisma.client.streamer.findUnique({
@@ -65,12 +74,15 @@ export const endpoint = new Elysia().get(
       bmac: !!integration?.bmacSecret,
     };
 
-    return {
+    const result = {
       ...publicProfile,
       kofiUsername: integration?.kofiUsername ?? null,
       bmacUsername: integration?.bmacUsername ?? null,
       integrations,
     };
+
+    void redis.redis.setex(cacheKey, 3600, JSON.stringify(result)).catch(() => {});
+    return result;
   },
   {
     detail: {

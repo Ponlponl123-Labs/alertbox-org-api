@@ -21,16 +21,26 @@ export const endpoint = new Elysia()
       const streamersKey = `org:${String(orgId)}:streamers`;
       const userOrgsKey = `user:${String(user.data.id)}:orgs`;
 
-      const [cachedOrg, cachedStreamers, cachedMemberPerms] = await Promise.all([
-        redis.redis.get(orgKey),
-        redis.redis.get(streamersKey),
-        redis.redis.hget(userOrgsKey, String(orgId)),
+      const [cachedOrg, cachedStreamersVals, cachedMemberPerms] = await Promise.all([
+        redis.redis.get(orgKey).catch(() => null),
+        redis.redis.hvals(streamersKey).catch(async (err: any) => {
+          if (err?.message?.includes("WRONGTYPE")) {
+            await redis.redis.del(streamersKey).catch(() => {});
+          }
+          return null;
+        }),
+        redis.redis.hget(userOrgsKey, String(orgId)).catch(async (err: any) => {
+          if (err?.message?.includes("WRONGTYPE")) {
+            await redis.redis.del(userOrgsKey).catch(() => {});
+          }
+          return null;
+        }),
       ]);
 
-      if (cachedOrg && cachedStreamers && cachedMemberPerms) {
+      if (cachedOrg && cachedStreamersVals && cachedStreamersVals.length > 0 && cachedMemberPerms) {
         try {
           const org = JSON.parse(cachedOrg);
-          const streamers = JSON.parse(cachedStreamers);
+          const streamers = cachedStreamersVals.map((v) => JSON.parse(v));
           const [role, permissions] = cachedMemberPerms.split(":");
           return {
             id: String(org.id),
@@ -91,11 +101,23 @@ export const endpoint = new Elysia()
         id: String(s.id),
       }));
 
-      await Promise.all([
+      const cacheTasks: Promise<any>[] = [
         redis.redis.setex(orgKey, day, JSON.stringify(orgInfo)),
-        redis.redis.setex(streamersKey, 3600, JSON.stringify(streamerList)),
         redis.redis.hset(userOrgsKey, String(orgId), `${member.role}:${member.permissions.toString()}`),
-      ]);
+      ];
+
+      if (streamerList.length > 0) {
+        const streamerMap: Record<string, string> = {};
+        for (const s of streamerList) {
+          streamerMap[s.id] = JSON.stringify(s);
+        }
+        cacheTasks.push(
+          redis.redis.hset(streamersKey, streamerMap),
+          redis.redis.expire(streamersKey, 3600),
+        );
+      }
+
+      await Promise.all(cacheTasks);
 
       return {
         id: String(member.organization.id),

@@ -89,7 +89,7 @@ export const endpoint = new Elysia()
         orgId,
         userId: user.data.id,
         action: "MEMBER_INVITED",
-        targetType: "USER",
+        targetType: "MEMBER",
         targetId: targetUser.id,
         payload: { email: cleanEmail, role, expiresAt: expiresAt.toISOString() },
       });

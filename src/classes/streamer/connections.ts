@@ -73,6 +73,7 @@ export async function setConnection(
       secret,
     ),
     redis.redis.del(`streamer:${String(streamerId)}:info`),
+    redis.redis.del(`streamer:${String(streamerId)}:public_details`),
   ]);
 
   if (provider === "buymeacoffee") {
@@ -121,6 +122,7 @@ export async function removeConnection(
   await Promise.all([
     redis.redis.del(`streamer:${String(streamerId)}:connections:${provider}`),
     redis.redis.del(`streamer:${String(streamerId)}:info`),
+    redis.redis.del(`streamer:${String(streamerId)}:public_details`),
   ]);
 
   if (provider === "buymeacoffee") {

@@ -14,14 +14,31 @@ describe("Seamless Redis Write-Through & In-Place Cache Synchronization", () => 
   beforeEach(() => {
     mockStore.clear();
     deletedKeys.length = 0;
+    const hashMap = new Map<string, Map<string, string>>();
     (redis.redis as any).get = async (key: string) => mockStore.get(key) ?? null;
     (redis.redis as any).setex = async (key: string, _ttl: number, val: string) => {
       mockStore.set(key, val);
       return "OK";
     };
+    (redis.redis as any).hget = async (key: string, field: string) => hashMap.get(key)?.get(field) ?? null;
+    (redis.redis as any).hset = async (key: string, ...args: any[]) => {
+      let m = hashMap.get(key);
+      if (!m) {
+        m = new Map();
+        hashMap.set(key, m);
+      }
+      if (typeof args[0] === "object") {
+        for (const [k, v] of Object.entries(args[0])) m.set(k, String(v));
+      } else {
+        m.set(args[0], String(args[1]));
+      }
+      return 1;
+    };
+    (redis.redis as any).hvals = async (key: string) => Array.from(hashMap.get(key)?.values() ?? []);
     (redis.redis as any).del = async (key: string) => {
       deletedKeys.push(key);
       mockStore.delete(key);
+      hashMap.delete(key);
       return 1;
     };
   });
@@ -67,9 +84,10 @@ describe("Seamless Redis Write-Through & In-Place Cache Synchronization", () => 
       JSON.stringify({ id: streamerId, name: "OldStreamer", displayName: "Old" }),
     );
 
-    mockStore.set(
+    await (redis.redis as any).hset(
       `org:${orgId}:streamers`,
-      JSON.stringify([{ id: streamerId, name: "OldStreamer", displayName: "Old" }]),
+      streamerId,
+      JSON.stringify({ id: streamerId, name: "OldStreamer", displayName: "Old" }),
     );
 
     mockStore.set(
@@ -99,9 +117,9 @@ describe("Seamless Redis Write-Through & In-Place Cache Synchronization", () => 
     expect(streamerInfo.name).toBe("NewStreamer");
     expect(streamerInfo.displayName).toBe("New Display");
 
-    const orgStreamers = JSON.parse(mockStore.get(`org:${orgId}:streamers`)!);
-    expect(orgStreamers[0].name).toBe("NewStreamer");
-    expect(orgStreamers[0].displayName).toBe("New Display");
+    const orgStreamer = JSON.parse(await (redis.redis as any).hget(`org:${orgId}:streamers`, streamerId)!);
+    expect(orgStreamer.name).toBe("NewStreamer");
+    expect(orgStreamer.displayName).toBe("New Display");
 
     const userOrgs = JSON.parse(mockStore.get(`user:${userId}:org_list`)!);
     expect(userOrgs[0].streamers[0].name).toBe("NewStreamer");

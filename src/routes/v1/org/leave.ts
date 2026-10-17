@@ -48,8 +48,11 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "MEMBER_LEFT",
         targetType: "MEMBER",
-        targetId: member.id,
-        payload: { role: member.role },
+        targetId: user.data.id,
+        payload: {
+          targetUserId: String(user.data.id),
+          role: member.role,
+        },
       });
 
       return "OK";

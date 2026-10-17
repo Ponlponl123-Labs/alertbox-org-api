@@ -4,6 +4,7 @@ import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -24,7 +25,7 @@ export const endpoint = new Elysia()
       const [streamer, members] = await Promise.all([
         prisma.client.streamer.findUnique({
           where: { id: streamerId },
-          select: { id: true, uri: true },
+          select: { id: true, name: true, uri: true },
         }),
         prisma.client.organizationMember.findMany({
           where: { orgId },
@@ -64,6 +65,15 @@ export const endpoint = new Elysia()
       }
 
       await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
+
+      await logOrgAudit({
+        orgId,
+        userId: user.data.id,
+        action: "STREAMER_DELETED",
+        targetType: "STREAMER",
+        targetId: streamerId,
+        payload: { name: streamer?.name },
+      });
 
       return "OK";
     },

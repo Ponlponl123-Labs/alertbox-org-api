@@ -121,11 +121,15 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "MEMBER_ROLE_UPDATED",
         targetType: "MEMBER",
-        targetId: targetMemberId,
+        targetId: targetMember.userId,
         payload: {
+          targetMemberId: String(targetMemberId),
           targetUserId: String(targetMember.userId),
+          previousRole: targetMember.role,
           role: updated.role,
+          previousPermissions: targetMember.permissions ? targetMember.permissions.toString() : "0",
           permissions: updated.permissions.toString(),
+          streamerAssignments: body.streamerAssignments ?? null,
           streamerAssignmentsCount: body.streamerAssignments ? body.streamerAssignments.length : undefined,
         },
       });

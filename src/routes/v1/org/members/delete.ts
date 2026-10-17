@@ -62,8 +62,13 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "MEMBER_REMOVED",
         targetType: "MEMBER",
-        targetId: targetMemberId,
-        payload: { removedUserId: String(targetMember.userId), role: targetMember.role },
+        targetId: targetMember.userId,
+        payload: {
+          targetMemberId: String(targetMemberId),
+          targetUserId: String(targetMember.userId),
+          removedUserId: String(targetMember.userId),
+          role: targetMember.role,
+        },
       });
 
       return "OK";

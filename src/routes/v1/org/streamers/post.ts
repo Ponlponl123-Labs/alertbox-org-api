@@ -7,6 +7,7 @@ import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
 import { isSelfHosted } from "@/utils/instance";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -89,6 +90,15 @@ export const endpoint = new Elysia()
       ];
 
       await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
+
+      await logOrgAudit({
+        orgId,
+        userId: user.data.id,
+        action: "STREAMER_CREATED",
+        targetType: "STREAMER",
+        targetId: streamer.id,
+        payload: { name: streamer.name, displayName: streamer.displayName },
+      });
 
       return {
         id: String(streamer.id),

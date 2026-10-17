@@ -4,6 +4,7 @@ import { prisma } from "@/core/prisma";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { resolveProvider, removeConnection } from "@/classes/streamer";
+import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -23,7 +24,7 @@ export const endpoint = new Elysia()
         set,
       );
       if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
-      const { streamerId } = authRes;
+      const { orgId, streamerId } = authRes;
 
       const provider = resolveProvider(params.provider ?? "");
       if (!provider) {
@@ -32,6 +33,19 @@ export const endpoint = new Elysia()
       }
 
       await removeConnection(streamerId, provider);
+
+      await logOrgAudit({
+        orgId,
+        userId: user.data.id,
+        action: "INTEGRATION_DISCONNECTED",
+        targetType: "STREAMER",
+        targetId: streamerId,
+        payload: {
+          streamerId: String(streamerId),
+          platform: provider,
+        },
+      });
+
       return "OK";
     },
     {
