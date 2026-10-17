@@ -21,16 +21,14 @@ export async function verifyTokenAndRevocation(
   const userKey = payload.userId.toString();
   const redisKey = `user:v:${userKey}`;
 
-  // 1. Fast-path: Check Redis cached version
   const cachedVersion = await redis.redis.get(redisKey);
   if (cachedVersion !== null) {
     if (parseInt(cachedVersion, 10) !== payload.version) {
-      return null; // Revoked!
+      return null;
     }
     return { userId: payload.userId, version: payload.version };
   }
 
-  // 2. Fallback: Query DB (cache miss)
   const user = await prisma.client.user.findFirst({
     where: typeof payload.userId === "bigint"
       ? { id: payload.userId.toString() as any }

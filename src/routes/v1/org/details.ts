@@ -52,7 +52,7 @@ export const endpoint = new Elysia()
         include: {
           organization: {
             include: {
-              _count: { select: { members: true, streamers: true } },
+              _count: { select: { members: { where: { isDeleted: null } }, streamers: true } },
               streamers: {
                 where: { deletedAt: null },
                 select: {
@@ -69,7 +69,7 @@ export const endpoint = new Elysia()
         },
       });
 
-      if (!member || member.organization.deletedAt) {
+      if (!member || member.isDeleted || member.organization.deletedAt) {
         set.status = "Not Found";
         return "Organization not found";
       }
@@ -81,6 +81,7 @@ export const endpoint = new Elysia()
         avatar: member.organization.avatar,
         banner: member.organization.banner,
         ownerId: String(member.organization.ownerId),
+        createBy: String(member.organization.createBy),
         memberCount: member.organization._count.members,
         createdAt: member.organization.createdAt,
       };

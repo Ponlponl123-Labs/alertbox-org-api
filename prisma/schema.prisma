@@ -21,10 +21,11 @@ model User {
   updatedAt          DateTime               @updatedAt @db.Timestamp(0)
   sessions           Session[]              @relation("UserSessions")
   sessionUsages      SessionUsage[]
-  ownedOrganizations Organization[]         @relation("OrgOwner")
-  memberships        OrganizationMember[]
-  invitesSent        OrganizationInvite[]   @relation("OrgInviter")
-  auditLogs          OrganizationAuditLog[]
+  ownedOrganizations   Organization[]         @relation("OrgOwner")
+  createdOrganizations Organization[]         @relation("OrgCreator")
+  memberships          OrganizationMember[]
+  invitesSent          OrganizationInvite[]   @relation("OrgInviter")
+  auditLogs            OrganizationAuditLog[]
 
   @@unique([id, secret])
 }
@@ -37,10 +38,12 @@ model Organization {
   avatar              String?                @db.VarChar(512)
   banner              String?                @db.VarChar(512)
   ownerId             BigInt                 @db.UnsignedBigInt
+  createBy            BigInt                 @db.UnsignedBigInt
   deletedAt           DateTime?              @db.Timestamp(0)
   createdAt           DateTime               @default(now()) @db.Timestamp(0)
   updatedAt           DateTime               @updatedAt @db.Timestamp(0)
   owner               User                   @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  creator             User                   @relation("OrgCreator", fields: [createBy], references: [id], onDelete: Restrict)
   members             OrganizationMember[]
   invites             OrganizationInvite[]
   rolePresets         OrganizationRolePreset[]
@@ -51,9 +54,8 @@ model Organization {
   streamlabsRelayLogs StreamlabsRelayLog[]
   auditLogs           OrganizationAuditLog[]
 
-  @@index([ownerId])
+  @@index([createBy])
   @@index([ownerId, deletedAt])
-  @@index([deletedAt])
 }
 
 model OrganizationMember {
@@ -62,6 +64,7 @@ model OrganizationMember {
   userId       BigInt       @db.UnsignedBigInt
   role         OrgRole      @default(MEMBER)
   permissions  BigInt       @default(0) @db.UnsignedBigInt
+  isDeleted    DateTime?    @db.DateTime(0)
   createdAt    DateTime     @default(now()) @db.Timestamp(0)
   updatedAt    DateTime     @updatedAt @db.Timestamp(0)
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)

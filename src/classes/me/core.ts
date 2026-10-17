@@ -31,6 +31,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     const rawMemberships = await prisma.client.organizationMember.findMany({
       where: {
         userId,
+        isDeleted: null,
         organization: { deletedAt: null },
       },
       include: {

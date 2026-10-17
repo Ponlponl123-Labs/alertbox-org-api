@@ -28,7 +28,7 @@ export const endpoint = new Elysia()
         where: { id: targetMemberId },
       });
 
-      if (!targetMember || targetMember.orgId !== orgId) {
+      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Member not found";
       }

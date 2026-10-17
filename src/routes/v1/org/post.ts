@@ -5,7 +5,7 @@ import { redis } from "@/core/redis";
 import { nanoid } from "nanoid";
 import { OrgPerm } from "@/utils/rbac";
 import { pureUserSelect } from "@/consts/session";
-import { OrgType } from "@/generated/prisma/client";
+import { OrgRole, OrgType } from "@/generated/prisma/client";
 import { isSelfHosted } from "@/utils/instance";
 
 export const createOrgEndpoint = new Elysia()
@@ -16,12 +16,17 @@ export const createOrgEndpoint = new Elysia()
       const user = await getAuthenticatedUser(pureUserSelect);
       const userType = user.data.type || "REGULAR";
 
-      // Limit regular and supporter users to 1 organization on production; community self-hosted is unlocked
+      // Limit regular and supporter users to 1 active owned organization on production; community self-hosted is unlocked
       if (!isSelfHosted() && userType !== "OPERATOR") {
-        const ownedCount = await prisma.client.organization.count({
-          where: { ownerId: user.data.id, deletedAt: null },
+        const activeOwnedCount = await prisma.client.organizationMember.count({
+          where: {
+            userId: user.data.id,
+            role: OrgRole.OWNER,
+            isDeleted: null,
+            organization: { deletedAt: null },
+          },
         });
-        if (ownedCount >= 1) {
+        if (activeOwnedCount >= 1) {
           set.status = "Forbidden";
           return "Regular and supporter accounts can only create one organization";
         }
@@ -50,6 +55,7 @@ export const createOrgEndpoint = new Elysia()
         const org = await tx.organization.create({
           data: {
             ownerId: user.data.id,
+            createBy: user.data.id,
             type: orgType,
             name,
             slug,

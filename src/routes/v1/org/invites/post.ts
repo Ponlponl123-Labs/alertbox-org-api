@@ -58,7 +58,7 @@ export const endpoint = new Elysia()
       const alreadyMember = await prisma.client.organizationMember.findUnique({
         where: { orgId_userId: { orgId, userId: targetUser.id } },
       });
-      if (alreadyMember) {
+      if (alreadyMember && !alreadyMember.isDeleted) {
         set.status = "Conflict";
         return "User is already a member of this organization";
       }

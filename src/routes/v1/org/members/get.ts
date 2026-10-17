@@ -33,7 +33,7 @@ export const endpoint = new Elysia()
           },
         }),
         prisma.client.organizationMember.findMany({
-          where: { orgId },
+          where: { orgId, isDeleted: null },
           include: {
             user: {
               select: {

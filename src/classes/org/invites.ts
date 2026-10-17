@@ -29,7 +29,7 @@ export async function createOrgInvite(
   const alreadyMember = await prisma.client.organizationMember.findUnique({
     where: { orgId_userId: { orgId: targetOrgId, userId: targetUser.id } },
   });
-  if (alreadyMember) {
+  if (alreadyMember && !alreadyMember.isDeleted) {
     throw new Error("User is already a member of this organization");
   }
 
@@ -149,12 +149,18 @@ export async function acceptOrgInviteCode(code: string, userId: bigint) {
       data: { acceptedAt: new Date() },
     });
 
-    return tx.organizationMember.create({
-      data: {
+    return tx.organizationMember.upsert({
+      where: { orgId_userId: { orgId: invite.orgId, userId } },
+      create: {
         orgId: invite.orgId,
         userId,
         role: invite.role,
         permissions: invite.permissions,
+      },
+      update: {
+        role: invite.role,
+        permissions: invite.permissions,
+        isDeleted: null,
       },
     });
   });

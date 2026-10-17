@@ -55,7 +55,7 @@ export const endpoint = new Elysia()
                COUNT(*) as count,
                CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
                CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
-        FROM TransactionLog
+        FROM TransactionLog FORCE INDEX (TransactionLog_orgId_createdAt_idx)
         WHERE orgId = ${orgId}
           AND createdAt >= ${startDate}
           AND status != 'FAILED'

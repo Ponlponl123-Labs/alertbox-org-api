@@ -17,6 +17,7 @@ export async function updateOrgCache(
     avatar?: string | null;
     banner?: string | null;
     ownerId?: bigint | string;
+    createBy?: bigint | string;
     createdAt?: Date;
   },
   memberUserIds: (bigint | string)[] = [],
@@ -35,6 +36,7 @@ export async function updateOrgCache(
         avatar: org.avatar ?? null,
         banner: org.banner ?? null,
         ownerId: org.ownerId ? String(org.ownerId) : "",
+        createBy: org.createBy ? String(org.createBy) : "",
         createdAt: org.createdAt || new Date(),
       };
 

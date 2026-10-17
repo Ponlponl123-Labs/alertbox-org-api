@@ -95,7 +95,6 @@ export const orgContext = new Elysia({ name: "org-context" })
     const userId = user.data.id;
     const userKey = String(userId);
 
-    // 1. Resolve target Org ID from header/cookie or find user's default/first org
     const requestedOrgIdHeader = headers["x-org-id"] || (cookie?.ab_org_id?.value as string | undefined);
     let targetOrgId: bigint | null = null;
 
@@ -103,7 +102,6 @@ export const orgContext = new Elysia({ name: "org-context" })
       targetOrgId = await resolveOrgId(requestedOrgIdHeader);
     }
 
-    // 2. Fetch membership (from Redis hash or DB)
     let membership: { role: OrgRole; permissions: bigint; orgId: bigint } | null = null;
 
     if (targetOrgId) {
@@ -117,15 +115,13 @@ export const orgContext = new Elysia({ name: "org-context" })
             permissions: BigInt(permStr),
           };
         } catch {
-          // ignore cache format error and fallback
         }
       }
     }
 
     if (!membership) {
-      // Query DB for user's memberships
       const memberRecord = await prisma.client.organizationMember.findFirst({
-        where: targetOrgId ? { userId, orgId: targetOrgId } : { userId },
+        where: targetOrgId ? { userId, orgId: targetOrgId, isDeleted: null } : { userId, isDeleted: null },
         select: {
           orgId: true,
           role: true,
@@ -140,7 +136,6 @@ export const orgContext = new Elysia({ name: "org-context" })
           role: memberRecord.role,
           permissions: memberRecord.permissions,
         };
-        // Cache in Redis hash (TTL 24 hours)
         await redis.redis.hset(
           `user:${userKey}:orgs`,
           String(memberRecord.orgId),
@@ -154,7 +149,6 @@ export const orgContext = new Elysia({ name: "org-context" })
       return { org: null };
     }
 
-    // 3. Resolve active Streamer ID in this Org
     const requestedStreamerIdHeader = headers["x-streamer-id"] || (cookie?.ab_streamer_id?.value as string | undefined);
     let targetStreamerId: bigint | null = null;
 
@@ -224,10 +218,10 @@ export async function getMemberPermissions(
 
   const callerMember = await prisma.client.organizationMember.findUnique({
     where: { orgId_userId: { orgId, userId } },
-    select: { permissions: true, role: true },
+    select: { permissions: true, role: true, isDeleted: true },
   });
 
-  if (callerMember) {
+  if (callerMember && !callerMember.isDeleted) {
     void redis.redis
       .hset(
         `user:${userId}:orgs`,
@@ -296,10 +290,10 @@ export async function authorizeStreamer(
 
   const callerMember = await prisma.client.organizationMember.findUnique({
     where: { orgId_userId: { orgId, userId } },
-    select: { id: true, permissions: true, role: true },
+    select: { id: true, permissions: true, role: true, isDeleted: true },
   });
 
-  if (!callerMember) {
+  if (!callerMember || callerMember.isDeleted) {
     set.status = "Forbidden";
     return `Insufficient permissions to ${options.actionDescription || "access channel"}`;
   }

@@ -5,7 +5,7 @@ import { OrgRole } from "@/generated/prisma/client";
 export async function listOrgMembers(orgId: bigint | string) {
   const targetOrgId = BigInt(orgId);
   const members = await prisma.client.organizationMember.findMany({
-    where: { orgId: targetOrgId },
+    where: { orgId: targetOrgId, isDeleted: null },
     include: {
       user: {
         select: {
@@ -108,8 +108,9 @@ export async function removeOrgMember(
   const targetOrgId = BigInt(orgId);
   const targetUid = BigInt(targetUserId);
 
-  await prisma.client.organizationMember.delete({
+  await prisma.client.organizationMember.update({
     where: { orgId_userId: { orgId: targetOrgId, userId: targetUid } },
+    data: { isDeleted: new Date() },
   });
 
   await Promise.all([

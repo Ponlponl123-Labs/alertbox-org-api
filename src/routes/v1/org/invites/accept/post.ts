@@ -58,6 +58,7 @@ export const endpoint = new Elysia()
           update: {
             role: invite.role,
             permissions: invite.permissions,
+            isDeleted: null,
           },
         }),
         prisma.client.organizationInvite.update({
@@ -123,6 +124,7 @@ export const endpoint = new Elysia()
           update: {
             role: invite.role,
             permissions: invite.permissions,
+            isDeleted: null,
           },
         }),
         prisma.client.organizationInvite.update({

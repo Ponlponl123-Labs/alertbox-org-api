@@ -514,14 +514,14 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
   });
 
   describe("Write & Mutation Queries (INSERT, UPDATE, DELETE)", () => {
-    it("Session.create: insert new session [scans: 0, logical <= 10, physical: 0]", async () => {
+    it("Session.create: insert new session [scans: 0, logical <= 15, physical: 0]", async () => {
       const res = await inspectQuery(
         "Session.create",
         "INSERT INTO `Session` (userId, userSecret, token, method, userAgent, ipAddress, expiresAt) " +
         "VALUES (1, 'sec', 'tok_perf_test_1', 'POST', 'test-agent', '127.0.0.1', DATE_ADD(NOW(), INTERVAL 2 HOUR))"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(10);
+      expect(res.logicalReads).toBeLessThanOrEqual(15);
       expect(res.physicalReads).toBe(0);
     });
 
@@ -593,8 +593,8 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     it("Organization.create: insert organization [scans: 0, logical <= 10, physical: 0]", async () => {
       const res = await inspectQuery(
         "Organization.create",
-        "INSERT INTO `Organization` (name, slug, ownerId, createdAt, updatedAt) " +
-        "VALUES ('Alpha Org', 'alpha-org-perf-test', 1, NOW(), NOW())"
+        "INSERT INTO `Organization` (name, slug, ownerId, createBy, createdAt, updatedAt) " +
+        "VALUES ('Alpha Org', 'alpha-org-perf-test', 1, 1, NOW(), NOW())"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);

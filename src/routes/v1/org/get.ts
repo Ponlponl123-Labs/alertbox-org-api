@@ -19,11 +19,11 @@ export const listOrgsEndpoint = new Elysia()
       }
 
       const memberships = await prisma.client.organizationMember.findMany({
-        where: { userId: user.data.id, organization: { deletedAt: null } },
+        where: { userId: user.data.id, isDeleted: null, organization: { deletedAt: null } },
         include: {
           organization: {
             include: {
-              _count: { select: { members: true, streamers: true } },
+              _count: { select: { members: { where: { isDeleted: null } }, streamers: true } },
               streamers: {
                 where: { deletedAt: null },
                 select: {
@@ -51,6 +51,7 @@ export const listOrgsEndpoint = new Elysia()
           avatar: org.avatar,
           banner: org.banner,
           ownerId: String(org.ownerId),
+          createBy: String(org.createBy),
           createdAt: org.createdAt,
         };
         void redis.redis.setex(`org:${String(org.id)}:info`, day, JSON.stringify(orgInfo)).catch(() => {});

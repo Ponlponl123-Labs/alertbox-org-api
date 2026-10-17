@@ -6,6 +6,7 @@ import { RolePresets } from "@/utils/rbac";
 import { OrgRole } from "@/generated/prisma/client";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import { isSelfHosted } from "@/utils/instance";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -32,7 +33,7 @@ export const endpoint = new Elysia()
         where: { id: targetMemberId },
       });
 
-      if (!targetMember || targetMember.orgId !== orgId) {
+      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Target member not found in this organization";
       }
@@ -42,8 +43,40 @@ export const endpoint = new Elysia()
         return "You are already the owner of this organization";
       }
 
-      // Single-owner transaction: Demote caller to ADMIN, promote target to OWNER
+      const targetUser = await prisma.client.user.findUnique({
+        where: { id: targetMember.userId },
+        select: { id: true, type: true },
+      });
+
+      if (!targetUser) {
+        set.status = "Not Found";
+        return "Target user not found";
+      }
+
+      if (!isSelfHosted() && targetUser.type !== "OPERATOR") {
+        const targetActiveOwnedCount = await prisma.client.organizationMember.count({
+          where: {
+            userId: targetMember.userId,
+            role: OrgRole.OWNER,
+            isDeleted: null,
+            organization: { deletedAt: null },
+          },
+        });
+
+        if (targetActiveOwnedCount >= 1) {
+          set.status = "Forbidden";
+          return "Target user already owns an active organization";
+        }
+      }
+
+      // Single-owner transaction: Update org ownerId, demote caller to ADMIN, promote target to OWNER
       await prisma.client.$transaction([
+        prisma.client.organization.update({
+          where: { id: orgId },
+          data: {
+            ownerId: targetMember.userId,
+          },
+        }),
         prisma.client.organizationMember.update({
           where: { orgId_userId: { orgId, userId: user.data.id } },
           data: {

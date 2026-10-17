@@ -50,7 +50,7 @@ describe("Organization Transaction Activity Query Performance & Index Verificati
   it("TransactionLog.byOrgActivity: verifies sub-millisecond execution, index range scan, zero full table scans", async () => {
     const sql =
       "SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as day, COUNT(*) as count " +
-      "FROM `TransactionLog` " +
+      "FROM `TransactionLog` FORCE INDEX (`TransactionLog_orgId_createdAt_idx`) " +
       "WHERE orgId = 1 AND createdAt >= DATE_SUB(NOW(), INTERVAL 365 DAY) AND status != 'FAILED' " +
       "GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')";
 

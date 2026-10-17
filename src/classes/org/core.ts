@@ -25,7 +25,7 @@ export async function getOrganizationDetails(orgId: bigint, userId: bigint) {
     },
   });
 
-  if (!member || member.organization.deletedAt) {
+  if (!member || member.isDeleted || member.organization.deletedAt) {
     return null;
   }
 
@@ -49,11 +49,11 @@ export async function getOrganizationDetails(orgId: bigint, userId: bigint) {
 
 export async function listUserOrganizations(userId: bigint) {
   const memberships = await prisma.client.organizationMember.findMany({
-    where: { userId, organization: { deletedAt: null } },
+    where: { userId, isDeleted: null, organization: { deletedAt: null } },
     include: {
       organization: {
         include: {
-          _count: { select: { members: true, streamers: true } },
+          _count: { select: { members: { where: { isDeleted: null } }, streamers: true } },
           streamers: {
             where: { deletedAt: null },
             select: {

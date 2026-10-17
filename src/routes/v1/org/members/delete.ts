@@ -3,7 +3,7 @@ import { auth } from "@/core/auth";
 import { prisma } from "@/core/prisma";
 import { redis } from "@/core/redis";
 import { hasPermission, OrgPerm } from "@/utils/rbac";
-import { authorizeOrg, parseBigIntParam } from "@/core/org";
+import { authorizeOrg, parseBigIntParam, resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
@@ -18,17 +18,25 @@ export const endpoint = new Elysia()
         return "Invalid ID parameters";
       }
 
-      const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBERS_MANAGE, set, "remove members");
-      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
-      const { orgId } = authRes;
+      const orgId = await resolveOrgId(params.orgId);
+      if (!orgId) {
+        set.status = "Bad Request";
+        return "Invalid ID parameters";
+      }
 
       const targetMember = await prisma.client.organizationMember.findUnique({
         where: { id: targetMemberId },
       });
 
-      if (!targetMember || targetMember.orgId !== orgId) {
+      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Member not found";
+      }
+
+      const isSelf = targetMember.userId === user.data.id;
+      if (!isSelf) {
+        const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBERS_MANAGE, set, "remove members");
+        if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
       }
 
       if (targetMember.role === "OWNER") {
@@ -36,8 +44,9 @@ export const endpoint = new Elysia()
         return "Cannot remove organization OWNER";
       }
 
-      await prisma.client.organizationMember.delete({
+      await prisma.client.organizationMember.update({
         where: { id: targetMemberId },
+        data: { isDeleted: new Date() },
       });
 
       await Promise.all([
