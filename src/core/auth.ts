@@ -2,7 +2,6 @@ import Elysia from "elysia";
 import { Me } from "@/classes/me";
 import { isBearerToken } from "@/utils/bearer-token";
 import { ip } from "elysia-ip";
-import { Prisma } from "@/generated/prisma/client";
 import { basicUserSelect } from "@/consts/session";
 
 /**
@@ -40,9 +39,9 @@ export const auth = new Elysia({ name: "auth" })
        * @throws {BadRequestError} If the Authorization header is missing or invalid.
        * @throws {UnauthorizedError} If the session token is invalid or expired.
        */
-      async getAuthenticatedUser<S extends Prisma.UserSelect = typeof basicUserSelect>(
-        select?: S,
-      ): Promise<Omit<Me<S>, "data"> & { data: Prisma.UserGetPayload<{ select: S }> & { id: bigint } }> {
+      async getAuthenticatedUser(
+        select?: any,
+      ): Promise<Me & { data: any }> {
         const authHeader = headers.authorization;
         if (!authHeader) {
           throw new BadRequestError("Bad Request");
@@ -51,7 +50,7 @@ export const auth = new Elysia({ name: "auth" })
         if (!token) {
           throw new BadRequestError("Bad Request");
         }
-        const user = await new Me().use(token, ip, select as any);
+        const user = await new Me().use(token, ip, select ?? basicUserSelect);
         if (!user || !user.data) {
           throw new UnauthorizedError("Unauthorized");
         }

@@ -40,11 +40,15 @@ function loadEnvFile(filePath: string): boolean {
       if (eqIdx === -1) continue;
       const key = line.slice(0, eqIdx).trim();
       let val = line.slice(eqIdx + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
+      if (val.startsWith('"')) {
+        const endQuote = val.indexOf('"', 1);
+        val = endQuote !== -1 ? val.slice(1, endQuote) : val.slice(1);
+      } else if (val.startsWith("'")) {
+        const endQuote = val.indexOf("'", 1);
+        val = endQuote !== -1 ? val.slice(1, endQuote) : val.slice(1);
+      } else {
+        const hashIdx = val.indexOf("#");
+        if (hashIdx !== -1) val = val.slice(0, hashIdx).trim();
       }
       if (process.env[key] === undefined) {
         process.env[key] = val;

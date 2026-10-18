@@ -1,13 +1,10 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 import { MinimalUser } from "@/types/account.types";
 import { nanoid } from "nanoid";
 import betterConsole, { tsflag } from "ts-better-console";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
-
-import { OrgPerm } from "@/consts/permission";
-import { pureUserSelect } from "@/consts/session";
 
 /**
  * Create a new user in the database with their primary organization, streamer profile, and widgets.
@@ -26,24 +23,37 @@ export async function createAccount(data: {
   while (attempts < maxAttempts) {
     const timestamp = Date.now();
     const internalSecret = `${nanoid(32)}.${timestamp}.${nanoid(32)}`;
-    const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
-    const orgSlug = `${data.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "org"}-${nanoid(6)}`;
 
     try {
-      const user = await prisma.client.$transaction(async (tx) => {
-        const newUser = await tx.user.create({
-          data: {
+      const user = await db.transaction().execute(async (trx) => {
+        const now = new Date();
+        const insertRes = await trx
+          .insertInto("User")
+          .values({
             email: data.email,
             name: data.name,
             createWith: data.createWith,
             secret: internalSecret,
-          },
-        });
+            updatedAt: now,
+          })
+          .executeTakeFirst();
 
-        return await tx.user.findUnique({
-          where: { id: newUser.id },
-          select: pureUserSelect,
-        });
+        const newId = insertRes.insertId ? Number(insertRes.insertId) : 0;
+        return await trx
+          .selectFrom("User")
+          .where("id", "=", newId)
+          .select([
+            "id",
+            "type",
+            "email",
+            "name",
+            "avatar",
+            "createWith",
+            "createdAt",
+            "disabledAt",
+            "deletedAt",
+          ])
+          .executeTakeFirst();
       });
 
       if (!user) throw new Error("Failed to load created user");
@@ -59,15 +69,13 @@ export async function createAccount(data: {
       );
       return user;
     } catch (error: any) {
-      if (error?.code === "P2002") {
-        const target = error?.meta?.target;
-        const isEmailCollision = Array.isArray(target)
-          ? target.includes("email")
-          : typeof target === "string"
-          ? target.includes("email")
-          : false;
-
-        if (isEmailCollision) {
+      if (
+        error?.code === "ER_DUP_ENTRY" ||
+        error?.errno === 1062 ||
+        error?.code === "P2002"
+      ) {
+        const message = String(error?.message || "");
+        if (message.includes("email") || message.includes("User_email_key")) {
           return false;
         }
 
@@ -76,7 +84,7 @@ export async function createAccount(data: {
           tsflag(
             "warn",
             true,
-            `[Prisma > createAccount] Collision for secret/widget token. Retrying...`,
+            `[Kysely > createAccount] Collision for secret. Retrying...`,
           ),
         );
       } else {
@@ -102,8 +110,9 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
       const parsed = JSON.parse(cached);
       if (parsed && parsed.id != null) {
         return {
-          ...parsed,
           id: BigInt(parsed.id),
+          disabledAt: parsed.disabledAt ? new Date(parsed.disabledAt) : null,
+          deletedAt: parsed.deletedAt ? new Date(parsed.deletedAt) : null,
         };
       }
     } catch {
@@ -111,16 +120,11 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
     }
   }
 
-  const user = await prisma.client.user.findUnique({
-    select: {
-      id: true,
-      disabledAt: true,
-      deletedAt: true,
-    },
-    where: {
-      email: cleanEmail,
-    },
-  });
+  const user = await db
+    .selectFrom("User")
+    .where("email", "=", cleanEmail)
+    .select(["id", "disabledAt", "deletedAt"])
+    .executeTakeFirst();
 
   if (user?.deletedAt) {
     await redis.redis.setex(cacheKey, day, "deleted");
@@ -133,7 +137,13 @@ export async function isExist(email: string): Promise<MinimalUser | null> {
     await redis.redis.setex(cacheKey, 300, "null");
   }
 
-  return user;
+  return user
+    ? {
+        id: BigInt(user.id),
+        disabledAt: user.disabledAt ? new Date(user.disabledAt) : null,
+        deletedAt: user.deletedAt ? new Date(user.deletedAt) : null,
+      }
+    : null;
 }
 
 /**
@@ -148,69 +158,76 @@ export async function deleteAccount(uid: string | bigint, email: string) {
     throw new Error("Invalid user ID");
   }
 
-  const user = await prisma.client.user.findUnique({
-    where: { id: userId },
-    include: {
-      memberships: {
-        include: {
-          organization: {
-            include: {
-              streamers: {
-                include: {
-                  reservedUris: {
-                    where: { deletedAt: null },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  const user = await db
+    .selectFrom("User")
+    .where("id", "=", Number(userId))
+    .select(["id", "secret"])
+    .executeTakeFirst();
 
   if (!user) {
     throw new Error("User not found");
   }
 
+  // Fetch streamers where the user is an owner of the organization
+  const ownedStreamers = await db
+    .selectFrom("OrganizationMember")
+    .innerJoin("Streamer", "Streamer.orgId", "OrganizationMember.orgId")
+    .where("OrganizationMember.userId", "=", Number(userId))
+    .where("OrganizationMember.role", "=", "OWNER")
+    .where("OrganizationMember.isDeleted", "is", null)
+    .select(["Streamer.id", "Streamer.uri"])
+    .execute();
+
+  const streamerIds = ownedStreamers.map((s) => s.id);
+  const reservedUris = streamerIds.length > 0
+    ? await db
+        .selectFrom("ReservedUri")
+        .where("streamerId", "in", streamerIds)
+        .where("deletedAt", "is", null)
+        .select(["id", "uri", "streamerId"])
+        .execute()
+    : [];
+
   const deletedEmail = `deleted-${timestamp}-${email}`.slice(0, 256);
   const deletedSecret = `deleted-${timestamp}-${user.secret}`.slice(0, 255);
+  const now = new Date();
 
-  const updated = await prisma.client.$transaction(async (tx) => {
-    // Release active reserved URIs by suffixing them and marking as deleted
-    for (const membership of user.memberships) {
-      if (membership.role === "OWNER") {
-        for (const streamer of membership.organization.streamers) {
-          for (const reserved of streamer.reservedUris) {
-            await tx.reservedUri.update({
-              where: { id: reserved.id },
-              data: {
-                uri: `deleted-${timestamp}-${reserved.uri}`.slice(0, 50),
-                deletedAt: new Date(),
-              },
-            });
-          }
-          if (streamer.uri) {
-            await tx.streamer.update({
-              where: { id: streamer.id },
-              data: {
-                uri: `deleted-${timestamp}-${streamer.uri}`.slice(0, 64),
-                deletedAt: new Date(),
-              },
-            });
-          }
-        }
+  await db.transaction().execute(async (trx) => {
+    for (const reserved of reservedUris) {
+      await trx
+        .updateTable("ReservedUri")
+        .set({
+          uri: `deleted-${timestamp}-${reserved.uri}`.slice(0, 50),
+          deletedAt: now,
+        })
+        .where("id", "=", reserved.id)
+        .execute();
+    }
+
+    for (const streamer of ownedStreamers) {
+      if (streamer.uri) {
+        await trx
+          .updateTable("Streamer")
+          .set({
+            uri: `deleted-${timestamp}-${streamer.uri}`.slice(0, 64),
+            deletedAt: now,
+            updatedAt: now,
+          })
+          .where("id", "=", streamer.id)
+          .execute();
       }
     }
 
-    return await tx.user.update({
-      where: { id: userId },
-      data: {
+    await trx
+      .updateTable("User")
+      .set({
         email: deletedEmail,
         secret: deletedSecret,
-        deletedAt: new Date(),
-      },
-    });
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where("id", "=", Number(userId))
+      .execute();
   });
 
   // Cleanup Caches
@@ -220,22 +237,17 @@ export async function deleteAccount(uid: string | bigint, email: string) {
     redis.redis.del(`email:${email.trim().toLowerCase()}`),
   ];
 
-  for (const membership of user.memberships) {
-    if (membership.role === "OWNER") {
-      for (const streamer of membership.organization.streamers) {
-        if (streamer.uri) {
-          cacheCleanup.push(redis.redis.del(`uri:${streamer.uri.toLowerCase()}:owner`));
-        }
-        for (const reserved of streamer.reservedUris) {
-          cacheCleanup.push(redis.redis.del(`uri:${reserved.uri.toLowerCase()}:owner`));
-        }
-      }
+  for (const streamer of ownedStreamers) {
+    if (streamer.uri) {
+      cacheCleanup.push(redis.redis.del(`uri:${streamer.uri.toLowerCase()}:owner`));
     }
+  }
+  for (const reserved of reservedUris) {
+    cacheCleanup.push(redis.redis.del(`uri:${reserved.uri.toLowerCase()}:owner`));
   }
 
   await Promise.all(cacheCleanup);
-
-  return updated;
+  return true;
 }
 
 /**
@@ -261,33 +273,65 @@ export async function ensureStreamerWidgets(
 
   const timestamp = Date.now();
   const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
+  const now = new Date();
 
-  const createdWidget = await prisma.client.widget.create({
-    data: {
-      orgId: targetOrgId,
-      streamerId: targetStreamerId,
+  return await db.transaction().execute(async (trx) => {
+    const widgetRes = await trx
+      .insertInto("Widget")
+      .values({
+        orgId: Number(targetOrgId),
+        streamerId: Number(targetStreamerId),
+        type: "ALERTBOX",
+        token: widgetToken,
+        updatedAt: now,
+      })
+      .executeTakeFirst();
+
+    const widgetId = Number(widgetRes.insertId);
+
+    const alertboxRes = await trx
+      .insertInto("AlertboxSetting")
+      .values({
+        widgetId,
+        globalVolume: 50,
+      })
+      .executeTakeFirst();
+
+    const alertboxId = Number(alertboxRes.insertId);
+
+    for (const evt of DEFAULT_ALERTBOX_EVENTS) {
+      await trx
+        .insertInto("AlertboxEvent")
+        .values({
+          alertboxId,
+          eventType: evt.eventType as any,
+          prefix: evt.prefix,
+          subfix: evt.subfix,
+          messageLayout: evt.messageLayout ?? 0,
+          animIn: evt.animIn ?? 0,
+          animOut: evt.animOut ?? 1,
+          ttsEnabled: evt.ttsEnabled ? 1 : 0,
+          updatedAt: now,
+        })
+        .execute();
+    }
+
+    const createdWidget = {
+      id: widgetId,
+      orgId: Number(targetOrgId),
+      streamerId: Number(targetStreamerId),
       type: "ALERTBOX",
       token: widgetToken,
       alertbox: {
-        create: {
-          events: {
-            createMany: {
-              data: DEFAULT_ALERTBOX_EVENTS,
-            },
-          },
-        },
+        id: alertboxId,
+        widgetId,
+        globalVolume: 50,
+        events: DEFAULT_ALERTBOX_EVENTS,
       },
-    },
-    include: {
-      alertbox: {
-        include: {
-          events: true,
-        },
-      },
-    },
-  });
+    };
 
-  return [createdWidget];
+    return [createdWidget];
+  });
 }
 
 export async function ensureUserWidgets(userId: string | bigint, currentWidgets: any[]): Promise<any[]> {

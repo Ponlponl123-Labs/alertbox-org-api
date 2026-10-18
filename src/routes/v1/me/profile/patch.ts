@@ -3,7 +3,7 @@ import { isValidUri } from "@/utils/regex";
 import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
 import { registerURI } from "@/classes/streamer";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 /**
  * PATCH endpoint to update/register the custom URI for the active streamer profile.
@@ -31,10 +31,11 @@ export const endpoint = new Elysia()
         return "Bad Request";
       }
 
-      const streamer = await prisma.client.streamer.findUnique({
-        where: { id: org.streamerId },
-        select: { uriCooldownEnd: true },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .select("uriCooldownEnd")
+        .where("id", "=", Number(org.streamerId))
+        .executeTakeFirst();
 
       const now = Date.now();
       const cooldown =

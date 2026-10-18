@@ -1,9 +1,9 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { setConnection } from "@/classes/streamer";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import betterConsole, { tsflag, s } from "ts-better-console";
-import { TransactionStatus } from "@/generated/prisma/client";
+import { TransactionStatus } from "@/db/enums";
 import { logDev } from "@/utils/log";
 
 /**
@@ -118,10 +118,11 @@ export async function relayStreamlabsDonation({
   const targetStreamerId = BigInt(streamerId);
 
   try {
-    const relayLog = await prisma.client.streamlabsRelayLog.create({
-      data: {
-        orgId: targetOrgId,
-        streamerId: targetStreamerId,
+    const insertRes = await db
+      .insertInto("StreamlabsRelayLog")
+      .values({
+        orgId: Number(targetOrgId),
+        streamerId: Number(targetStreamerId),
         provider,
         providerTxId: providerTxId ?? null,
         type: alertType,
@@ -131,19 +132,28 @@ export async function relayStreamlabsDonation({
         senderName: name ?? "Anonymous",
         senderEmail: identifier ?? null,
         message: message ?? null,
-      },
-    });
-    relayLogId = relayLog.id;
+        updatedAt: new Date(),
+      })
+      .executeTakeFirst();
+    relayLogId = insertRes.insertId ? BigInt(insertRes.insertId) : null;
     await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
     await redis.redis.publish(
       `alertbox-org:streamlabs-relay-logs:${streamerId}`,
       JSON.stringify({
         event: "created",
         log: {
-          ...relayLog,
-          id: String(relayLog.id),
-          orgId: String(relayLog.orgId),
-          streamerId: String(relayLog.streamerId),
+          id: String(relayLogId),
+          orgId: String(targetOrgId),
+          streamerId: String(targetStreamerId),
+          provider,
+          providerTxId: providerTxId ?? null,
+          type: alertType,
+          status: TransactionStatus.PENDING,
+          amount: Math.round(amount * 100),
+          currency,
+          senderName: name ?? "Anonymous",
+          senderEmail: identifier ?? null,
+          message: message ?? null,
         },
       }),
     );
@@ -213,23 +223,28 @@ export async function relayStreamlabsDonation({
   if (relayLogId) {
     const isOk = res?.ok ?? false;
     try {
-      const updated = await prisma.client.streamlabsRelayLog.update({
-        where: { id: relayLogId },
-        data: {
-          status: isOk ? TransactionStatus.COMPLETED : TransactionStatus.FAILED,
+      const status = isOk ? TransactionStatus.COMPLETED : TransactionStatus.FAILED;
+      await db
+        .updateTable("StreamlabsRelayLog")
+        .set({
+          status,
           errorMessage: isOk ? null : errText,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where("id", "=", Number(relayLogId))
+        .execute();
+
       await redis.redis.del(`redis:streamlabs-relay-logs:${streamerId}`);
       await redis.redis.publish(
         `alertbox-org:streamlabs-relay-logs:${streamerId}`,
         JSON.stringify({
           event: "updated",
           log: {
-            ...updated,
-            id: String(updated.id),
-            orgId: String(updated.orgId),
-            streamerId: String(updated.streamerId),
+            id: String(relayLogId),
+            orgId: String(targetOrgId),
+            streamerId: String(targetStreamerId),
+            status,
+            errorMessage: isOk ? null : errText,
           },
         }),
       );

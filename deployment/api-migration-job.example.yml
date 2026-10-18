@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: alertbox-org-api-migration
-  namespace: ponlponl123-labs
+  name: alertbox-org-api-migration-example
+  namespace: default
   annotations:
     argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,BeforeHookCreation
 spec:
   backoffLimit: 1
   template:
@@ -16,28 +16,39 @@ spec:
       restartPolicy: Never
       containers:
         - name: migration-runner
-          image: alertbox-org-api:latest
-          command: ["bun", "run", "db:migrate:deploy"]
+          image: gomicro/goose:v3.24.1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              GOOSE_DBSTRING="${DB_USER}:${DB_PASS}@tcp(${DB_HOST}:${DB_PORT})/${DB_NAME}?parseTime=true"
+              goose -dir /migrations mysql "$GOOSE_DBSTRING" up
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 50m
+              memory: 32Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 200m
+              memory: 64Mi
           env:
-            - name: NODE_ENV
-              value: "production"
             - name: DB_HOST
-              value: "mariadb-galera.mariadb.svc.cluster.local"
+              value: "mariadb.default.svc.cluster.local"
             - name: DB_PORT
               value: "3306"
             - name: DB_USER
-              value: "user"
+              value: "alertbox"
             - name: DB_NAME
-              value: "database"
+              value: "alertbox_org"
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
-                  name: secret
-                  key: mariadb_root_password
+                  name: db-secret
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: alertbox-org-migrations

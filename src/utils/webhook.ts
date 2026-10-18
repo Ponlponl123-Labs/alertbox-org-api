@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { AlertEventType } from "@/generated/prisma/client";
+import { AlertEventType } from "@/db/enums";
 import { StreamlabsOption } from "@/consts/integration";
 import type { KofiPayload } from "@/types/webhook.types";
 

@@ -10,17 +10,17 @@ const DEFAULT_CACHE_TTL = 3600;
  */
 export async function updateOrgCache(
   org: {
-    id: bigint | string;
+    id: bigint | string | number;
     type?: string;
     name?: string;
     slug?: string;
     avatar?: string | null;
     banner?: string | null;
-    ownerId?: bigint | string;
-    createBy?: bigint | string;
+    ownerId?: bigint | string | number;
+    createBy?: bigint | string | number;
     createdAt?: Date;
   },
-  memberUserIds: (bigint | string)[] = [],
+  memberUserIds: (bigint | string | number)[] = [],
 ): Promise<void> {
   const orgIdStr = String(org.id);
   const infoKey = `org:${orgIdStr}:info`;
@@ -81,8 +81,8 @@ export async function updateOrgCache(
  */
 export async function updateStreamerCache(
   streamer: {
-    id: bigint | string;
-    orgId: bigint | string;
+    id: bigint | string | number;
+    orgId: bigint | string | number;
     name?: string;
     displayName?: string;
     bio?: string | null;

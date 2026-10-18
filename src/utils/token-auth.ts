@@ -1,6 +1,6 @@
 import { parseToken, mintToken, type TokenPayload } from "./token";
 import { redis } from "@/core/redis";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 const DAY_SEC = 86400;
 
@@ -29,12 +29,11 @@ export async function verifyTokenAndRevocation(
     return { userId: payload.userId, version: payload.version };
   }
 
-  const user = await prisma.client.user.findFirst({
-    where: typeof payload.userId === "bigint"
-      ? { id: payload.userId.toString() as any }
-      : { id: payload.userId },
-    select: { id: true, secret: true },
-  });
+  const user = await db
+    .selectFrom("User")
+    .where("id", "=", Number(payload.userId))
+    .select(["id", "secret"])
+    .executeTakeFirst();
 
   if (!user) return null;
 

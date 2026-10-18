@@ -1,11 +1,10 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db, OrgRole, OrgType } from "@/db";
 import { redis } from "@/core/redis";
 import { nanoid } from "nanoid";
 import { OrgPerm } from "@/consts/permission";
 import { pureUserSelect } from "@/consts/session";
-import { OrgRole, OrgType } from "@/generated/prisma/client";
 import { isSelfHosted } from "@/utils/instance";
 
 export const createOrgEndpoint = new Elysia()
@@ -18,14 +17,16 @@ export const createOrgEndpoint = new Elysia()
 
       // Limit regular and supporter users to 1 active owned organization on production; community self-hosted is unlocked
       if (!isSelfHosted() && userType !== "OPERATOR") {
-        const activeOwnedCount = await prisma.client.organizationMember.count({
-          where: {
-            userId: user.data.id,
-            role: OrgRole.OWNER,
-            isDeleted: null,
-            organization: { deletedAt: null },
-          },
-        });
+        const activeOwnedCountRow = await db
+          .selectFrom("OrganizationMember")
+          .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+          .select((eb) => eb.fn.count("OrganizationMember.id").as("count"))
+          .where("OrganizationMember.userId", "=", Number(user.data.id))
+          .where("OrganizationMember.role", "=", "OWNER")
+          .where("OrganizationMember.isDeleted", "is", null)
+          .where("Organization.deletedAt", "is", null)
+          .executeTakeFirst();
+        const activeOwnedCount = Number(activeOwnedCountRow?.count ?? 0);
         if (activeOwnedCount >= 1) {
           set.status = "Forbidden";
           return "Regular and supporter accounts can only create one organization";
@@ -39,10 +40,11 @@ export const createOrgEndpoint = new Elysia()
       ).slice(0, 50);
 
       // Check slug uniqueness
-      const existing = await prisma.client.organization.findUnique({
-        where: { slug },
-        select: { id: true },
-      });
+      const existing = await db
+        .selectFrom("Organization")
+        .select("id")
+        .where("slug", "=", slug)
+        .executeTakeFirst();
 
       if (existing) {
         set.status = "Conflict";
@@ -51,25 +53,33 @@ export const createOrgEndpoint = new Elysia()
 
       const orgType = (userType === "OPERATOR" && body.type === "ENTERPRISE") ? "ENTERPRISE" : "COMMUNITY";
 
-      const createdOrg = await prisma.client.$transaction(async (tx) => {
-        const org = await tx.organization.create({
-          data: {
-            ownerId: user.data.id,
-            createBy: user.data.id,
+      const createdOrg = await db.transaction().execute(async (trx) => {
+        const insertRes = await trx
+          .insertInto("Organization")
+          .values({
+            ownerId: Number(user.data.id),
+            createBy: Number(user.data.id),
             type: orgType,
             name,
             slug,
-            members: {
-              create: {
-                userId: user.data.id,
-                role: "OWNER",
-                permissions: OrgPerm.ALL,
-              },
-            },
-          },
-        });
+            updatedAt: new Date(),
+          })
+          .executeTakeFirstOrThrow();
 
-        return org;
+        const orgId = Number(insertRes.insertId);
+
+        await trx
+          .insertInto("OrganizationMember")
+          .values({
+            orgId,
+            userId: Number(user.data.id),
+            role: "OWNER",
+            permissions: Number(OrgPerm.ALL),
+            updatedAt: new Date(),
+          })
+          .execute();
+
+        return { id: orgId, type: orgType, name, slug };
       });
 
       // Invalidate user orgs cache

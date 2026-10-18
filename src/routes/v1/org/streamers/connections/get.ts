@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 
@@ -24,9 +24,20 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
       const { streamerId } = authRes;
 
-      const integration = await prisma.client.integration.findUnique({
-        where: { streamerId },
-      });
+      const integration = await db
+        .selectFrom("Integration")
+        .select([
+          "stripeSecret",
+          "bmacSecret",
+          "bmacUsername",
+          "kofiSecret",
+          "kofiUsername",
+          "xenditSecret",
+          "ffpSecret",
+          "streamlabsSecret",
+        ])
+        .where("streamerId", "=", Number(streamerId))
+        .executeTakeFirst();
 
       return {
         stripe: integration?.stripeSecret ?? null,

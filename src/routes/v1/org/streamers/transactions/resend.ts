@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
@@ -38,9 +38,13 @@ export const endpoint = new Elysia()
         return "Invalid transaction ID";
       }
 
-      const tx = await prisma.client.transactionLog.findFirst({
-        where: { id: txIdBig, orgId, streamerId },
-      });
+      const tx = await db
+        .selectFrom("TransactionLog")
+        .selectAll()
+        .where("id", "=", Number(txIdBig))
+        .where("orgId", "=", Number(orgId))
+        .where("streamerId", "=", Number(streamerId))
+        .executeTakeFirst();
 
       if (!tx) {
         set.status = "Not Found";
@@ -50,11 +54,13 @@ export const endpoint = new Elysia()
       const unixTime = Math.floor(Date.now() / 1000);
       const baseTxId = tx.providerTxId || String(tx.id);
       const newProviderTxId = `${baseTxId}_r${unixTime}`;
+      const now = new Date();
 
-      const duplicatedTx = await prisma.client.transactionLog.create({
-        data: {
-          orgId,
-          streamerId,
+      const insertRes = await db
+        .insertInto("TransactionLog")
+        .values({
+          orgId: Number(orgId),
+          streamerId: Number(streamerId),
           provider: tx.provider,
           providerTxId: newProviderTxId,
           type: tx.type,
@@ -66,20 +72,24 @@ export const endpoint = new Elysia()
           senderEmail: tx.senderEmail,
           message: tx.message,
           rawPayload: tx.rawPayload,
-        },
-      });
+          createdAt: now,
+          updatedAt: now,
+        })
+        .executeTakeFirstOrThrow();
+
+      const newTxId = String(insertRes.insertId);
 
       const formattedTx = {
-        id: String(duplicatedTx.id),
-        provider: duplicatedTx.provider,
-        type: duplicatedTx.type,
-        status: duplicatedTx.status,
-        isTest: duplicatedTx.isTest,
-        amount: duplicatedTx.amount,
-        currency: duplicatedTx.currency,
-        senderName: duplicatedTx.senderName,
-        message: duplicatedTx.message,
-        createdAt: duplicatedTx.createdAt.toISOString(),
+        id: newTxId,
+        provider: tx.provider,
+        type: tx.type,
+        status: tx.status,
+        isTest: Boolean(tx.isTest),
+        amount: Number(tx.amount),
+        currency: tx.currency,
+        senderName: tx.senderName,
+        message: tx.message,
+        createdAt: now.toISOString(),
         isDeleted: false,
       };
 
@@ -89,34 +99,34 @@ export const endpoint = new Elysia()
           transaction: formattedTx,
         }),
         WebhookDispatcher.dispatchAlerts(streamerId, {
-          type: duplicatedTx.type as any,
-          name: duplicatedTx.senderName,
-          amount: duplicatedTx.amount,
-          currency: duplicatedTx.currency,
-          message: duplicatedTx.message,
+          type: tx.type as any,
+          name: tx.senderName,
+          amount: Number(tx.amount),
+          currency: tx.currency,
+          message: tx.message,
         }),
-        recordActivityTransaction(orgId, duplicatedTx.isTest),
+        recordActivityTransaction(orgId, Boolean(tx.isTest)),
         logOrgAudit({
           orgId,
           userId: user.data.id,
           action: "TRANSACTION_RESENT",
           targetType: "STREAMER",
-          targetId: streamerId,
+          targetId: BigInt(streamerId),
           payload: {
             transactionId: String(tx.id),
-            newTransactionId: String(duplicatedTx.id),
+            newTransactionId: newTxId,
             streamerId: String(streamerId),
-            senderName: duplicatedTx.senderName,
-            amount: duplicatedTx.amount,
-            currency: duplicatedTx.currency,
-            provider: duplicatedTx.provider,
+            senderName: tx.senderName,
+            amount: Number(tx.amount),
+            currency: tx.currency,
+            provider: tx.provider,
           },
         }),
       ]);
 
       return {
         success: true,
-        message: `Alert for ${duplicatedTx.senderName} (${duplicatedTx.amount} ${duplicatedTx.currency}) re-triggered.`,
+        message: `Alert for ${tx.senderName} (${(Number(tx.amount) / 100).toFixed(2)} ${tx.currency}) re-triggered.`,
         transaction: formattedTx,
       };
     },

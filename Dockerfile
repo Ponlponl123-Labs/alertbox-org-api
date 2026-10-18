@@ -9,31 +9,16 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-# Generate Prisma Client
-COPY prisma ./prisma
-RUN bun prisma generate
-
-# Copy source and build
+# Copy source and compile standalone binary
 COPY . .
-RUN mkdir -p /app/public
-RUN bun build ./src/index.ts --outdir ./dist --target bun --minify --sourcemap=none
-
-# Prune unused cross-platform binaries and dev artifacts
-RUN rm -rf \
-    node_modules/onnxruntime-node/bin/napi-v6/win32 \
-    node_modules/onnxruntime-node/bin/napi-v6/darwin \
-    node_modules/onnxruntime-node/bin/napi-v6/linux/arm* \
-    node_modules/onnxruntime-web \
-    node_modules/@img/*musl* \
-    node_modules/typescript \
-    node_modules/@types
+RUN mkdir -p /app/dist
+RUN bun build --compile --minify-whitespace --minify-syntax --target bun ./src/index.ts --outfile /app/dist/server
 
 # ---------------------------------------------------
 # Stage 2: Runtime
 # ---------------------------------------------------
 FROM oven/bun:1.3-slim AS release
 
-# Set production environment
 ENV NODE_ENV=production
 ENV HOME=/home/bun
 ENV HF_HOME=/home/bun/.cache
@@ -41,29 +26,26 @@ ENV TRANSFORMERS_CACHE=/home/bun/.cache
 
 WORKDIR /app
 
-# Ensure writable cache and uploads directories for non-root user (before copying node_modules)
+# Ensure directories exist and permissions are set
 RUN mkdir -p /home/bun/.cache /app/.cache /app/public/uploads && chown -R bun:bun /home/bun /app
 
-# Copy the build output from the build stage
-COPY --from=build --chown=bun:bun /app/dist/index.js ./index.js
+# Copy the standalone compiled binary
+COPY --from=build --chown=bun:bun /app/dist/server ./server
 
 # Copy static assets required by the server
 COPY --from=build --chown=bun:bun /app/favicon.ico ./favicon.ico
 COPY --from=build --chown=bun:bun /app/public ./public
 
-# Copy Prisma schema, migrations, config, and CLI for runtime migration execution
+# Goose migration runner and migration files
+COPY --from=gomicro/goose:v3.24.1 /bin/goose /usr/local/bin/goose
+COPY --from=build --chown=bun:bun /app/migrations ./migrations
 COPY --from=build --chown=bun:bun /app/package.json ./package.json
-COPY --from=build --chown=bun:bun /app/node_modules ./node_modules
-COPY --from=build --chown=bun:bun /app/prisma ./prisma
-COPY --from=build --chown=bun:bun /app/prisma.config.ts ./prisma.config.ts
-COPY --from=build --chown=bun:bun /app/src/config ./src/config
 
-# Kubernetes / Docker best practice: run as a non-root user
-ENV HF_HOME=/home/bun/.cache
+# Kubernetes / Docker best practice: run as non-root user
 USER bun
 
 # Default port for Elysia
 EXPOSE 3000
 
-# Start the application
-ENTRYPOINT ["bun", "run", "--smol", "index.js"]
+# Start the standalone binary directly
+ENTRYPOINT ["./server"]

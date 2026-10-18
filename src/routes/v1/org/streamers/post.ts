@@ -1,11 +1,11 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
-import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
+import { authorizeOrg, authorizeStreamer } from "@/core/org";
 import { isSelfHosted } from "@/utils/instance";
 import { logOrgAudit } from "@/core/audit";
 
@@ -20,16 +20,20 @@ export const endpoint = new Elysia()
       const { orgId } = authRes;
 
       // Limit community organizations to 1 channel on production; community self-hosted is unlocked
-      const orgRecord = await prisma.client.organization.findUnique({
-        where: { id: orgId },
-        select: { type: true },
-      });
+      const orgRecord = await db
+        .selectFrom("Organization")
+        .select(["type"])
+        .where("id", "=", Number(orgId))
+        .executeTakeFirst();
 
       if (!isSelfHosted() && (!orgRecord || orgRecord.type === "COMMUNITY")) {
-        const activeStreamersCount = await prisma.client.streamer.count({
-          where: { orgId, deletedAt: null },
-        });
-        if (activeStreamersCount >= 1) {
+        const countRow = await db
+          .selectFrom("Streamer")
+          .select((eb) => eb.fn.count("id").as("count"))
+          .where("orgId", "=", Number(orgId))
+          .where("deletedAt", "is", null)
+          .executeTakeFirst();
+        if (Number(countRow?.count ?? 0) >= 1) {
           set.status = "Forbidden";
           return "Community organizations can only create one channel";
         }
@@ -44,43 +48,72 @@ export const endpoint = new Elysia()
       const timestamp = Date.now();
       const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
 
-      const streamer = await prisma.client.$transaction(async (tx) => {
-        const created = await tx.streamer.create({
-          data: {
-            orgId,
+      const { streamerId, widgetId } = await db.transaction().execute(async (trx) => {
+        const streamerRes = await trx
+          .insertInto("Streamer")
+          .values({
+            orgId: Number(orgId),
             name,
             displayName,
-            widgets: {
-              create: {
-                orgId,
-                type: "ALERTBOX",
-                token: widgetToken,
-                alertbox: {
-                  create: {
-                    events: {
-                      createMany: {
-                        data: DEFAULT_ALERTBOX_EVENTS,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          include: {
-            widgets: {
-              select: { id: true, type: true, token: true },
-            },
-          },
-        });
+            updatedAt: new Date(),
+          })
+          .executeTakeFirstOrThrow();
+        const sId = Number(streamerRes.insertId);
 
-        return created;
+        const widgetRes = await trx
+          .insertInto("Widget")
+          .values({
+            orgId: Number(orgId),
+            streamerId: sId,
+            type: "ALERTBOX",
+            token: widgetToken,
+            updatedAt: new Date(),
+          })
+          .executeTakeFirstOrThrow();
+        const wId = Number(widgetRes.insertId);
+
+        const settingRes = await trx
+          .insertInto("AlertboxSetting")
+          .values({
+            widgetId: wId,
+          })
+          .executeTakeFirstOrThrow();
+        const settingId = Number(settingRes.insertId);
+
+        if (DEFAULT_ALERTBOX_EVENTS.length > 0) {
+          await trx
+            .insertInto("AlertboxEvent")
+            .values(
+              DEFAULT_ALERTBOX_EVENTS.map((ev) => ({
+                alertboxId: settingId,
+                eventType: ev.eventType as any,
+                prefix: ev.prefix,
+                subfix: ev.subfix,
+                messageLayout: ev.messageLayout,
+                animIn: ev.animIn ?? null,
+                animOut: ev.animOut ?? null,
+                ttsEnabled: ev.ttsEnabled ? 1 : 0,
+                updatedAt: new Date(),
+              })),
+            )
+            .execute();
+        }
+
+        return { streamerId: sId, widgetId: wId };
       });
 
-      const members = await prisma.client.organizationMember.findMany({
-        where: { orgId },
-        select: { userId: true },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .select(["id", "name", "displayName", "avatar", "uri", "createdAt"])
+        .where("id", "=", streamerId)
+        .executeTakeFirstOrThrow();
+
+      const members = await db
+        .selectFrom("OrganizationMember")
+        .select(["userId"])
+        .where("orgId", "=", Number(orgId))
+        .where("isDeleted", "is", null)
+        .execute();
 
       const keysToDelete = [
         `org:${String(orgId)}:streamers`,
@@ -96,7 +129,7 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "STREAMER_CREATED",
         targetType: "STREAMER",
-        targetId: streamer.id,
+        targetId: BigInt(streamer.id),
         payload: { name: streamer.name, displayName: streamer.displayName },
       });
 
@@ -106,10 +139,13 @@ export const endpoint = new Elysia()
         displayName: streamer.displayName,
         avatar: streamer.avatar,
         uri: streamer.uri,
-        widgets: streamer.widgets.map((w) => ({
-          ...w,
-          id: String(w.id),
-        })),
+        widgets: [
+          {
+            id: String(widgetId),
+            type: "ALERTBOX",
+            token: widgetToken,
+          },
+        ],
         createdAt: streamer.createdAt,
       };
     },
@@ -143,10 +179,12 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
       const { orgId, streamerId } = authRes;
 
-      const updated = await prisma.client.streamer.update({
-        where: { id: streamerId },
-        data: { publishedAt: new Date() },
-      });
+      const publishedAt = new Date();
+      await db
+        .updateTable("Streamer")
+        .set({ publishedAt, updatedAt: new Date() })
+        .where("id", "=", Number(streamerId))
+        .execute();
 
       await Promise.all([
         redis.redis.del(`streamer:${String(streamerId)}:info`),
@@ -155,7 +193,7 @@ export const endpoint = new Elysia()
         redis.redis.del(`org:${String(orgId)}:primary_streamer`),
       ]);
 
-      return { publishedAt: updated.publishedAt };
+      return { publishedAt };
     },
     {
       detail: {

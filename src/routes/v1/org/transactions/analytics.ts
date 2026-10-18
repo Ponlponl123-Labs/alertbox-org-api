@@ -1,6 +1,7 @@
 import Elysia, { t } from "elysia";
+import { sql } from "kysely";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { hasAnyPermission } from "@/utils/rbac";
@@ -60,14 +61,17 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
       if (
         !callerMember ||
         !hasAnyPermission(
-          callerMember.permissions,
+          BigInt(callerMember.permissions),
           OrgPerm.ORG_VIEW | OrgPerm.TRANSACTION_VIEW | OrgPerm.ANALYTICS_VIEW,
         )
       ) {
@@ -91,59 +95,67 @@ export const endpoint = new Elysia()
       const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const startDate = new Date(todayUtc.getTime() - (daysCount - 1) * 86400000);
 
-      const [currencyRows, gatewayRows, streamerRows, timelineRows, activeStreamersCount] = await Promise.all([
-        prisma.client.$queryRaw<Array<{ currency: string; amount: number | bigint; count: number | bigint }>>`
+      const [currencyRes, gatewayRes, streamerRes, timelineRes, activeStreamersRow] = await Promise.all([
+        sql<{ currency: string; amount: number | string; count: number | string }>`
           SELECT currency,
                  CAST(SUM(amount) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
-          WHERE orgId = ${orgId}
+          WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
             AND createdAt >= ${startDate}
           GROUP BY currency
           ORDER BY amount DESC
-        `,
-        prisma.client.$queryRaw<Array<{ provider: string; currency: string; amount: number | bigint; count: number | bigint }>>`
+        `.execute(db),
+        sql<{ provider: string; currency: string; amount: number | string; count: number | string }>`
           SELECT provider,
                  currency,
                  CAST(SUM(amount) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
-          WHERE orgId = ${orgId}
+          WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
             AND createdAt >= ${startDate}
           GROUP BY provider, currency
           ORDER BY count DESC
-        `,
-        prisma.client.$queryRaw<Array<{ streamerId: bigint; amount: number | bigint; count: number | bigint }>>`
+        `.execute(db),
+        sql<{ streamerId: number | string; amount: number | string; count: number | string }>`
           SELECT streamerId,
                  CAST(SUM(amount) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
-          WHERE orgId = ${orgId}
+          WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
             AND createdAt >= ${startDate}
           GROUP BY streamerId
           ORDER BY amount DESC
           LIMIT 10
-        `,
-        prisma.client.$queryRaw<Array<{ date: string; amount: number | bigint; count: number | bigint; realCount: number | bigint; testCount: number | bigint }>>`
+        `.execute(db),
+        sql<{ date: string; amount: number | string; count: number | string; realCount: number | string; testCount: number | string }>`
           SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as date,
                  CAST(SUM(amount) AS UNSIGNED) as amount,
                  COUNT(*) as count,
                  CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
                  CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
           FROM TransactionLog
-          WHERE orgId = ${orgId}
+          WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
             AND createdAt >= ${startDate}
           GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
           ORDER BY date ASC
-        `,
-        prisma.client.streamer.count({
-          where: { orgId, deletedAt: null },
-        }),
+        `.execute(db),
+        db.selectFrom("Streamer")
+          .select((eb) => eb.fn.count("id").as("count"))
+          .where("orgId", "=", Number(orgId))
+          .where("deletedAt", "is", null)
+          .executeTakeFirst(),
       ]);
+
+      const currencyRows = currencyRes.rows;
+      const gatewayRows = gatewayRes.rows;
+      const streamerRows = streamerRes.rows;
+      const timelineRows = timelineRes.rows;
+      const activeStreamersCount = Number(activeStreamersRow?.count ?? 0);
 
       const totalTransactions = currencyRows.reduce((acc, r) => acc + Number(r.count), 0);
       const totalAmountCents = currencyRows.reduce((acc, r) => acc + Number(r.amount), 0);
@@ -168,10 +180,11 @@ export const endpoint = new Elysia()
 
       const streamerIds = streamerRows.map((r) => r.streamerId);
       const streamerDetails = streamerIds.length
-        ? await prisma.client.streamer.findMany({
-            where: { id: { in: streamerIds } },
-            select: { id: true, name: true, displayName: true, avatar: true },
-          })
+        ? await db
+            .selectFrom("Streamer")
+            .select(["id", "name", "displayName", "avatar"])
+            .where("id", "in", streamerIds.map(Number))
+            .execute()
         : [];
       const streamerMap = new Map(streamerDetails.map((s) => [String(s.id), s]));
 

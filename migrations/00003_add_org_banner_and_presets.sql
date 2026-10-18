@@ -1,7 +1,11 @@
--- AlterTable Organization
-ALTER TABLE `Organization` ADD COLUMN `banner` VARCHAR(512) NULL AFTER `avatar`;
+-- +goose Up
+-- ============================================================================
+-- MIGRATION: add_org_banner_and_presets (20261015023500)
+-- Target: MariaDB Galera (InnoDB, utf8mb4_unicode_ci)
+-- ============================================================================
 
--- CreateTable OrganizationRolePreset
+ALTER TABLE `Organization` ADD COLUMN IF NOT EXISTS `banner` VARCHAR(512) NULL AFTER `avatar`;
+
 CREATE TABLE IF NOT EXISTS `OrganizationRolePreset` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `orgId` BIGINT UNSIGNED NOT NULL,
@@ -14,4 +18,8 @@ CREATE TABLE IF NOT EXISTS `OrganizationRolePreset` (
   PRIMARY KEY (`id`),
   INDEX `OrganizationRolePreset_orgId_idx` (`orgId`),
   CONSTRAINT `OrganizationRolePreset_orgId_fkey` FOREIGN KEY (`orgId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- +goose Down
+DROP TABLE IF EXISTS `OrganizationRolePreset`;
+ALTER TABLE `Organization` DROP COLUMN IF EXISTS `banner`;

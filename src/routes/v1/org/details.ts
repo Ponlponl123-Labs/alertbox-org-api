@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { day } from "@/consts/time";
@@ -57,49 +57,65 @@ export const endpoint = new Elysia()
         } catch {}
       }
 
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-        include: {
-          organization: {
-            include: {
-              _count: { select: { members: { where: { isDeleted: null } }, streamers: true } },
-              streamers: {
-                where: { deletedAt: null },
-                select: {
-                  id: true,
-                  name: true,
-                  displayName: true,
-                  avatar: true,
-                  uri: true,
-                  publishedAt: true,
-                },
-              },
-            },
-          },
-        },
-      });
+      const member = await db
+        .selectFrom("OrganizationMember")
+        .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+        .select([
+          "OrganizationMember.id as memberId",
+          "OrganizationMember.role as role",
+          "OrganizationMember.permissions as permissions",
+          "OrganizationMember.isDeleted as memberDeletedAt",
+          "Organization.id as orgId",
+          "Organization.name as orgName",
+          "Organization.slug as orgSlug",
+          "Organization.avatar as orgAvatar",
+          "Organization.banner as orgBanner",
+          "Organization.ownerId as orgOwnerId",
+          "Organization.createBy as orgCreateBy",
+          "Organization.createdAt as orgCreatedAt",
+          "Organization.deletedAt as orgDeletedAt",
+        ])
+        .where("OrganizationMember.orgId", "=", Number(orgId))
+        .where("OrganizationMember.userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
-      if (!member || member.isDeleted || member.organization.deletedAt) {
+      if (!member || member.memberDeletedAt || member.orgDeletedAt) {
         set.status = "Not Found";
         return "Organization not found";
       }
 
-      const orgInfo = {
-        id: String(member.organization.id),
-        name: member.organization.name,
-        slug: member.organization.slug,
-        avatar: member.organization.avatar,
-        banner: member.organization.banner,
-        ownerId: String(member.organization.ownerId),
-        createBy: String(member.organization.createBy),
-        memberCount: member.organization._count.members,
-        createdAt: member.organization.createdAt,
-      };
+      const [memberCountRow, streamers] = await Promise.all([
+        db
+          .selectFrom("OrganizationMember")
+          .select((eb) => eb.fn.count("id").as("count"))
+          .where("orgId", "=", Number(orgId))
+          .where("isDeleted", "is", null)
+          .executeTakeFirst(),
+        db
+          .selectFrom("Streamer")
+          .select(["id", "name", "displayName", "avatar", "uri", "publishedAt"])
+          .where("orgId", "=", Number(orgId))
+          .where("deletedAt", "is", null)
+          .execute(),
+      ]);
 
-      const streamerList = member.organization.streamers.map((s) => ({
+      const memberCount = Number(memberCountRow?.count ?? 0);
+      const streamerList = streamers.map((s) => ({
         ...s,
         id: String(s.id),
       }));
+
+      const orgInfo = {
+        id: String(member.orgId),
+        name: member.orgName,
+        slug: member.orgSlug,
+        avatar: member.orgAvatar,
+        banner: member.orgBanner,
+        ownerId: String(member.orgOwnerId),
+        createBy: String(member.orgCreateBy),
+        memberCount,
+        createdAt: member.orgCreatedAt,
+      };
 
       const cacheTasks: Promise<any>[] = [
         redis.redis.setex(orgKey, day, JSON.stringify(orgInfo)),
@@ -120,16 +136,16 @@ export const endpoint = new Elysia()
       await Promise.all(cacheTasks);
 
       return {
-        id: String(member.organization.id),
-        name: member.organization.name,
-        slug: member.organization.slug,
-        avatar: member.organization.avatar,
-        banner: member.organization.banner,
+        id: String(member.orgId),
+        name: member.orgName,
+        slug: member.orgSlug,
+        avatar: member.orgAvatar,
+        banner: member.orgBanner,
         role: member.role,
         permissions: member.permissions.toString(),
-        memberCount: member.organization._count.members,
+        memberCount,
         streamers: streamerList,
-        createdAt: member.organization.createdAt,
+        createdAt: member.orgCreatedAt,
       };
     },
     {

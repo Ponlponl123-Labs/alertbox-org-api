@@ -1,9 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm, RolePresets } from "@/consts/permission";
-import { OrgRole } from "@/generated/prisma/client";
 import { customAlphabet } from "nanoid";
 import { resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
@@ -22,11 +21,14 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBER_ADD)) {
+      if (!callerMember || !hasPermission(BigInt(callerMember.permissions), OrgPerm.ORG_MEMBER_ADD)) {
         set.status = "Forbidden";
         return "Insufficient permissions to invite members";
       }
@@ -46,61 +48,69 @@ export const endpoint = new Elysia()
         }
       }
 
-      const targetUser = await prisma.client.user.findUnique({
-        where: { email: cleanEmail },
-        select: { id: true, name: true, avatar: true },
-      });
+      const targetUser = await db
+        .selectFrom("User")
+        .select(["id", "name", "avatar"])
+        .where("email", "=", cleanEmail)
+        .executeTakeFirst();
 
       if (!targetUser) {
         set.status = "Not Found";
         return "No registered user found with this email";
       }
 
-      const alreadyMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: targetUser.id } },
-      });
+      const alreadyMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "isDeleted"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(targetUser.id))
+        .executeTakeFirst();
       if (alreadyMember && !alreadyMember.isDeleted) {
         set.status = "Conflict";
         return "User is already a member of this organization";
       }
 
       // Expire older unaccepted invites for this specific email
-      await prisma.client.organizationInvite.updateMany({
-        where: { orgId, email: cleanEmail, acceptedAt: null },
-        data: { expiresAt: new Date() },
-      });
+      await db
+        .updateTable("OrganizationInvite")
+        .set({ expiresAt: new Date() })
+        .where("orgId", "=", Number(orgId))
+        .where("email", "=", cleanEmail)
+        .where("acceptedAt", "is", null)
+        .execute();
 
       const token = generate8DigitCode();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min TTL
 
-      const invite = await prisma.client.organizationInvite.create({
-        data: {
-          orgId,
-          inviterId: user.data.id,
+      const result = await db
+        .insertInto("OrganizationInvite")
+        .values({
+          orgId: Number(orgId),
+          inviterId: Number(user.data.id),
           email: cleanEmail,
           role,
-          permissions,
+          permissions: Number(permissions),
           token,
           expiresAt,
-        },
-      });
+        })
+        .executeTakeFirst();
 
       await logOrgAudit({
         orgId,
         userId: user.data.id,
         action: "MEMBER_INVITED",
         targetType: "MEMBER",
-        targetId: targetUser.id,
+        targetId: BigInt(targetUser.id),
         payload: { email: cleanEmail, role, expiresAt: expiresAt.toISOString() },
       });
 
       return {
-        id: String(invite.id),
-        email: invite.email,
-        role: invite.role,
-        code: invite.token,
-        token: invite.token,
-        expiresAt: invite.expiresAt,
+        id: String(result.insertId ?? ""),
+        email: cleanEmail,
+        role,
+        code: token,
+        token,
+        expiresAt,
       };
     },
     {

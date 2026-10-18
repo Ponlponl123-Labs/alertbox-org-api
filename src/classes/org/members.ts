@@ -1,57 +1,58 @@
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "@/core/redis";
-import { OrgRole } from "@/generated/prisma/client";
 
 export async function listOrgMembers(orgId: bigint | string) {
-  const targetOrgId = BigInt(orgId);
-  const members = await prisma.client.organizationMember.findMany({
-    where: { orgId: targetOrgId, isDeleted: null },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          avatar: true,
-          createdAt: true,
-        },
-      },
-      organization: {
-        select: {
-          streamers: {
-            where: { deletedAt: null },
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-              avatar: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const targetOrgId = Number(orgId);
+
+  const [members, streamers] = await Promise.all([
+    db
+      .selectFrom("OrganizationMember")
+      .innerJoin("User", "User.id", "OrganizationMember.userId")
+      .select([
+        "OrganizationMember.id as memberId",
+        "OrganizationMember.userId as userId",
+        "OrganizationMember.role as role",
+        "OrganizationMember.permissions as permissions",
+        "OrganizationMember.createdAt as createdAt",
+        "User.id as uId",
+        "User.email as uEmail",
+        "User.name as uName",
+        "User.avatar as uAvatar",
+        "User.createdAt as uCreatedAt",
+      ])
+      .where("OrganizationMember.orgId", "=", targetOrgId)
+      .where("OrganizationMember.isDeleted", "is", null)
+      .orderBy("OrganizationMember.createdAt", "asc")
+      .execute(),
+    db
+      .selectFrom("Streamer")
+      .select(["id", "name", "displayName", "avatar"])
+      .where("orgId", "=", targetOrgId)
+      .where("deletedAt", "is", null)
+      .execute(),
+  ]);
+
+  const assignedStreamers = streamers.map((s) => ({
+    id: String(s.id),
+    name: s.name,
+    displayName: s.displayName,
+    avatar: s.avatar,
+  }));
 
   return members.map((m) => ({
-    id: String(m.id),
+    id: String(m.memberId),
     userId: String(m.userId),
     role: m.role,
     permissions: m.permissions.toString(),
-    createdAt: m.createdAt,
+    createdAt: new Date(m.createdAt),
     user: {
-      id: String(m.user.id),
-      email: m.user.email,
-      name: m.user.name,
-      avatar: m.user.avatar,
-      joinedAt: m.user.createdAt,
+      id: String(m.uId),
+      email: m.uEmail,
+      name: m.uName,
+      avatar: m.uAvatar,
+      joinedAt: new Date(m.uCreatedAt),
     },
-    assignedStreamers: (m.organization?.streamers || []).map((s) => ({
-      id: String(s.id),
-      name: s.name,
-      displayName: s.displayName,
-      avatar: s.avatar,
-    })),
+    assignedStreamers,
   }));
 }
 
@@ -61,26 +62,37 @@ export async function updateOrgMemberRole(
   role: OrgRole,
   permissions?: bigint,
 ) {
-  const targetOrgId = BigInt(orgId);
-  const targetUid = BigInt(targetUserId);
+  const targetOrgId = Number(orgId);
+  const targetUid = Number(targetUserId);
 
-  const updated = await prisma.client.organizationMember.update({
-    where: { orgId_userId: { orgId: targetOrgId, userId: targetUid } },
-    data: {
-      role,
-      ...(permissions !== undefined ? { permissions } : {}),
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          avatar: true,
-        },
-      },
-    },
-  });
+  const patch: any = { role, updatedAt: new Date() };
+  if (permissions !== undefined) {
+    patch.permissions = Number(permissions);
+  }
+
+  await db
+    .updateTable("OrganizationMember")
+    .set(patch)
+    .where("orgId", "=", targetOrgId)
+    .where("userId", "=", targetUid)
+    .execute();
+
+  const updated = await db
+    .selectFrom("OrganizationMember")
+    .innerJoin("User", "User.id", "OrganizationMember.userId")
+    .select([
+      "OrganizationMember.id as memberId",
+      "OrganizationMember.userId as userId",
+      "OrganizationMember.role as role",
+      "OrganizationMember.permissions as permissions",
+      "User.id as uId",
+      "User.email as uEmail",
+      "User.name as uName",
+      "User.avatar as uAvatar",
+    ])
+    .where("OrganizationMember.orgId", "=", targetOrgId)
+    .where("OrganizationMember.userId", "=", targetUid)
+    .executeTakeFirstOrThrow();
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),
@@ -88,15 +100,15 @@ export async function updateOrgMemberRole(
   ]);
 
   return {
-    id: String(updated.id),
+    id: String(updated.memberId),
     userId: String(updated.userId),
     role: updated.role,
     permissions: updated.permissions.toString(),
     user: {
-      id: String(updated.user.id),
-      email: updated.user.email,
-      name: updated.user.name,
-      avatar: updated.user.avatar,
+      id: String(updated.uId),
+      email: updated.uEmail,
+      name: updated.uName,
+      avatar: updated.uAvatar,
     },
   };
 }
@@ -105,13 +117,15 @@ export async function removeOrgMember(
   orgId: bigint | string,
   targetUserId: bigint | string,
 ) {
-  const targetOrgId = BigInt(orgId);
-  const targetUid = BigInt(targetUserId);
+  const targetOrgId = Number(orgId);
+  const targetUid = Number(targetUserId);
 
-  await prisma.client.organizationMember.update({
-    where: { orgId_userId: { orgId: targetOrgId, userId: targetUid } },
-    data: { isDeleted: new Date() },
-  });
+  await db
+    .updateTable("OrganizationMember")
+    .set({ isDeleted: new Date() })
+    .where("orgId", "=", targetOrgId)
+    .where("userId", "=", targetUid)
+    .execute();
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),

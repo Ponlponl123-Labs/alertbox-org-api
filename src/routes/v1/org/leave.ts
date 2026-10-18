@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
@@ -17,9 +17,12 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const member = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const member = await db
+        .selectFrom("OrganizationMember")
+        .selectAll()
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
       if (!member || member.isDeleted) {
         set.status = "Not Found";
@@ -31,10 +34,11 @@ export const endpoint = new Elysia()
         return "Organization owner cannot leave. Transfer ownership or delete the organization first.";
       }
 
-      await prisma.client.organizationMember.update({
-        where: { id: member.id },
-        data: { isDeleted: new Date() },
-      });
+      await db
+        .updateTable("OrganizationMember")
+        .set({ isDeleted: new Date() })
+        .where("id", "=", member.id)
+        .execute();
 
       await Promise.all([
         redis.redis.del(`user:${String(user.data.id)}:orgs`),

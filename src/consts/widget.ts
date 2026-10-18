@@ -1,9 +1,19 @@
-import { Prisma } from "@/generated/prisma/client";
+import type { AlertEventType } from "@/db/enums";
+
+export interface DefaultAlertboxEvent {
+  eventType: AlertEventType | "TIP" | "MEMBERSHIP" | "MERCH" | "FOLLOW";
+  prefix: string;
+  subfix: string;
+  messageLayout: number;
+  animIn?: number;
+  animOut?: number;
+  ttsEnabled?: boolean;
+}
 
 /**
  * Default events to seed for a newly created alertbox widget.
  */
-export const DEFAULT_ALERTBOX_EVENTS: Prisma.AlertboxEventCreateManyAlertboxInput[] = [
+export const DEFAULT_ALERTBOX_EVENTS: DefaultAlertboxEvent[] = [
   {
     eventType: "TIP",
     prefix: "{{user}} just donated ",

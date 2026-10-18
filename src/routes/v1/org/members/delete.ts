@@ -1,8 +1,7 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg, parseBigIntParam, resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
@@ -25,16 +24,18 @@ export const endpoint = new Elysia()
         return "Invalid ID parameters";
       }
 
-      const targetMember = await prisma.client.organizationMember.findUnique({
-        where: { id: targetMemberId },
-      });
+      const targetMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "orgId", "userId", "role", "isDeleted"])
+        .where("id", "=", Number(targetMemberId))
+        .executeTakeFirst();
 
-      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
+      if (!targetMember || BigInt(targetMember.orgId) !== orgId || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Member not found";
       }
 
-      const isSelf = targetMember.userId === user.data.id;
+      const isSelf = BigInt(targetMember.userId) === user.data.id;
       if (!isSelf) {
         const authRes = await authorizeOrg(params.orgId, user.data.id, OrgPerm.ORG_MEMBER_REMOVE, set, "remove members");
         if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid ID parameters" : authRes;
@@ -45,10 +46,11 @@ export const endpoint = new Elysia()
         return "Cannot remove organization OWNER";
       }
 
-      await prisma.client.organizationMember.update({
-        where: { id: targetMemberId },
-        data: { isDeleted: new Date() },
-      });
+      await db
+        .updateTable("OrganizationMember")
+        .set({ isDeleted: new Date(), updatedAt: new Date() })
+        .where("id", "=", Number(targetMemberId))
+        .execute();
 
       await Promise.all([
         redis.redis.del(`user:${String(targetMember.userId)}:orgs`),
@@ -62,7 +64,7 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "MEMBER_REMOVED",
         targetType: "MEMBER",
-        targetId: targetMember.userId,
+        targetId: BigInt(targetMember.userId),
         payload: {
           targetMemberId: String(targetMemberId),
           targetUserId: String(targetMember.userId),

@@ -11,7 +11,7 @@ import betterConsole, {
 
 import "./config/env";
 import { redis } from "./core/redis";
-import { prisma } from "./core/prisma";
+import { db } from "./db";
 import Server from "./core/server";
 import { Moderation } from "./classes/moderation";
 
@@ -82,7 +82,7 @@ if (logger.isVerbose()) {
 
 export const server = new Server(Number(values.port || 3000));
 
-export { redis, prisma };
+export { redis, db };
 
 const exitSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGQUIT"];
 
@@ -105,9 +105,9 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
       // ignore
     }
 
-    if (prisma && prisma.client) {
-      await prisma.client.$disconnect();
-      logger.process(tsflag("info", true, "Prisma connection disconnected."));
+    if (db) {
+      await db.destroy();
+      logger.process(tsflag("info", true, "Database connection pool destroyed."));
     }
 
     if (server && server.app) {

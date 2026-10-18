@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 const patchValidation = {
   detail: {
@@ -46,14 +46,14 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to manage integrations";
       }
 
-      await prisma.client.integration.update({
-        where: {
-          streamerId: org.streamerId,
-        },
-        data: {
+      await db
+        .updateTable("Integration")
+        .set({
           streamlabsOptions: body.options,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where("streamerId", "=", Number(org.streamerId))
+        .execute();
 
       return "OK";
     },

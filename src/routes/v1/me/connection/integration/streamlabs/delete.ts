@@ -4,7 +4,7 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
 import { removeConnection } from "@/classes/streamer";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 const deleteHandler = async ({ headers, set, ip }: any) => {
   const auth = isBearerToken(headers.authorization);
@@ -18,11 +18,17 @@ const deleteHandler = async ({ headers, set, ip }: any) => {
     return "Unauthorized";
   }
 
-  const membership = await prisma.client.organizationMember.findFirst({
-    where: { userId: user.data.id },
-    include: { organization: { include: { streamers: { take: 1 } } } },
-  });
-  const streamerId = membership?.organization?.streamers?.[0]?.id ?? user.data.id;
+  const streamerRow = await db
+    .selectFrom("OrganizationMember")
+    .innerJoin("Streamer", "Streamer.orgId", "OrganizationMember.orgId")
+    .select("Streamer.id as streamerId")
+    .where("OrganizationMember.userId", "=", Number(user.data.id))
+    .where("OrganizationMember.isDeleted", "is", null)
+    .where("Streamer.deletedAt", "is", null)
+    .orderBy("Streamer.createdAt", "asc")
+    .executeTakeFirst();
+
+  const streamerId = streamerRow ? streamerRow.streamerId : user.data.id;
 
   await removeConnection(streamerId, "streamlabs");
 

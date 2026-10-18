@@ -1,6 +1,6 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import betterConsole, { tsflag, s } from "ts-better-console";
-import { AlertEventType } from "@/generated/prisma/client";
+import { AlertEventType } from "@/db/enums";
 import { StreamlabsOption } from "@/consts/integration";
 import { verifySignature } from "@/utils/signature";
 import { timingSafeEqualString } from "@/utils/security";
@@ -21,24 +21,23 @@ export class BmacWebhook {
       return cachedIntegrations;
     }
 
-    const integrations = await prisma.client.integration.findMany({
-      where: {
-        bmacSecret: { not: null },
-        deletedAt: null,
-      },
-      select: {
-        orgId: true,
-        streamerId: true,
-        bmacSecret: true,
-        streamlabsSecret: true,
-        streamlabsRefreshToken: true,
-        streamlabsOptions: true,
-      },
-    });
+    const integrations = await db
+      .selectFrom("Integration")
+      .where("bmacSecret", "is not", null)
+      .where("deletedAt", "is", null)
+      .select([
+        "orgId",
+        "streamerId",
+        "bmacSecret",
+        "streamlabsSecret",
+        "streamlabsRefreshToken",
+        "streamlabsOptions",
+      ])
+      .execute();
 
-    cachedIntegrations = integrations;
+    cachedIntegrations = integrations as any;
     lastCacheSync = now;
-    return integrations;
+    return integrations as any;
   }
 
   public static invalidateIntegrations(): void {
@@ -73,19 +72,21 @@ export class BmacWebhook {
         matchedIntegration =
           integrations.find((i) => timingSafeEqualString(i.bmacSecret, token)) ?? null;
         if (!matchedIntegration) {
-          const dbMatched = await prisma.client.integration.findFirst({
-            where: { bmacSecret: token, deletedAt: null },
-            select: {
-              orgId: true,
-              streamerId: true,
-              bmacSecret: true,
-              streamlabsSecret: true,
-              streamlabsRefreshToken: true,
-              streamlabsOptions: true,
-            },
-          });
+          const dbMatched = await db
+            .selectFrom("Integration")
+            .where("bmacSecret", "=", token)
+            .where("deletedAt", "is", null)
+            .select([
+              "orgId",
+              "streamerId",
+              "bmacSecret",
+              "streamlabsSecret",
+              "streamlabsRefreshToken",
+              "streamlabsOptions",
+            ])
+            .executeTakeFirst();
           if (dbMatched) {
-            matchedIntegration = dbMatched;
+            matchedIntegration = dbMatched as any;
             this.invalidateIntegrations();
           }
         }

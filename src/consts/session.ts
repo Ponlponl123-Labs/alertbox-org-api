@@ -1,11 +1,9 @@
-import { Prisma } from "@/generated/prisma/client";
-
 /**
  * Minimal selection for presence checks.
  */
 export const basicUserSelect = {
   id: true,
-} as const satisfies Prisma.UserSelect;
+} as const;
 
 /**
  * Pure user scalar attributes for lightweight, isolated user cache.
@@ -20,7 +18,7 @@ export const pureUserSelect = {
   createdAt: true,
   disabledAt: true,
   deletedAt: true,
-} as const satisfies Prisma.UserSelect;
+} as const;
 
 /**
  * Selection for full user data including organizations and streamers.
@@ -57,7 +55,7 @@ export const sessionUserSelect = {
       },
     },
   },
-} as const satisfies Prisma.UserSelect;
+} as const;
 
 /**
  * Full user selection containing all details and nested relations for master caching.
@@ -94,7 +92,7 @@ export const fullUserSelect = {
       },
     },
   },
-} as const satisfies Prisma.UserSelect;
+} as const;
 
 export const sessionUserInclude = {
   memberships: {
@@ -106,7 +104,7 @@ export const sessionUserInclude = {
       },
     },
   },
-} as const satisfies Prisma.UserInclude;
+} as const;
 
 export const fullUserInclude = {
   memberships: {
@@ -131,4 +129,4 @@ export const fullUserInclude = {
       },
     },
   },
-} as const satisfies Prisma.UserInclude;
+} as const;

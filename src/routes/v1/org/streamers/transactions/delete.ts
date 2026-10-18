@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
@@ -36,17 +36,20 @@ export const endpoint = new Elysia()
         return "Invalid transaction ID";
       }
 
-      const tx = await prisma.client.transactionLog.findFirst({
-        where: { id: txIdBig, orgId, streamerId },
-        select: {
-          id: true,
-          isDeleted: true,
-          senderName: true,
-          amount: true,
-          currency: true,
-          provider: true,
-        },
-      });
+      const tx = await db
+        .selectFrom("TransactionLog")
+        .select([
+          "id",
+          "isDeleted",
+          "senderName",
+          "amount",
+          "currency",
+          "provider",
+        ])
+        .where("id", "=", Number(txIdBig))
+        .where("orgId", "=", Number(orgId))
+        .where("streamerId", "=", Number(streamerId))
+        .executeTakeFirst();
 
       if (!tx) {
         set.status = "Not Found";
@@ -56,18 +59,18 @@ export const endpoint = new Elysia()
       const isRestoring = tx.isDeleted !== null;
       const nextDeletedDate = isRestoring ? null : new Date();
 
-      const updated = await prisma.client.transactionLog.update({
-        where: { id: tx.id },
-        data: { isDeleted: nextDeletedDate },
-        select: { id: true, isDeleted: true },
-      });
+      await db
+        .updateTable("TransactionLog")
+        .set({ isDeleted: nextDeletedDate, updatedAt: new Date() })
+        .where("id", "=", Number(tx.id))
+        .execute();
 
-      const isDeletedBool = updated.isDeleted !== null;
+      const isDeletedBool = nextDeletedDate !== null;
 
       await Promise.all([
         broadcastStreamerTransaction(orgId, streamerId, {
           type: "transaction:updated",
-          transactionId: String(updated.id),
+          transactionId: String(tx.id),
           isDeleted: isDeletedBool,
         }),
         logOrgAudit({
@@ -75,12 +78,12 @@ export const endpoint = new Elysia()
           userId: user.data.id,
           action: isRestoring ? "TRANSACTION_RESTORED" : "TRANSACTION_DELETED",
           targetType: "STREAMER",
-          targetId: streamerId,
+          targetId: BigInt(streamerId),
           payload: {
-            transactionId: String(updated.id),
+            transactionId: String(tx.id),
             streamerId: String(streamerId),
             senderName: tx.senderName,
-            amount: tx.amount,
+            amount: Number(tx.amount),
             currency: tx.currency,
             provider: tx.provider,
           },
@@ -88,9 +91,9 @@ export const endpoint = new Elysia()
       ]);
 
       return {
-        id: String(updated.id),
+        id: String(tx.id),
         isDeleted: isDeletedBool,
-        deletedAt: updated.isDeleted ? updated.isDeleted.toISOString() : null,
+        deletedAt: nextDeletedDate ? nextDeletedDate.toISOString() : null,
       };
     },
     {

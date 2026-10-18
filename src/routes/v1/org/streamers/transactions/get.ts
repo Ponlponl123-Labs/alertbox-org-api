@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 
@@ -29,50 +29,62 @@ export const endpoint = new Elysia()
       const limit = Math.min(Math.max(Number(query.limit || 25), 1), 100);
       const offset = Math.max(Number(query.offset || 0), 0);
 
-      const where: any = { orgId, streamerId };
+      let countQuery = db
+        .selectFrom("TransactionLog")
+        .select((eb) => eb.fn.count("id").as("count"))
+        .where("orgId", "=", Number(orgId))
+        .where("streamerId", "=", Number(streamerId));
+
+      let itemsQuery = db
+        .selectFrom("TransactionLog")
+        .select([
+          "id",
+          "provider",
+          "type",
+          "status",
+          "isTest",
+          "amount",
+          "currency",
+          "senderName",
+          "message",
+          "createdAt",
+          "isDeleted",
+        ])
+        .where("orgId", "=", Number(orgId))
+        .where("streamerId", "=", Number(streamerId));
 
       if (query.provider && query.provider !== "ALL") {
-        where.provider = query.provider.toUpperCase();
+        countQuery = countQuery.where("provider", "=", query.provider.toUpperCase());
+        itemsQuery = itemsQuery.where("provider", "=", query.provider.toUpperCase());
       }
       if (query.status && query.status !== "ALL") {
-        where.status = query.status.toUpperCase();
+        countQuery = countQuery.where("status", "=", query.status.toUpperCase() as any);
+        itemsQuery = itemsQuery.where("status", "=", query.status.toUpperCase() as any);
       }
       if (query.type && query.type !== "ALL") {
-        where.type = query.type.toUpperCase();
+        countQuery = countQuery.where("type", "=", query.type.toUpperCase() as any);
+        itemsQuery = itemsQuery.where("type", "=", query.type.toUpperCase() as any);
       }
       if (query.search && query.search.trim()) {
-        const s = query.search.trim();
-        where.OR = [
-          { senderName: { contains: s } },
-          { message: { contains: s } },
-        ];
+        const s = `%${query.search.trim()}%`;
+        const filter = (eb: any) =>
+          eb.or([
+            eb("senderName", "like", s),
+            eb("message", "like", s),
+          ]);
+        countQuery = countQuery.where(filter);
+        itemsQuery = itemsQuery.where(filter);
       }
 
       const orderByField = query.sortBy === "amount" ? "amount" : "createdAt";
       const orderDirection = query.sortOrder === "asc" ? "asc" : "desc";
 
-      const [total, items] = await Promise.all([
-        prisma.client.transactionLog.count({ where }),
-        prisma.client.transactionLog.findMany({
-          where,
-          orderBy: { [orderByField]: orderDirection },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            provider: true,
-            type: true,
-            status: true,
-            isTest: true,
-            amount: true,
-            currency: true,
-            senderName: true,
-            message: true,
-            createdAt: true,
-            isDeleted: true,
-          },
-        }),
+      const [countRow, items] = await Promise.all([
+        countQuery.executeTakeFirst(),
+        itemsQuery.orderBy(orderByField, orderDirection).limit(limit).offset(offset).execute(),
       ]);
+
+      const total = Number(countRow?.count ?? 0);
 
       return {
         total,
@@ -83,12 +95,12 @@ export const endpoint = new Elysia()
           provider: tx.provider,
           type: tx.type,
           status: tx.status,
-          isTest: tx.isTest,
-          amount: tx.amount,
+          isTest: Boolean(tx.isTest),
+          amount: Number(tx.amount),
           currency: tx.currency,
           senderName: tx.senderName,
           message: tx.message,
-          createdAt: tx.createdAt.toISOString(),
+          createdAt: new Date(tx.createdAt).toISOString(),
           isDeleted: tx.isDeleted !== null,
         })),
       };

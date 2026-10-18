@@ -1,6 +1,5 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { Prisma } from "@/generated/prisma/client";
 import { basicUserSelect, pureUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
 import { MeOptions, SessionMetadata } from "@/types/me.types";
@@ -11,12 +10,10 @@ import { listUserDevices, destroyUserDevice } from "./device";
 import { supported_providers } from "@/consts/providers";
 import { hasPermission, parseStreamerPermissions } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
-import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
 
-export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
-  public data: (Prisma.UserGetPayload<{ select: T }> & { id: bigint }) | null =
-    null;
+export class Me<T = any> {
+  public data: any = null;
   private options: MeOptions;
   private currentSession: string | null = null;
   private lastSelect: any = basicUserSelect;
@@ -29,70 +26,145 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
    * Helper to fetch active memberships, organizations, and streamers.
    */
   private async fetchUserMemberships(userId: bigint): Promise<any[]> {
-    const rawMemberships = await prisma.client.organizationMember.findMany({
-      where: {
-        userId,
-        isDeleted: null,
-        organization: { deletedAt: null },
+    const rawMembers = await db
+      .selectFrom("OrganizationMember")
+      .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+      .where("OrganizationMember.userId", "=", Number(userId))
+      .where("OrganizationMember.isDeleted", "is", null)
+      .where("Organization.deletedAt", "is", null)
+      .select([
+        "OrganizationMember.id as memberId",
+        "OrganizationMember.orgId",
+        "OrganizationMember.userId",
+        "OrganizationMember.role",
+        "OrganizationMember.permissions",
+        "OrganizationMember.createdAt as memberCreatedAt",
+        "Organization.id as orgId",
+        "Organization.type as orgType",
+        "Organization.name as orgName",
+        "Organization.slug as orgSlug",
+        "Organization.avatar as orgAvatar",
+        "Organization.banner as orgBanner",
+        "Organization.ownerId as orgOwnerId",
+        "Organization.createdAt as orgCreatedAt",
+      ])
+      .orderBy("OrganizationMember.createdAt", "asc")
+      .execute();
+
+    if (rawMembers.length === 0) return [];
+
+    const orgIds = Array.from(new Set(rawMembers.map((m) => m.orgId)));
+
+    const streamers = await db
+      .selectFrom("Streamer")
+      .where("orgId", "in", orgIds)
+      .where("deletedAt", "is", null)
+      .selectAll()
+      .orderBy("createdAt", "asc")
+      .execute();
+
+    const streamerIds = streamers.map((s) => s.id);
+
+    const widgets = streamerIds.length > 0
+      ? await db
+          .selectFrom("Widget")
+          .where("streamerId", "in", streamerIds)
+          .where("deletedAt", "is", null)
+          .select([
+            "id",
+            "streamerId",
+            "type",
+            "token",
+            "createdAt",
+            "updatedAt",
+          ])
+          .execute()
+      : [];
+
+    const integrations = streamerIds.length > 0
+      ? await db
+          .selectFrom("Integration")
+          .where("streamerId", "in", streamerIds)
+          .where("deletedAt", "is", null)
+          .select([
+            "id",
+            "orgId",
+            "streamerId",
+            "stripeSecret",
+            "bmacSecret",
+            "kofiSecret",
+            "xenditSecret",
+            "ffpSecret",
+            "streamlabsSecret",
+            "kofiUsername",
+            "bmacUsername",
+          ])
+          .execute()
+      : [];
+
+    const widgetMap = new Map<string, any[]>();
+    for (const w of widgets) {
+      const key = String(w.streamerId);
+      const list = widgetMap.get(key) || [];
+      list.push(w);
+      widgetMap.set(key, list);
+    }
+
+    const integrationMap = new Map<string, any>();
+    for (const i of integrations) {
+      integrationMap.set(String(i.streamerId), i);
+    }
+
+    const streamerOrgMap = new Map<string, any[]>();
+    for (const s of streamers) {
+      const key = String(s.orgId);
+      const list = streamerOrgMap.get(key) || [];
+      list.push({
+        ...s,
+        widgets: widgetMap.get(String(s.id)) || [],
+        integration: integrationMap.get(String(s.id)) || null,
+      });
+      streamerOrgMap.set(key, list);
+    }
+
+    const rawMemberships = rawMembers.map((m) => ({
+      id: m.memberId,
+      orgId: m.orgId,
+      userId: m.userId,
+      role: m.role,
+      permissions: m.permissions,
+      createdAt: m.memberCreatedAt,
+      organization: {
+        id: m.orgId,
+        type: m.orgType,
+        name: m.orgName,
+        slug: m.orgSlug,
+        avatar: m.orgAvatar,
+        banner: m.orgBanner,
+        ownerId: m.orgOwnerId,
+        createdAt: m.orgCreatedAt,
+        streamers: streamerOrgMap.get(String(m.orgId)) || [],
       },
-      include: {
-        organization: {
-          include: {
-            streamers: {
-              where: { deletedAt: null },
-              include: {
-                widgets: {
-                  where: { deletedAt: null },
-                  select: {
-                    id: true,
-                    streamerId: true,
-                    type: true,
-                    token: true,
-                    createdAt: true,
-                    updatedAt: true,
-                  },
-                },
-                integration: {
-                  select: {
-                    id: true,
-                    orgId: true,
-                    streamerId: true,
-                    stripeSecret: true,
-                    bmacSecret: true,
-                    kofiSecret: true,
-                    xenditSecret: true,
-                    ffpSecret: true,
-                    streamlabsSecret: true,
-                    kofiUsername: true,
-                    bmacUsername: true,
-                  },
-                },
-              },
-              orderBy: { createdAt: "asc" },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "asc" },
-    });
+    }));
 
     const memberAssignmentKeys = rawMemberships.map((m) => `org:${String(m.orgId)}:member:${String(m.id)}:streamers`);
     const cachedMemberAssignments = memberAssignmentKeys.length > 0 ? await redis.redis.mget(memberAssignmentKeys) : [];
 
     const memberships = rawMemberships.map((m, idx) => {
       const isOwnerOrAdmin = m.role === "OWNER" || m.role === "ADMIN";
-      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.STREAMER_VIEW);
-      const hasOrgEditProfile = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.STREAMER_MANAGE);
-      const hasOrgViewTransactions = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.TRANSACTION_VIEW);
-      const hasOrgViewAnalytics = isOwnerOrAdmin || hasPermission(m.permissions, OrgPerm.ANALYTICS_VIEW);
+      const permBig = BigInt(m.permissions);
+      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.STREAMER_VIEW);
+      const hasOrgEditProfile = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.STREAMER_MANAGE);
+      const hasOrgViewTransactions = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.TRANSACTION_VIEW);
+      const hasOrgViewAnalytics = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.ANALYTICS_VIEW);
       const hasOrgManageWidgets =
         isOwnerOrAdmin ||
-        hasPermission(m.permissions, OrgPerm.WIDGET_MANAGE) ||
-        hasPermission(m.permissions, OrgPerm.WIDGET_VIEW);
+        hasPermission(permBig, OrgPerm.WIDGET_MANAGE) ||
+        hasPermission(permBig, OrgPerm.WIDGET_VIEW);
       const hasOrgManageIntegrations =
         isOwnerOrAdmin ||
-        hasPermission(m.permissions, OrgPerm.INTEGRATION_MANAGE) ||
-        hasPermission(m.permissions, OrgPerm.INTEGRATION_VIEW);
+        hasPermission(permBig, OrgPerm.INTEGRATION_MANAGE) ||
+        hasPermission(permBig, OrgPerm.INTEGRATION_VIEW);
 
       let assignmentsMap = new Map<string, number>();
       let assignedStreamerIds: string[] = [];
@@ -106,7 +178,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
         } catch {}
       }
 
-      const allOrgStreamers = (m.organization?.streamers || []).map((s) => {
+      const allOrgStreamers = (m.organization?.streamers || []).map((s: any) => {
         const { integration, ...streamerRest } = s as any;
         const sId = String(s.id);
         const assignedBits = assignmentsMap.get(sId) || 0;
@@ -219,51 +291,39 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     return memberships;
   }
 
-
   /**
    * Authenticate and load user data using a session token.
    */
-  public async use<S extends Prisma.UserSelect>(
-    session: string,
-    ip: string,
-    select: S,
-  ): Promise<Me<S> | false | null>;
-  public async use(session: string, ip: string): Promise<Me<T> | false | null>;
-  public async use(
-    session: string,
-    ip: string,
-    select: any = basicUserSelect,
-  ): Promise<any> {
+  public async use(session: string, ip: string, select: any = basicUserSelect): Promise<any> {
     this.currentSession = session;
     this.lastSelect = select;
 
-    // Fetch session and include user via minimal select to drop unneeded heavy columns
-    const session_info = await prisma.client.session.findUnique({
-      where: {
-        token: session,
-      },
-      select: {
-        id: true,
-        userId: true,
-        ipAddress: true,
-        disabledAt: true,
-        expiresAt: true,
-        user: { select: { id: true } },
-      },
-    });
+    const session_info = await db
+      .selectFrom("Session")
+      .innerJoin("User", "User.id", "Session.userId")
+      .where("Session.token", "=", session)
+      .select([
+        "Session.id as sessionId",
+        "Session.userId",
+        "Session.ipAddress",
+        "Session.disabledAt",
+        "Session.expiresAt",
+        "User.id as validUserId",
+      ])
+      .executeTakeFirst();
 
     if (
       !session_info ||
       session_info.disabledAt ||
       session_info.expiresAt <= new Date() ||
-      !session_info.user
+      !session_info.validUserId
     ) {
       if (session_info) void destroySession(session);
       return false;
     }
 
     // Track session usage in background
-    void trackSessionUsage(session_info.userId, session_info.id, ip);
+    void trackSessionUsage(session_info.userId, session_info.sessionId, ip);
 
     if (session_info.ipAddress !== ip) {
       void destroySession(session);
@@ -276,12 +336,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
   /**
    * Load user data by UID.
    */
-  public async load<S extends Prisma.UserSelect>(
-    uid: string | bigint,
-    select: S,
-  ): Promise<Me<S> | false | null>;
-  public async load(uid: string | bigint): Promise<Me<T> | false | null>;
-  public async load(uid: string | bigint, select: any = basicUserSelect): Promise<any> {
+  public async load(uid: string | bigint | number, select: any = basicUserSelect): Promise<any> {
     this.lastSelect = select;
 
     let bigUid: bigint;
@@ -300,10 +355,21 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     }
 
     if (!pureUser || pureUser.id == null) {
-      pureUser = await prisma.client.user.findUnique({
-        where: { id: bigUid },
-        select: pureUserSelect,
-      });
+      pureUser = await db
+        .selectFrom("User")
+        .where("id", "=", Number(bigUid))
+        .select([
+          "id",
+          "type",
+          "email",
+          "name",
+          "avatar",
+          "createWith",
+          "createdAt",
+          "disabledAt",
+          "deletedAt",
+        ])
+        .executeTakeFirst();
 
       if (!pureUser) return null;
 
@@ -316,27 +382,18 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     }
 
     if (!needsMemberships) {
-      this.data = filterUserSelection(pureUser, select) as any;
+      this.data = filterUserSelection(pureUser, select);
       return this;
     }
 
     const memberships = await this.fetchUserMemberships(bigUid);
-    this.data = filterUserSelection({ ...pureUser, memberships }, select) as any;
+    this.data = filterUserSelection({ ...pureUser, memberships }, select);
     return this;
   }
 
   /**
    * Create a new account.
    */
-  public async create<S extends Prisma.UserSelect>(
-    data: { name: string; email: string; createWith: string },
-    select: S,
-  ): Promise<Me<S> | false>;
-  public async create(data: {
-    name: string;
-    email: string;
-    createWith: string;
-  }): Promise<Me<T> | false>;
   public async create(
     data: { name: string; email: string; createWith: string },
     select: any = basicUserSelect,
@@ -351,10 +408,9 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       return this.load(user.id, select);
     }
 
-    this.data = filterUserSelection(user, select) as any;
+    this.data = filterUserSelection(user, select);
     return this;
   }
-
 
   /**
    * Session management namespace.
@@ -375,6 +431,7 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       },
     };
   }
+
   /**
    * Active devices management namespace.
    */
@@ -414,9 +471,11 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
     const result = await deleteAccount(this.data.id, (this.data as any).email);
 
     if (result) {
-      await Promise.all(supported_providers.map(provider => 
-        redis.redis.del(`user:${this.data!.id}:connections:${provider}`)
-      ));
+      await Promise.all(
+        supported_providers.map((provider) =>
+          redis.redis.del(`user:${this.data!.id}:connections:${provider}`),
+        ),
+      );
     }
 
     return result;
@@ -430,16 +489,20 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
       throw new Error("User data not loaded.");
     }
     const newSecret = `${nanoid(32)}.${Date.now()}.${nanoid(32)}`;
-    await prisma.client.$transaction([
-      prisma.client.user.update({
-        data: { secret: newSecret },
-        where: { id: BigInt(this.data.id) },
-      }),
-      prisma.client.session.updateMany({
-        where: { userId: BigInt(this.data.id), disabledAt: null },
-        data: { disabledAt: new Date() },
-      }),
-    ]);
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable("User")
+        .set({ secret: newSecret })
+        .where("id", "=", Number(this.data.id))
+        .execute();
+
+      await trx
+        .updateTable("Session")
+        .set({ disabledAt: new Date() })
+        .where("userId", "=", Number(this.data.id))
+        .where("disabledAt", "is", null)
+        .execute();
+    });
     return true;
   }
 
@@ -483,12 +546,5 @@ export class Me<T extends Prisma.UserSelect = typeof basicUserSelect> {
 
   public static async destroySession(token: string) {
     return destroySession(token);
-  }
-
-  /**
-   * Run dynamic checks on loaded user data.
-   */
-  private async selfHeal(user: any): Promise<any> {
-    return user;
   }
 }

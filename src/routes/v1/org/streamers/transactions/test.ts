@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
@@ -35,33 +35,40 @@ export const endpoint = new Elysia()
       const senderName = (body.senderName || "Test Supporter").trim();
       const message = body.message?.trim() || "This is a test tip alert!";
 
-      const tx = await prisma.client.transactionLog.create({
-        data: {
-          orgId,
-          streamerId,
+      const providerTxId = `test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const now = new Date();
+      const insertRes = await db
+        .insertInto("TransactionLog")
+        .values({
+          orgId: Number(orgId),
+          streamerId: Number(streamerId),
           provider,
-          providerTxId: `test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          providerTxId,
           type: "TIP",
           status: "COMPLETED",
-          isTest: true,
+          isTest: 1,
           amount,
           currency,
           senderName,
           message,
-        },
-      });
+          createdAt: now,
+          updatedAt: now,
+        })
+        .executeTakeFirstOrThrow();
+
+      const txId = String(insertRes.insertId);
 
       const formattedTx = {
-        id: String(tx.id),
-        provider: tx.provider,
-        type: tx.type,
-        status: tx.status,
-        isTest: tx.isTest,
-        amount: tx.amount,
-        currency: tx.currency,
-        senderName: tx.senderName,
-        message: tx.message,
-        createdAt: tx.createdAt.toISOString(),
+        id: txId,
+        provider,
+        type: "TIP",
+        status: "COMPLETED",
+        isTest: true,
+        amount,
+        currency,
+        senderName,
+        message,
+        createdAt: now.toISOString(),
         isDeleted: false,
       };
 

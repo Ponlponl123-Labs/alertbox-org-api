@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { TransactionStatus } from "@/generated/prisma/client";
+import { TransactionStatus } from "@/db/enums";
 import betterConsole, { tsflag, s } from "ts-better-console";
 import { logDev } from "@/utils/log";
 import { relayStreamlabsDonation } from "@/utils/streamlabs";
@@ -20,14 +20,15 @@ export class WebhookDispatcher {
     status: string,
   ): Promise<void> {
     try {
-      await prisma.client.webhookLog.create({
-        data: {
+      await db
+        .insertInto("WebhookLog")
+        .values({
           provider,
           eventType,
           rawPayload,
           status,
-        },
-      });
+        })
+        .execute();
     } catch (error) {
       betterConsole.error(
         tsflag("error", true, s("Failed to write WebhookLog:", { color: "red" })),
@@ -43,14 +44,12 @@ export class WebhookDispatcher {
     provider: string,
     providerTxId: string,
   ): Promise<boolean> {
-    const existingTx = await prisma.client.transactionLog.findUnique({
-      where: {
-        provider_providerTxId: {
-          provider,
-          providerTxId,
-        },
-      },
-    });
+    const existingTx = await db
+      .selectFrom("TransactionLog")
+      .where("provider", "=", provider)
+      .where("providerTxId", "=", providerTxId)
+      .select("id")
+      .executeTakeFirst();
     return !!existingTx;
   }
 
@@ -69,37 +68,44 @@ export class WebhookDispatcher {
       return;
     }
 
-    const tx = await prisma.client.transactionLog.create({
-      data: {
-        orgId: targetOrgId,
-        streamerId: targetStreamerId,
+    const amount = Math.round((Number.isFinite(payload.amount) && payload.amount >= 0 ? payload.amount : 0) * 100);
+    const now = new Date();
+
+    const insertRes = await db
+      .insertInto("TransactionLog")
+      .values({
+        orgId: Number(targetOrgId),
+        streamerId: Number(targetStreamerId),
         provider: payload.provider,
         providerTxId: payload.providerTxId,
         type: payload.type,
         status: payload.status ?? TransactionStatus.COMPLETED,
-        isTest: payload.isTest,
-        amount: Math.round((Number.isFinite(payload.amount) && payload.amount >= 0 ? payload.amount : 0) * 100),
+        isTest: payload.isTest ? 1 : 0,
+        amount,
         currency: payload.currency,
         senderName: payload.senderName,
         senderEmail: payload.senderEmail ?? null,
         message: payload.message ?? null,
         rawPayload: payload.rawPayload,
-      },
-    });
+        updatedAt: now,
+      })
+      .executeTakeFirst();
+
+    const txId = insertRes.insertId ? String(insertRes.insertId) : String(Date.now());
 
     broadcastStreamerTransaction(targetOrgId, targetStreamerId, {
       type: "transaction:new",
       transaction: {
-        id: String(tx.id),
-        provider: tx.provider,
-        type: tx.type,
-        status: tx.status,
-        isTest: tx.isTest,
-        amount: tx.amount,
-        currency: tx.currency,
-        senderName: tx.senderName,
-        message: tx.message,
-        createdAt: tx.createdAt.toISOString(),
+        id: txId,
+        provider: payload.provider,
+        type: payload.type,
+        status: payload.status ?? TransactionStatus.COMPLETED,
+        isTest: payload.isTest,
+        amount,
+        currency: payload.currency,
+        senderName: payload.senderName,
+        message: payload.message ?? null,
+        createdAt: now.toISOString(),
         isDeleted: false,
       },
     }).catch(() => {});
@@ -179,16 +185,13 @@ export class WebhookDispatcher {
       return;
     }
 
-    const widgets = await prisma.client.widget.findMany({
-      where: {
-        streamerId: targetStreamerId,
-        type: "ALERTBOX",
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const widgets = await db
+      .selectFrom("Widget")
+      .where("streamerId", "=", Number(targetStreamerId))
+      .where("type", "=", "ALERTBOX")
+      .where("deletedAt", "is", null)
+      .select("id")
+      .execute();
 
     logDev(
       tsflag(

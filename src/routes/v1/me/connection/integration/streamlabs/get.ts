@@ -3,7 +3,7 @@ import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { redis } from "@/core/redis";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 const getValidation = {
   detail: {
@@ -39,13 +39,11 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to view integrations";
       }
 
-      const integration = await prisma.client.integration.findUnique({
-        where: { streamerId: org.streamerId },
-        select: {
-          streamlabsSecret: true,
-          streamlabsOptions: true,
-        },
-      });
+      const integration = await db
+        .selectFrom("Integration")
+        .select(["streamlabsSecret", "streamlabsOptions"])
+        .where("streamerId", "=", Number(org.streamerId))
+        .executeTakeFirst();
 
       return {
         isConnected: !!integration?.streamlabsSecret,
@@ -105,14 +103,12 @@ export const endpoint = new Elysia()
       }
 
       // Query database
-      const logs = await prisma.client.streamlabsRelayLog.findMany({
-        where: {
-          streamerId: org.streamerId,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+      const logs = await db
+        .selectFrom("StreamlabsRelayLog")
+        .selectAll()
+        .where("streamerId", "=", Number(org.streamerId))
+        .orderBy("createdAt", "desc")
+        .execute();
 
       const formattedLogs = logs.map((l) => ({
         ...l,

@@ -1,7 +1,7 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
-import { hasPermission, hasAnyPermission } from "@/utils/rbac";
+import { db } from "@/db";
+import { hasAnyPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
 
@@ -24,27 +24,33 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
-      if (!callerMember || !hasAnyPermission(callerMember.permissions, OrgPerm.ORG_MEMBER_ADD | OrgPerm.ORG_MEMBER_REMOVE)) {
+      if (!callerMember || !hasAnyPermission(BigInt(callerMember.permissions), OrgPerm.ORG_MEMBER_ADD | OrgPerm.ORG_MEMBER_REMOVE)) {
         set.status = "Forbidden";
         return "Insufficient permissions to delete invites";
       }
 
-      const invite = await prisma.client.organizationInvite.findUnique({
-        where: { id: inviteId },
-      });
+      const invite = await db
+        .selectFrom("OrganizationInvite")
+        .select(["id", "orgId"])
+        .where("id", "=", Number(inviteId))
+        .executeTakeFirst();
 
-      if (!invite || invite.orgId !== orgId) {
+      if (!invite || BigInt(invite.orgId) !== orgId) {
         set.status = "Not Found";
         return "Invite not found";
       }
 
-      await prisma.client.organizationInvite.delete({
-        where: { id: inviteId },
-      });
+      await db
+        .deleteFrom("OrganizationInvite")
+        .where("id", "=", Number(inviteId))
+        .execute();
 
       return "OK";
     },

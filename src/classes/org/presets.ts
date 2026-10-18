@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 
 export interface RolePresetData {
@@ -11,12 +11,15 @@ export interface RolePresetData {
 }
 
 export async function listOrgRolePresets(orgId: bigint | string): Promise<RolePresetData[]> {
-  const targetOrgId = BigInt(orgId);
+  const targetOrgId = Number(orgId);
   try {
-    const dbPresets = await prisma.client.organizationRolePreset.findMany({
-      where: { orgId: targetOrgId },
-      orderBy: { createdAt: "asc" },
-    });
+    const dbPresets = await db
+      .selectFrom("OrganizationRolePreset")
+      .selectAll()
+      .where("orgId", "=", targetOrgId)
+      .orderBy("createdAt", "asc")
+      .execute();
+
     if (dbPresets && dbPresets.length > 0) {
       return dbPresets.map((p) => ({
         id: String(p.id),
@@ -24,12 +27,11 @@ export async function listOrgRolePresets(orgId: bigint | string): Promise<RolePr
         description: p.description,
         permissions: p.permissions.toString(),
         color: p.color,
-        createdAt: p.createdAt.toISOString(),
+        createdAt: new Date(p.createdAt).toISOString(),
       }));
     }
   } catch {}
 
-  // Fallback to Redis cache if table is migrating
   const raw = await redis.redis.get(`org:${String(orgId)}:permissions:presets`);
   return raw ? JSON.parse(raw) : [];
 }
@@ -43,27 +45,30 @@ export async function createOrgRolePreset(
     color?: string | null;
   },
 ): Promise<RolePresetData> {
-  const targetOrgId = BigInt(orgId);
+  const targetOrgId = Number(orgId);
   let createdPreset: RolePresetData;
 
   try {
-    const dbRecord = await prisma.client.organizationRolePreset.create({
-      data: {
+    const insertResult = await db
+      .insertInto("OrganizationRolePreset")
+      .values({
         orgId: targetOrgId,
         name: data.name.trim(),
         description: data.description?.trim() || null,
-        permissions: data.permissions,
+        permissions: Number(data.permissions),
         color: data.color?.trim() || null,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .executeTakeFirstOrThrow();
 
+    const insertedId = insertResult.insertId ? Number(insertResult.insertId) : Date.now();
     createdPreset = {
-      id: String(dbRecord.id),
-      name: dbRecord.name,
-      description: dbRecord.description,
-      permissions: dbRecord.permissions.toString(),
-      color: dbRecord.color,
-      createdAt: dbRecord.createdAt.toISOString(),
+      id: String(insertedId),
+      name: data.name.trim(),
+      description: data.description?.trim() || null,
+      permissions: data.permissions.toString(),
+      color: data.color?.trim() || null,
+      createdAt: new Date().toISOString(),
     };
   } catch {
     createdPreset = {
@@ -76,7 +81,6 @@ export async function createOrgRolePreset(
     };
   }
 
-  // Update Redis cache
   const existing = await listOrgRolePresets(orgId);
   if (!existing.some((p) => p.id === createdPreset.id)) {
     existing.push(createdPreset);
@@ -96,19 +100,19 @@ export async function updateOrgRolePreset(
     color?: string | null;
   },
 ): Promise<RolePresetData> {
-  const targetOrgId = BigInt(orgId);
-
   try {
-    const numId = BigInt(presetId);
-    await prisma.client.organizationRolePreset.update({
-      where: { id: numId },
-      data: {
-        ...(patch.name ? { name: patch.name.trim() } : {}),
-        ...(patch.description !== undefined ? { description: patch.description?.trim() || null } : {}),
-        ...(patch.permissions !== undefined ? { permissions: patch.permissions } : {}),
-        ...(patch.color !== undefined ? { color: patch.color?.trim() || null } : {}),
-      },
-    });
+    const numId = Number(presetId);
+    const updatePayload: any = { updatedAt: new Date() };
+    if (patch.name) updatePayload.name = patch.name.trim();
+    if (patch.description !== undefined) updatePayload.description = patch.description?.trim() || null;
+    if (patch.permissions !== undefined) updatePayload.permissions = Number(patch.permissions);
+    if (patch.color !== undefined) updatePayload.color = patch.color?.trim() || null;
+
+    await db
+      .updateTable("OrganizationRolePreset")
+      .set(updatePayload)
+      .where("id", "=", numId)
+      .execute();
   } catch {}
 
   const existing = await listOrgRolePresets(orgId);
@@ -130,10 +134,11 @@ export async function updateOrgRolePreset(
 
 export async function deleteOrgRolePreset(orgId: bigint | string, presetId: string): Promise<boolean> {
   try {
-    const numId = BigInt(presetId);
-    await prisma.client.organizationRolePreset.delete({
-      where: { id: numId },
-    });
+    const numId = Number(presetId);
+    await db
+      .deleteFrom("OrganizationRolePreset")
+      .where("id", "=", numId)
+      .execute();
   } catch {}
 
   const existing = await listOrgRolePresets(orgId);

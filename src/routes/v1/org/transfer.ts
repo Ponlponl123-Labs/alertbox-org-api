@@ -1,9 +1,8 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "@/core/redis";
 import { RolePresets } from "@/consts/permission";
-import { OrgRole } from "@/generated/prisma/client";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { isSelfHosted } from "@/utils/instance";
@@ -29,24 +28,27 @@ export const endpoint = new Elysia()
         return "Only the organization OWNER can transfer ownership";
       }
 
-      const targetMember = await prisma.client.organizationMember.findUnique({
-        where: { id: targetMemberId },
-      });
+      const targetMember = await db
+        .selectFrom("OrganizationMember")
+        .selectAll()
+        .where("id", "=", Number(targetMemberId))
+        .executeTakeFirst();
 
-      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
+      if (!targetMember || targetMember.orgId !== Number(orgId) || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Target member not found in this organization";
       }
 
-      if (targetMember.userId === user.data.id) {
+      if (targetMember.userId === Number(user.data.id)) {
         set.status = "Bad Request";
         return "You are already the owner of this organization";
       }
 
-      const targetUser = await prisma.client.user.findUnique({
-        where: { id: targetMember.userId },
-        select: { id: true, type: true },
-      });
+      const targetUser = await db
+        .selectFrom("User")
+        .select(["id", "type"])
+        .where("id", "=", targetMember.userId)
+        .executeTakeFirst();
 
       if (!targetUser) {
         set.status = "Not Found";
@@ -54,14 +56,16 @@ export const endpoint = new Elysia()
       }
 
       if (!isSelfHosted() && targetUser.type !== "OPERATOR") {
-        const targetActiveOwnedCount = await prisma.client.organizationMember.count({
-          where: {
-            userId: targetMember.userId,
-            role: OrgRole.OWNER,
-            isDeleted: null,
-            organization: { deletedAt: null },
-          },
-        });
+        const countRow = await db
+          .selectFrom("OrganizationMember")
+          .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+          .select((eb) => eb.fn.count("OrganizationMember.id").as("count"))
+          .where("OrganizationMember.userId", "=", targetMember.userId)
+          .where("OrganizationMember.role", "=", "OWNER")
+          .where("OrganizationMember.isDeleted", "is", null)
+          .where("Organization.deletedAt", "is", null)
+          .executeTakeFirst();
+        const targetActiveOwnedCount = Number(countRow?.count ?? 0);
 
         if (targetActiveOwnedCount >= 1) {
           set.status = "Forbidden";
@@ -70,28 +74,37 @@ export const endpoint = new Elysia()
       }
 
       // Single-owner transaction: Update org ownerId, demote caller to ADMIN, promote target to OWNER
-      await prisma.client.$transaction([
-        prisma.client.organization.update({
-          where: { id: orgId },
-          data: {
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable("Organization")
+          .set({
             ownerId: targetMember.userId,
-          },
-        }),
-        prisma.client.organizationMember.update({
-          where: { orgId_userId: { orgId, userId: user.data.id } },
-          data: {
-            role: OrgRole.ADMIN,
-            permissions: RolePresets.ADMIN,
-          },
-        }),
-        prisma.client.organizationMember.update({
-          where: { id: targetMemberId },
-          data: {
-            role: OrgRole.OWNER,
-            permissions: RolePresets.OWNER,
-          },
-        }),
-      ]);
+            updatedAt: new Date(),
+          })
+          .where("id", "=", Number(orgId))
+          .execute();
+
+        await trx
+          .updateTable("OrganizationMember")
+          .set({
+            role: "ADMIN",
+            permissions: Number(RolePresets.ADMIN),
+            updatedAt: new Date(),
+          })
+          .where("orgId", "=", Number(orgId))
+          .where("userId", "=", Number(user.data.id))
+          .execute();
+
+        await trx
+          .updateTable("OrganizationMember")
+          .set({
+            role: "OWNER",
+            permissions: Number(RolePresets.OWNER),
+            updatedAt: new Date(),
+          })
+          .where("id", "=", Number(targetMemberId))
+          .execute();
+      });
 
       await Promise.all([
         redis.redis.del(`user:${user.data.id}:org_list`),

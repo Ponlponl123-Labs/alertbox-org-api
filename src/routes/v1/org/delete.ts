@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
@@ -22,32 +22,45 @@ export const endpoint = new Elysia()
 
       // Fetch all members and streamers before soft deleting
       const [members, streamers] = await Promise.all([
-        prisma.client.organizationMember.findMany({
-          where: { orgId },
-          select: { userId: true },
-        }),
-        prisma.client.streamer.findMany({
-          where: { orgId },
-          select: { id: true, uri: true },
-        }),
+        db
+          .selectFrom("OrganizationMember")
+          .select("userId")
+          .where("orgId", "=", Number(orgId))
+          .execute(),
+        db
+          .selectFrom("Streamer")
+          .select(["id", "uri"])
+          .where("orgId", "=", Number(orgId))
+          .execute(),
       ]);
 
       const now = new Date();
+      const numOrgId = Number(orgId);
+      const streamerIds = streamers.map((s) => s.id);
 
-      await prisma.client.$transaction([
-        prisma.client.organization.update({
-          where: { id: orgId },
-          data: { deletedAt: now },
-        }),
-        prisma.client.streamer.updateMany({
-          where: { orgId, deletedAt: null },
-          data: { deletedAt: now },
-        }),
-        prisma.client.reservedUri.updateMany({
-          where: { streamer: { orgId }, deletedAt: null },
-          data: { deletedAt: now },
-        }),
-      ]);
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable("Organization")
+          .set({ deletedAt: now })
+          .where("id", "=", numOrgId)
+          .execute();
+
+        await trx
+          .updateTable("Streamer")
+          .set({ deletedAt: now })
+          .where("orgId", "=", numOrgId)
+          .where("deletedAt", "is", null)
+          .execute();
+
+        if (streamerIds.length > 0) {
+          await trx
+            .updateTable("ReservedUri")
+            .set({ deletedAt: now })
+            .where("streamerId", "in", streamerIds)
+            .where("deletedAt", "is", null)
+            .execute();
+        }
+      });
 
       const keysToDelete: string[] = [
         `org:${String(orgId)}:info`,

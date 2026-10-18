@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
@@ -21,9 +21,11 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return authRes;
       const { orgId } = authRes;
 
-      const org = await prisma.client.organization.findUnique({
-        where: { id: orgId },
-      });
+      const org = await db
+        .selectFrom("Organization")
+        .selectAll()
+        .where("id", "=", Number(orgId))
+        .executeTakeFirst();
 
       if (!org || org.deletedAt) {
         set.status = "Not Found";
@@ -87,15 +89,27 @@ export const endpoint = new Elysia()
         data.banner = null;
       }
 
-      const updated = await prisma.client.organization.update({
-        where: { id: orgId },
-        data,
-      });
+      await db
+        .updateTable("Organization")
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where("id", "=", Number(orgId))
+        .execute();
 
-      const members = await prisma.client.organizationMember.findMany({
-        where: { orgId },
-        select: { userId: true },
-      });
+      const updated = await db
+        .selectFrom("Organization")
+        .selectAll()
+        .where("id", "=", Number(orgId))
+        .executeTakeFirstOrThrow();
+
+      const members = await db
+        .selectFrom("OrganizationMember")
+        .select("userId")
+        .where("orgId", "=", Number(orgId))
+        .where("isDeleted", "is", null)
+        .execute();
 
       await updateOrgCache(
         {
@@ -106,7 +120,7 @@ export const endpoint = new Elysia()
           avatar: updated.avatar,
           banner: updated.banner,
           ownerId: updated.ownerId,
-          createdAt: updated.createdAt,
+          createdAt: updated.createdAt ? new Date(updated.createdAt) : undefined,
         },
         members.map((m) => m.userId),
       );

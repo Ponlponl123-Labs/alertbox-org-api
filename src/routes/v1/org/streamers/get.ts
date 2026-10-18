@@ -1,10 +1,10 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
-import { authorizeOrg, authorizeStreamer, resolveOrgId } from "@/core/org";
+import { authorizeStreamer, resolveOrgId } from "@/core/org";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -18,10 +18,12 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-        select: { id: true, permissions: true, role: true },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "permissions", "role"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
       if (!callerMember) {
         set.status = "Forbidden";
@@ -29,7 +31,7 @@ export const endpoint = new Elysia()
       }
 
       const isOwnerOrAdmin = callerMember.role === "OWNER" || callerMember.role === "ADMIN";
-      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(callerMember.permissions, OrgPerm.STREAMER_VIEW);
+      const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(BigInt(callerMember.permissions), OrgPerm.STREAMER_VIEW);
 
       let assignedStreamerIds: string[] = [];
       if (!isOwnerOrAdmin) {
@@ -63,16 +65,31 @@ export const endpoint = new Elysia()
       }
 
       if (!streamersData.length) {
-        const streamers = await prisma.client.streamer.findMany({
-          where: { orgId, deletedAt: null },
-          include: {
-            widgets: {
-              where: { deletedAt: null },
-              select: { id: true, type: true, token: true },
-            },
-          },
-          orderBy: { createdAt: "asc" },
-        });
+        const streamers = await db
+          .selectFrom("Streamer")
+          .select(["id", "name", "displayName", "avatar", "uri", "publishedAt", "createdAt"])
+          .where("orgId", "=", Number(orgId))
+          .where("deletedAt", "is", null)
+          .orderBy("createdAt", "asc")
+          .execute();
+
+        const streamerIds = streamers.map((s) => s.id);
+        const widgets = streamerIds.length
+          ? await db
+              .selectFrom("Widget")
+              .select(["id", "streamerId", "type", "token"])
+              .where("streamerId", "in", streamerIds)
+              .where("deletedAt", "is", null)
+              .execute()
+          : [];
+
+        const widgetsByStreamer = new Map<string, typeof widgets>();
+        for (const w of widgets) {
+          const key = String(w.streamerId);
+          const list = widgetsByStreamer.get(key) || [];
+          list.push(w);
+          widgetsByStreamer.set(key, list);
+        }
 
         streamersData = streamers.map((s) => ({
           id: String(s.id),
@@ -81,7 +98,7 @@ export const endpoint = new Elysia()
           avatar: s.avatar,
           uri: s.uri,
           publishedAt: s.publishedAt,
-          widgets: s.widgets.map((w) => ({
+          widgets: (widgetsByStreamer.get(String(s.id)) || []).map((w) => ({
             ...w,
             id: String(w.id),
           })),
@@ -143,24 +160,93 @@ export const endpoint = new Elysia()
         } catch {}
       }
 
-      const streamer = await prisma.client.streamer.findFirst({
-        where: { id: streamerId, orgId, deletedAt: null },
-        include: {
-          widgets: {
-            where: { deletedAt: null },
-            include: {
-              alertbox: {
-                include: { events: true },
-              },
-            },
-          },
-          integration: true,
-        },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .select([
+          "id",
+          "orgId",
+          "name",
+          "displayName",
+          "bio",
+          "avatar",
+          "banner",
+          "uri",
+          "uriCooldownEnd",
+          "publishedAt",
+          "accentColor",
+          "twitch",
+          "youtube",
+          "twitter",
+          "facebook",
+          "reddit",
+          "discord",
+        ])
+        .where("id", "=", Number(streamerId))
+        .where("orgId", "=", Number(orgId))
+        .where("deletedAt", "is", null)
+        .executeTakeFirst();
 
       if (!streamer) {
         set.status = "Not Found";
         return "Streamer channel not found";
+      }
+
+      const [widgets, integration] = await Promise.all([
+        db.selectFrom("Widget")
+          .select(["id", "orgId", "streamerId", "type", "token", "createdAt", "updatedAt"])
+          .where("streamerId", "=", Number(streamerId))
+          .where("deletedAt", "is", null)
+          .execute(),
+        db.selectFrom("Integration")
+          .select([
+            "id",
+            "orgId",
+            "streamerId",
+            "stripeSecret",
+            "bmacSecret",
+            "kofiSecret",
+            "xenditSecret",
+            "ffpSecret",
+            "streamlabsSecret",
+            "kofiUsername",
+            "bmacUsername",
+          ])
+          .where("streamerId", "=", Number(streamerId))
+          .executeTakeFirst(),
+      ]);
+
+      const widgetIds = widgets.map((w) => w.id);
+      const alertboxSettings = widgetIds.length
+        ? await db
+            .selectFrom("AlertboxSetting")
+            .selectAll()
+            .where("widgetId", "in", widgetIds)
+            .execute()
+        : [];
+
+      const alertboxIds = alertboxSettings.map((a) => a.id);
+      const alertEvents = alertboxIds.length
+        ? await db
+            .selectFrom("AlertboxEvent")
+            .selectAll()
+            .where("alertboxId", "in", alertboxIds)
+            .execute()
+        : [];
+
+      const eventsByAlertbox = new Map<string, typeof alertEvents>();
+      for (const ev of alertEvents) {
+        const key = String(ev.alertboxId);
+        const list = eventsByAlertbox.get(key) || [];
+        list.push(ev);
+        eventsByAlertbox.set(key, list);
+      }
+
+      const alertboxByWidget = new Map<string, typeof alertboxSettings[0] & { events: typeof alertEvents }>();
+      for (const setting of alertboxSettings) {
+        alertboxByWidget.set(String(setting.widgetId), {
+          ...setting,
+          events: eventsByAlertbox.get(String(setting.id)) || [],
+        });
       }
 
       const result = {
@@ -181,37 +267,40 @@ export const endpoint = new Elysia()
         facebook: streamer.facebook,
         reddit: streamer.reddit,
         discord: streamer.discord,
-        widgets: streamer.widgets.map((w) => ({
-          ...w,
-          id: String(w.id),
-          orgId: String(w.orgId),
-          streamerId: String(w.streamerId),
-          alertbox: w.alertbox
-            ? {
-                ...w.alertbox,
-                id: String(w.alertbox.id),
-                widgetId: String(w.alertbox.widgetId),
-                events: (w.alertbox.events || []).map((ev) => ({
-                  ...ev,
-                  id: String(ev.id),
-                  alertboxId: String(ev.alertboxId),
-                })),
-              }
-            : null,
-        })),
-        integration: streamer.integration
+        widgets: widgets.map((w) => {
+          const setting = alertboxByWidget.get(String(w.id));
+          return {
+            ...w,
+            id: String(w.id),
+            orgId: String(w.orgId),
+            streamerId: String(w.streamerId),
+            alertbox: setting
+              ? {
+                  ...setting,
+                  id: String(setting.id),
+                  widgetId: String(setting.widgetId),
+                  events: setting.events.map((ev) => ({
+                    ...ev,
+                    id: String(ev.id),
+                    alertboxId: String(ev.alertboxId),
+                  })),
+                }
+              : null,
+          };
+        }),
+        integration: integration
           ? {
-              id: String(streamer.integration.id),
-              orgId: String(streamer.integration.orgId),
-              streamerId: String(streamer.integration.streamerId),
-              stripe: !!streamer.integration.stripeSecret,
-              bmac: !!streamer.integration.bmacSecret,
-              kofi: !!streamer.integration.kofiSecret,
-              xendit: !!streamer.integration.xenditSecret,
-              ffp: !!streamer.integration.ffpSecret,
-              streamlabs: !!streamer.integration.streamlabsSecret,
-              kofiUsername: streamer.integration.kofiUsername,
-              bmacUsername: streamer.integration.bmacUsername,
+              id: String(integration.id),
+              orgId: String(integration.orgId),
+              streamerId: String(integration.streamerId),
+              stripe: !!integration.stripeSecret,
+              bmac: !!integration.bmacSecret,
+              kofi: !!integration.kofiSecret,
+              xendit: !!integration.xenditSecret,
+              ffp: !!integration.ffpSecret,
+              streamlabs: !!integration.streamlabsSecret,
+              kofiUsername: integration.kofiUsername,
+              bmacUsername: integration.bmacUsername,
             }
           : null,
       };

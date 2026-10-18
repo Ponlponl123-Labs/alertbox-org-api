@@ -1,10 +1,9 @@
 import Elysia from "elysia";
 import { auth } from "./auth";
-import { prisma } from "./prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "./redis";
 import { hasPermission, parseStreamerPermissions, hasStreamerPermission } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
-import { OrgRole } from "@/generated/prisma/client";
 
 export interface OrgContext {
   orgId: bigint;
@@ -24,24 +23,27 @@ export async function resolveOrgId(param?: string | null): Promise<bigint | null
         if (parsed?.id) return BigInt(parsed.id);
       }
       const numericId = BigInt(trimmed);
-      const exists = await prisma.client.organization.findFirst({
-        where: { id: numericId, deletedAt: null },
-        select: { id: true },
-      });
-      if (exists) return exists.id;
+      const exists = await db
+        .selectFrom("Organization")
+        .select("id")
+        .where("id", "=", Number(numericId))
+        .where("deletedAt", "is", null)
+        .executeTakeFirst();
+      if (exists) return BigInt(exists.id);
     } catch {}
   }
-  const org = await prisma.client.organization.findFirst({
-    where: {
-      OR: [
-        { slug: trimmed.toLowerCase() },
-        { name: trimmed },
-      ],
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
-  return org ? org.id : null;
+  const org = await db
+    .selectFrom("Organization")
+    .select("id")
+    .where("deletedAt", "is", null)
+    .where((eb) =>
+      eb.or([
+        eb("slug", "=", trimmed.toLowerCase()),
+        eb("name", "=", trimmed),
+      ])
+    )
+    .executeTakeFirst();
+  return org ? BigInt(org.id) : null;
 }
 
 export async function resolveStreamerId(
@@ -53,26 +55,30 @@ export async function resolveStreamerId(
   if (/^\d+$/.test(trimmed)) {
     try {
       const numericId = BigInt(trimmed);
-      const exists = await prisma.client.streamer.findFirst({
-        where: { id: numericId, orgId, deletedAt: null },
-        select: { id: true },
-      });
-      if (exists) return exists.id;
+      const exists = await db
+        .selectFrom("Streamer")
+        .select("id")
+        .where("id", "=", Number(numericId))
+        .where("orgId", "=", Number(orgId))
+        .where("deletedAt", "is", null)
+        .executeTakeFirst();
+      if (exists) return BigInt(exists.id);
     } catch {}
   }
-  const streamer = await prisma.client.streamer.findFirst({
-    where: {
-      orgId,
-      OR: [
-        { name: trimmed },
-        { uri: trimmed },
-        { displayName: trimmed },
-      ],
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
-  return streamer ? streamer.id : null;
+  const streamer = await db
+    .selectFrom("Streamer")
+    .select("id")
+    .where("orgId", "=", Number(orgId))
+    .where("deletedAt", "is", null)
+    .where((eb) =>
+      eb.or([
+        eb("name", "=", trimmed),
+        eb("uri", "=", trimmed),
+        eb("displayName", "=", trimmed),
+      ])
+    )
+    .executeTakeFirst();
+  return streamer ? BigInt(streamer.id) : null;
 }
 
 /**
@@ -87,7 +93,7 @@ export const orgContext = new Elysia({ name: "org-context" })
       return { org: null };
     }
 
-    const userId = user.data.id;
+    const userId = BigInt(user.data.id);
     const userKey = String(userId);
 
     const requestedOrgIdHeader = headers["x-org-id"] || (cookie?.ab_org_id?.value as string | undefined);
@@ -122,21 +128,23 @@ export const orgContext = new Elysia({ name: "org-context" })
     }
 
     if (!membership) {
-      const memberRecord = await prisma.client.organizationMember.findFirst({
-        where: targetOrgId ? { userId, orgId: targetOrgId, isDeleted: null } : { userId, isDeleted: null },
-        select: {
-          orgId: true,
-          role: true,
-          permissions: true,
-        },
-        orderBy: { createdAt: "asc" },
-      });
+      let query = db
+        .selectFrom("OrganizationMember")
+        .select(["orgId", "role", "permissions"])
+        .where("userId", "=", Number(userId))
+        .where("isDeleted", "is", null);
+
+      if (targetOrgId) {
+        query = query.where("orgId", "=", Number(targetOrgId));
+      }
+
+      const memberRecord = await query.orderBy("createdAt", "asc").executeTakeFirst();
 
       if (memberRecord) {
         membership = {
-          orgId: memberRecord.orgId,
+          orgId: BigInt(memberRecord.orgId),
           role: memberRecord.role,
-          permissions: memberRecord.permissions,
+          permissions: BigInt(memberRecord.permissions),
         };
         try {
           await redis.redis.hset(
@@ -170,13 +178,15 @@ export const orgContext = new Elysia({ name: "org-context" })
     }
 
     if (!targetStreamerId) {
-      const streamer = await prisma.client.streamer.findFirst({
-        where: { orgId: membership.orgId, deletedAt: null },
-        select: { id: true },
-        orderBy: { createdAt: "asc" },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .select("id")
+        .where("orgId", "=", Number(membership.orgId))
+        .where("deletedAt", "is", null)
+        .orderBy("createdAt", "asc")
+        .executeTakeFirst();
       if (streamer) {
-        targetStreamerId = streamer.id;
+        targetStreamerId = BigInt(streamer.id);
       }
     }
 
@@ -236,10 +246,12 @@ export async function getMemberPermissions(
     }
   }
 
-  const callerMember = await prisma.client.organizationMember.findUnique({
-    where: { orgId_userId: { orgId, userId } },
-    select: { permissions: true, role: true, isDeleted: true },
-  });
+  const callerMember = await db
+    .selectFrom("OrganizationMember")
+    .select(["permissions", "role", "isDeleted"])
+    .where("orgId", "=", Number(orgId))
+    .where("userId", "=", Number(userId))
+    .executeTakeFirst();
 
   if (callerMember && !callerMember.isDeleted) {
     (async () => {
@@ -260,7 +272,7 @@ export async function getMemberPermissions(
         }
       }
     })().catch(() => {});
-    return { role: callerMember.role, permissions: callerMember.permissions };
+    return { role: callerMember.role, permissions: BigInt(callerMember.permissions) };
   }
 
   return null;
@@ -319,10 +331,12 @@ export async function authorizeStreamer(
     return "Invalid organization or streamer ID";
   }
 
-  const callerMember = await prisma.client.organizationMember.findUnique({
-    where: { orgId_userId: { orgId, userId } },
-    select: { id: true, permissions: true, role: true, isDeleted: true },
-  });
+  const callerMember = await db
+    .selectFrom("OrganizationMember")
+    .select(["id", "permissions", "role", "isDeleted"])
+    .where("orgId", "=", Number(orgId))
+    .where("userId", "=", Number(userId))
+    .executeTakeFirst();
 
   if (!callerMember || callerMember.isDeleted) {
     set.status = "Forbidden";
@@ -335,13 +349,14 @@ export async function authorizeStreamer(
       orgId,
       streamerId,
       role: callerMember.role,
-      permissions: callerMember.permissions,
+      permissions: BigInt(callerMember.permissions),
       streamerPermissions: StreamerPerm.ALL,
     };
   }
 
+  const memberPerms = BigInt(callerMember.permissions);
   const hasGlobalOrgPerm = options.requiredOrgPerm
-    ? hasPermission(callerMember.permissions, options.requiredOrgPerm)
+    ? hasPermission(memberPerms, options.requiredOrgPerm)
     : false;
 
   let streamerPerms = 0;
@@ -356,26 +371,25 @@ export async function authorizeStreamer(
     } catch {}
   }
 
-  // Inherit channel perms from org permissions if granted
-  if (hasPermission(callerMember.permissions, OrgPerm.STREAMER_VIEW)) {
+  if (hasPermission(memberPerms, OrgPerm.STREAMER_VIEW)) {
     streamerPerms |= StreamerPerm.STREAMER_VIEW;
   }
-  if (hasPermission(callerMember.permissions, OrgPerm.STREAMER_MANAGE)) {
+  if (hasPermission(memberPerms, OrgPerm.STREAMER_MANAGE)) {
     streamerPerms |= StreamerPerm.STREAMER_MANAGE;
   }
-  if (hasPermission(callerMember.permissions, OrgPerm.TRANSACTION_VIEW)) {
+  if (hasPermission(memberPerms, OrgPerm.TRANSACTION_VIEW)) {
     streamerPerms |= StreamerPerm.STREAMER_TRANSACTION_VIEW;
   }
-  if (hasPermission(callerMember.permissions, OrgPerm.ANALYTICS_VIEW)) {
+  if (hasPermission(memberPerms, OrgPerm.ANALYTICS_VIEW)) {
     streamerPerms |= StreamerPerm.STREAMER_ANALYTICS_VIEW;
   }
   if (
-    hasPermission(callerMember.permissions, OrgPerm.WIDGET_MANAGE) ||
-    hasPermission(callerMember.permissions, OrgPerm.WIDGET_VIEW)
+    hasPermission(memberPerms, OrgPerm.WIDGET_MANAGE) ||
+    hasPermission(memberPerms, OrgPerm.WIDGET_VIEW)
   ) {
     streamerPerms |= StreamerPerm.STREAMER_WIDGET_MANAGE;
   }
-  if (hasPermission(callerMember.permissions, OrgPerm.INTEGRATION_MANAGE)) {
+  if (hasPermission(memberPerms, OrgPerm.INTEGRATION_MANAGE)) {
     streamerPerms |= StreamerPerm.STREAMER_INTEGRATION_MANAGE;
   }
 
@@ -392,7 +406,7 @@ export async function authorizeStreamer(
     orgId,
     streamerId,
     role: callerMember.role,
-    permissions: callerMember.permissions,
+    permissions: memberPerms,
     streamerPermissions: streamerPerms,
   };
 }

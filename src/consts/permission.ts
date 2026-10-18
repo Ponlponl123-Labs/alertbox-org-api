@@ -1,4 +1,4 @@
-import { OrgRole } from "@/generated/prisma/client";
+import { OrgRole } from "@/db/enums";
 
 /**
  * 64-bit bitmask flags for ultra-fast, zero-overhead permission checks.

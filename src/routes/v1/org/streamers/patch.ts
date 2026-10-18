@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { hexColorToNumber } from "@/utils/color";
@@ -35,9 +35,13 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
       const { orgId, streamerId } = authRes;
 
-      const streamer = await prisma.client.streamer.findFirst({
-        where: { id: streamerId, orgId, deletedAt: null },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .selectAll()
+        .where("id", "=", Number(streamerId))
+        .where("orgId", "=", Number(orgId))
+        .where("deletedAt", "is", null)
+        .executeTakeFirst();
 
       if (!streamer) {
         set.status = "Not Found";
@@ -146,15 +150,25 @@ export const endpoint = new Elysia()
       if (body.reddit !== undefined || body.socialReddit !== undefined) data.reddit = body.reddit ?? body.socialReddit;
       if (body.discord !== undefined || body.socialDiscord !== undefined) data.discord = body.discord ?? body.socialDiscord;
 
-      const updated = await prisma.client.streamer.update({
-        where: { id: streamerId },
-        data,
-      });
+      data.updatedAt = new Date();
+      await db
+        .updateTable("Streamer")
+        .set(data)
+        .where("id", "=", Number(streamerId))
+        .execute();
 
-      const members = await prisma.client.organizationMember.findMany({
-        where: { orgId },
-        select: { userId: true },
-      });
+      const updated = await db
+        .selectFrom("Streamer")
+        .selectAll()
+        .where("id", "=", Number(streamerId))
+        .executeTakeFirstOrThrow();
+
+      const members = await db
+        .selectFrom("OrganizationMember")
+        .select(["userId"])
+        .where("orgId", "=", Number(orgId))
+        .where("isDeleted", "is", null)
+        .execute();
 
       await updateStreamerCache(
         {
@@ -174,7 +188,7 @@ export const endpoint = new Elysia()
           discord: updated.discord,
           uri: updated.uri,
         },
-        members.map((m) => m.userId),
+        members.map((m) => BigInt(m.userId)),
       );
 
       await logOrgAudit({
@@ -284,10 +298,11 @@ export const endpoint = new Elysia()
         return "Bad Request";
       }
 
-      const streamer = await prisma.client.streamer.findUnique({
-        where: { id: streamerId },
-        select: { uriCooldownEnd: true },
-      });
+      const streamer = await db
+        .selectFrom("Streamer")
+        .select(["uriCooldownEnd"])
+        .where("id", "=", Number(streamerId))
+        .executeTakeFirst();
 
       const now = Date.now();
       const cooldown = streamer?.uriCooldownEnd && new Date(streamer.uriCooldownEnd);

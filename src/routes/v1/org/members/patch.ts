@@ -1,10 +1,9 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "@/core/redis";
 import { hasAnyPermission } from "@/utils/rbac";
 import { OrgPerm, RolePresets } from "@/consts/permission";
-import { OrgRole } from "@/generated/prisma/client";
 import { resolveOrgId, getMemberPermissions, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { updateMemberCache } from "@/utils/cache-sync";
@@ -43,16 +42,18 @@ export const endpoint = new Elysia()
 
       const callerPerms = isOwner ? OrgPerm.ALL : callerMember.permissions;
 
-      const targetMember = await prisma.client.organizationMember.findUnique({
-        where: { id: targetMemberId },
-      });
+      const targetMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "orgId", "userId", "role", "permissions", "isDeleted"])
+        .where("id", "=", Number(targetMemberId))
+        .executeTakeFirst();
 
-      if (!targetMember || targetMember.orgId !== orgId || targetMember.isDeleted) {
+      if (!targetMember || BigInt(targetMember.orgId) !== orgId || targetMember.isDeleted) {
         set.status = "Not Found";
         return "Member not found";
       }
 
-      if (targetMember.userId === user.data.id) {
+      if (BigInt(targetMember.userId) === user.data.id) {
         set.status = "Forbidden";
         return "Cannot modify your own membership. Self-management is disabled.";
       }
@@ -79,7 +80,7 @@ export const endpoint = new Elysia()
         return "Cannot assign OWNER role via member update. Use ownership transfer.";
       }
 
-      const updateData: any = {};
+      const updateData: Record<string, any> = { updatedAt: new Date() };
       if (body.role) {
         const rolePerms = (RolePresets[body.role as OrgRole] ?? RolePresets.MEMBER) & ~OrgPerm.ORG_DELETE;
         if (!isOwner && (rolePerms & ~callerPerms) !== 0n) {
@@ -87,7 +88,7 @@ export const endpoint = new Elysia()
           return "Cannot assign a role with permissions higher than your own.";
         }
         updateData.role = body.role;
-        updateData.permissions = rolePerms;
+        updateData.permissions = Number(rolePerms);
       }
 
       if (body.permissions !== undefined) {
@@ -96,13 +97,20 @@ export const endpoint = new Elysia()
           set.status = "Forbidden";
           return "Cannot grant permissions higher than your own.";
         }
-        updateData.permissions = requestedPerms;
+        updateData.permissions = Number(requestedPerms);
       }
 
-      const updated = await prisma.client.organizationMember.update({
-        where: { id: targetMemberId },
-        data: updateData,
-      });
+      await db
+        .updateTable("OrganizationMember")
+        .set(updateData)
+        .where("id", "=", Number(targetMemberId))
+        .execute();
+
+      const updated = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "userId", "role", "permissions"])
+        .where("id", "=", Number(targetMemberId))
+        .executeTakeFirstOrThrow();
 
       if (body.streamerAssignments !== undefined) {
         await redis.redis.set(
@@ -111,9 +119,9 @@ export const endpoint = new Elysia()
         );
       }
 
-      await updateMemberCache(orgId, targetMemberId, targetMember.userId, {
+      await updateMemberCache(orgId, targetMemberId, BigInt(targetMember.userId), {
         role: updated.role,
-        permissions: updated.permissions.toString(),
+        permissions: String(updated.permissions),
       });
 
       await logOrgAudit({
@@ -121,14 +129,14 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "MEMBER_ROLE_UPDATED",
         targetType: "MEMBER",
-        targetId: targetMember.userId,
+        targetId: BigInt(targetMember.userId),
         payload: {
           targetMemberId: String(targetMemberId),
           targetUserId: String(targetMember.userId),
           previousRole: targetMember.role,
           role: updated.role,
-          previousPermissions: targetMember.permissions ? targetMember.permissions.toString() : "0",
-          permissions: updated.permissions.toString(),
+          previousPermissions: targetMember.permissions ? String(targetMember.permissions) : "0",
+          permissions: String(updated.permissions),
           streamerAssignments: body.streamerAssignments ?? null,
           streamerAssignmentsCount: body.streamerAssignments ? body.streamerAssignments.length : undefined,
         },
@@ -138,7 +146,7 @@ export const endpoint = new Elysia()
         id: String(updated.id),
         userId: String(updated.userId),
         role: updated.role,
-        permissions: updated.permissions.toString(),
+        permissions: String(updated.permissions),
         streamerAssignments: body.streamerAssignments,
       };
     },

@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { isValidUri } from "@/utils/regex";
 import { allowed_social } from "@/consts/regex";
@@ -130,10 +130,23 @@ export async function updateProfile(
     return null;
   }
 
-  const updated = await prisma.client.streamer.update({
-    data,
-    where: { id: targetStreamerId },
-  });
+  const targetId = Number(targetStreamerId);
+  await db
+    .updateTable("Streamer")
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where("id", "=", targetId)
+    .execute();
+
+  const updated = await db
+    .selectFrom("Streamer")
+    .selectAll()
+    .where("id", "=", targetId)
+    .executeTakeFirst();
+
+  if (!updated) return null;
 
   await updateStreamerCache({
     id: updated.id,
@@ -170,10 +183,11 @@ export async function registerURI(
   const cachedOwner = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cachedOwner && cachedOwner !== "noone") return false;
 
-  const existingRecord = await prisma.client.reservedUri.findUnique({
-    select: { streamerId: true, disabledAt: true },
-    where: { uri: parsedUri },
-  });
+  const existingRecord = await db
+    .selectFrom("ReservedUri")
+    .select(["streamerId", "disabledAt"])
+    .where("uri", "=", parsedUri)
+    .executeTakeFirst();
 
   if (existingRecord) {
     const status = existingRecord.disabledAt ? "disabled" : String(existingRecord.streamerId);
@@ -189,24 +203,28 @@ export async function registerURI(
   }
 
   const cooldownDate = new Date(Date.now() + week);
+  const targetId = Number(targetStreamerId);
 
   try {
-    await prisma.client.$transaction(async (tx) => {
-      await tx.reservedUri.create({
-        data: {
+    await db.transaction().execute(async (trx) => {
+      await trx
+        .insertInto("ReservedUri")
+        .values({
           uri: parsedUri,
-          streamerId: targetStreamerId,
+          streamerId: targetId,
           reservedByToken: token,
-        },
-      });
+        })
+        .execute();
 
-      await tx.streamer.update({
-        data: {
+      await trx
+        .updateTable("Streamer")
+        .set({
           uri: parsedUri,
           uriCooldownEnd: cooldownDate,
-        },
-        where: { id: targetStreamerId },
-      });
+          updatedAt: new Date(),
+        })
+        .where("id", "=", targetId)
+        .execute();
     });
 
     const now = Date.now();
@@ -242,10 +260,11 @@ export async function getURIOwner(uri: string): Promise<string | false> {
     }
   }
 
-  const lastRecord = await prisma.client.reservedUri.findUnique({
-    select: { createdAt: true, streamerId: true, disabledAt: true },
-    where: { uri: parsedUri },
-  });
+  const lastRecord = await db
+    .selectFrom("ReservedUri")
+    .select(["createdAt", "streamerId", "disabledAt"])
+    .where("uri", "=", parsedUri)
+    .executeTakeFirst();
 
   if (!lastRecord) {
     void redis.redis.setex(`uri:${parsedUri}:owner`, week, "noone");
@@ -256,7 +275,7 @@ export async function getURIOwner(uri: string): Promise<string | false> {
 
   await Promise.all([
     redis.redis.setex(`uri:${parsedUri}:owner`, week, status),
-    redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(lastRecord.createdAt.getTime())),
+    redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(new Date(lastRecord.createdAt).getTime())),
   ]);
 
   return lastRecord.disabledAt ? false : String(lastRecord.streamerId);

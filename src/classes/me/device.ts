@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 /**
  * List all active sessions/devices for a user.
@@ -11,45 +11,51 @@ export async function listUserDevices(uid: string | bigint, currentAuthToken: st
     return [];
   }
 
-  const devicesRaw = await prisma.client.session.findMany({
-    select: {
-      id: true,
-      createdAt: true,
-      ipAddress: true,
-      os: true,
-      osVersion: true,
-      platform: true,
-      platformVersion: true,
-      cpuArchitecture: true,
-      isp: true,
-      city: true,
-      region: true,
-      country: true,
-      latitude: true,
-      longitude: true,
-      token: true,
-      sessionUsages: {
-        select: {
-          createdAt: true,
-        },
-        orderBy: {
-          id: "desc",
-        },
-        take: 1,
-      },
-    },
-    where: {
-      userId: targetUid,
-      disabledAt: null,
-      expiresAt: {
-        gt: new Date(),
-      },
-    },
-  });
+  const sessions = await db
+    .selectFrom("Session")
+    .where("userId", "=", Number(targetUid))
+    .where("disabledAt", "is", null)
+    .where("expiresAt", ">", new Date())
+    .select([
+      "id",
+      "createdAt",
+      "ipAddress",
+      "os",
+      "osVersion",
+      "platform",
+      "platformVersion",
+      "cpuArchitecture",
+      "isp",
+      "city",
+      "region",
+      "country",
+      "latitude",
+      "longitude",
+      "token",
+    ])
+    .execute();
 
-  return devicesRaw.map(({ sessionUsages, token, ...rest }) => ({
+  if (sessions.length === 0) return [];
+
+  const sessionIds = sessions.map((s) => s.id);
+  const latestUsages = await db
+    .selectFrom("SessionUsage")
+    .where("sessionId", "in", sessionIds)
+    .select(["sessionId", "createdAt"])
+    .orderBy("id", "desc")
+    .execute();
+
+  const usageMap = new Map<string, Date>();
+  for (const u of latestUsages) {
+    const key = String(u.sessionId);
+    if (!usageMap.has(key)) {
+      usageMap.set(key, new Date(u.createdAt));
+    }
+  }
+
+  return sessions.map(({ token, ...rest }) => ({
     ...rest,
-    lastUsed: sessionUsages?.[0]?.createdAt ?? null,
+    lastUsed: usageMap.get(String(rest.id)) ?? null,
     isThisDevice: token === currentAuthToken,
   }));
 }
@@ -67,15 +73,14 @@ export async function destroyUserDevice(uid: string | bigint, deviceId: string |
     return false;
   }
 
-  const result = await prisma.client.session.updateMany({
-    data: {
+  const result = await db
+    .updateTable("Session")
+    .set({
       disabledAt: new Date(),
-    },
-    where: {
-      id: targetDeviceId,
-      userId: targetUid,
-    },
-  });
+    })
+    .where("id", "=", Number(targetDeviceId))
+    .where("userId", "=", Number(targetUid))
+    .executeTakeFirst();
 
-  return result.count > 0;
+  return Number(result.numUpdatedRows ?? 0) > 0;
 }

@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
@@ -63,15 +63,13 @@ export async function getTinyStreamer(streamerIdStr: string, orgId: bigint): Pro
   }
 
   try {
-    const streamer = await prisma.client.streamer.findFirst({
-      where: { id: numericId, orgId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        avatar: true,
-      },
-    });
+    const streamer = await db
+      .selectFrom("Streamer")
+      .select(["id", "name", "displayName", "avatar"])
+      .where("id", "=", Number(numericId))
+      .where("orgId", "=", Number(orgId))
+      .where("deletedAt", "is", null)
+      .executeTakeFirst();
 
     if (!streamer) {
       await redis.redis.setex(cacheKey, 300, "deleted");

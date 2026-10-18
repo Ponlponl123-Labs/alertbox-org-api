@@ -1,6 +1,5 @@
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "@/core/redis";
-import { OrgRole } from "@/generated/prisma/client";
 import {
   getOrganizationDetails,
   listUserOrganizations,
@@ -60,13 +59,12 @@ export class Org {
       return details;
     }
 
-    const org = await prisma.client.organization.findUnique({
-      where: { id: this.id, deletedAt: null },
-      include: {
-        _count: { select: { members: true, streamers: true } },
-        streamers: { where: { deletedAt: null } },
-      },
-    });
+    const org = await db
+      .selectFrom("Organization")
+      .selectAll()
+      .where("id", "=", Number(this.id))
+      .where("deletedAt", "is", null)
+      .executeTakeFirst();
 
     this.data = org;
     return org;
@@ -84,10 +82,17 @@ export class Org {
     if (data.avatar !== undefined) updatePayload.avatar = data.avatar;
     if (data.banner !== undefined) updatePayload.banner = data.banner;
 
-    const updated = await prisma.client.organization.update({
-      where: { id: this.id },
-      data: updatePayload,
-    });
+    await db
+      .updateTable("Organization")
+      .set(updatePayload)
+      .where("id", "=", Number(this.id))
+      .execute();
+
+    const updated = await db
+      .selectFrom("Organization")
+      .selectAll()
+      .where("id", "=", Number(this.id))
+      .executeTakeFirst();
 
     await logOrgAudit({
       orgId: this.id,

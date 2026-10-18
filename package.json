@@ -5,27 +5,22 @@
   "scripts": {
     "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
-    "db:push": "bun node_modules/prisma/build/index.js db push",
-    "db:generate": "bun node_modules/prisma/build/index.js generate",
-    "db:migrate:dev": "bun node_modules/prisma/build/index.js migrate dev",
-    "db:migrate:deploy": "bun node_modules/prisma/build/index.js migrate deploy",
-    "db:migrate:resolve": "bun node_modules/prisma/build/index.js migrate resolve --applied 0_init",
-    "db:migrate:reset": "bun node_modules/prisma/build/index.js migrate reset",
-    "build": "bun build ./src/index.ts --compile --minify --sourcemap=none --outfile alertbox-api",
-    "build:windows": "bun build ./src/index.ts --compile --minify --target=bun-windows-x64 --outfile alertbox-api.exe",
+    "db:codegen": "kysely-codegen --dialect mysql --out src/db/types.d.ts",
+    "db:migrate:up": "goose -dir migrations mysql \"$DATABASE_URL\" up",
+    "db:migrate:deploy": "goose -dir migrations ${GOOSE_EXTRA_FLAGS:-} mysql \"${MIGRATION_DATABASE_URL:-$DATABASE_URL}\" up",
+    "db:migrate:down": "goose -dir migrations mysql \"$DATABASE_URL\" down",
+    "db:migrate:status": "goose -dir migrations mysql \"$DATABASE_URL\" status",
+    "build": "bun build --compile --minify-whitespace --minify-syntax --target bun src/index.ts --outfile dist/server",
+    "build:windows": "bun build ./src/index.ts --compile --minify-whitespace --minify-syntax --target=bun-windows-x64 --outfile dist/server.exe",
     "db:inspect": "bun test test/queries.performance.test.ts"
   },
   "dependencies": {
     "@elysia/openapi": "^1.4.16",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/static": "^1.4.10",
-    "@prisma/adapter-libsql": "7.10.0",
-    "@prisma/adapter-mariadb": "7.10.0",
-    "@prisma/client": "^7.10.0",
     "elysia": "latest",
     "elysia-ip": "^1.1.0",
     "ioredis": "^5.11.0",
-    "mariadb": "^3.5.2",
     "nanoid": "^5.1.11",
     "ts-better-console": "^0.1.4",
     "ua-parser-js": "^2.0.10"
@@ -33,7 +28,9 @@
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "bun-types": "latest",
-    "prisma": "7.10.0"
+    "kysely": "^0.29.7",
+    "kysely-codegen": "^0.20.0",
+    "mysql2": "^3.24.6"
   },
   "module": "src/index.js"
 }

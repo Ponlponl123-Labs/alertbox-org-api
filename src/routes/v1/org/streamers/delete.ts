@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
@@ -23,28 +23,33 @@ export const endpoint = new Elysia()
       }
 
       const [streamer, members] = await Promise.all([
-        prisma.client.streamer.findUnique({
-          where: { id: streamerId },
-          select: { id: true, name: true, uri: true },
-        }),
-        prisma.client.organizationMember.findMany({
-          where: { orgId },
-          select: { userId: true },
-        }),
+        db.selectFrom("Streamer")
+          .select(["id", "name", "uri"])
+          .where("id", "=", Number(streamerId))
+          .executeTakeFirst(),
+        db.selectFrom("OrganizationMember")
+          .select(["userId"])
+          .where("orgId", "=", Number(orgId))
+          .where("isDeleted", "is", null)
+          .execute(),
       ]);
 
       const now = new Date();
 
-      await prisma.client.$transaction([
-        prisma.client.streamer.update({
-          where: { id: streamerId },
-          data: { deletedAt: now },
-        }),
-        prisma.client.reservedUri.updateMany({
-          where: { streamerId, deletedAt: null },
-          data: { deletedAt: now },
-        }),
-      ]);
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable("Streamer")
+          .set({ deletedAt: now, updatedAt: now })
+          .where("id", "=", Number(streamerId))
+          .execute();
+
+        await trx
+          .updateTable("ReservedUri")
+          .set({ deletedAt: now })
+          .where("streamerId", "=", Number(streamerId))
+          .where("deletedAt", "is", null)
+          .execute();
+      });
 
       const keysToDelete: string[] = [
         `streamer:${String(streamerId)}:info`,
@@ -71,7 +76,7 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: "STREAMER_DELETED",
         targetType: "STREAMER",
-        targetId: streamerId,
+        targetId: BigInt(streamerId),
         payload: { name: streamer?.name },
       });
 
@@ -103,10 +108,11 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
       const { orgId, streamerId } = authRes;
 
-      await prisma.client.streamer.update({
-        where: { id: streamerId },
-        data: { publishedAt: null },
-      });
+      await db
+        .updateTable("Streamer")
+        .set({ publishedAt: null, updatedAt: new Date() })
+        .where("id", "=", Number(streamerId))
+        .execute();
 
       await Promise.all([
         redis.redis.del(`streamer:${String(streamerId)}:info`),

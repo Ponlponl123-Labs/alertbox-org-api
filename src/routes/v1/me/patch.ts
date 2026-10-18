@@ -2,7 +2,7 @@ import Elysia, { t } from "elysia";
 import { orgContext } from "@/core/org";
 import { sessionUserSelect } from "@/consts/session";
 import { Moderation } from "@/classes/moderation";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { Me } from "@/classes/me";
 import { setCachedUser } from "@/classes/me/cache";
@@ -54,10 +54,11 @@ export const endpoint = new Elysia()
 
       if (Object.keys(updateData).length === 0) return "No changes";
 
-      await prisma.client.user.update({
-        where: { id: user.data.id },
-        data: updateData,
-      });
+      await db
+        .updateTable("User")
+        .set(updateData)
+        .where("id", "=", Number(user.data.id))
+        .execute();
       Object.assign(user.data, updateData);
 
       await setCachedUser(user.data.id, user.data);

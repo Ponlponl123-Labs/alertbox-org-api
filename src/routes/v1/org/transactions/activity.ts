@@ -1,6 +1,7 @@
 import Elysia from "elysia";
+import { sql } from "kysely";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { hasAnyPermission } from "@/utils/rbac";
@@ -19,14 +20,17 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
       if (
         !callerMember ||
         !hasAnyPermission(
-          callerMember.permissions,
+          BigInt(callerMember.permissions),
           OrgPerm.ORG_VIEW | OrgPerm.TRANSACTION_VIEW | OrgPerm.ANALYTICS_VIEW,
         )
       ) {
@@ -49,19 +53,19 @@ export const endpoint = new Elysia()
       const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const startDate = new Date(todayUtc.getTime() - (totalDays - 1) * 86400000);
 
-      const rows = await prisma.client.$queryRaw<
-        Array<{ day: string; count: number | bigint; testCount: number | bigint; realCount: number | bigint }>
+      const { rows } = await sql<
+        { day: string; count: number | string; testCount: number | string; realCount: number | string }
       >`
         SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as day,
                COUNT(*) as count,
                CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
                CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
         FROM TransactionLog FORCE INDEX (TransactionLog_orgId_createdAt_idx)
-        WHERE orgId = ${orgId}
+        WHERE orgId = ${Number(orgId)}
           AND createdAt >= ${startDate}
           AND status != 'FAILED'
         GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
-      `;
+      `.execute(db);
 
       const countMap = new Map<string, { total: number; test: number; real: number }>();
       for (const row of rows) {

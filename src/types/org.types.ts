@@ -1,4 +1,4 @@
-import { OrgRole } from "@/generated/prisma/client";
+import { OrgRole } from "@/db/enums";
 
 export interface RolePresetData {
   id: string;

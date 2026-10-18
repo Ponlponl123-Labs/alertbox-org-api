@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import betterConsole, { tsflag, s } from "ts-better-console";
 import { logDev } from "@/utils/log";
 import { timingSafeEqualString } from "@/utils/security";
@@ -31,24 +31,23 @@ export class KofiWebhook {
       return cachedIntegrations;
     }
 
-    const integrations = await prisma.client.integration.findMany({
-      where: {
-        kofiSecret: { not: null },
-        deletedAt: null,
-      },
-      select: {
-        orgId: true,
-        streamerId: true,
-        kofiSecret: true,
-        streamlabsSecret: true,
-        streamlabsRefreshToken: true,
-        streamlabsOptions: true,
-      },
-    });
+    const integrations = await db
+      .selectFrom("Integration")
+      .where("kofiSecret", "is not", null)
+      .where("deletedAt", "is", null)
+      .select([
+        "orgId",
+        "streamerId",
+        "kofiSecret",
+        "streamlabsSecret",
+        "streamlabsRefreshToken",
+        "streamlabsOptions",
+      ])
+      .execute();
 
-    cachedIntegrations = integrations;
+    cachedIntegrations = integrations as any;
     lastCacheSync = now;
-    return integrations;
+    return integrations as any;
   }
 
   public static invalidateIntegrations(): void {
@@ -81,23 +80,22 @@ export class KofiWebhook {
         integrations.find((i) => timingSafeEqualString(i.kofiSecret, verificationToken)) ?? null;
 
       if (!matchedIntegration) {
-        const dbMatched = await prisma.client.integration.findFirst({
-          where: {
-            kofiSecret: verificationToken,
-            deletedAt: null,
-          },
-          select: {
-            orgId: true,
-            streamerId: true,
-            kofiSecret: true,
-            streamlabsSecret: true,
-            streamlabsRefreshToken: true,
-            streamlabsOptions: true,
-          },
-        });
+        const dbMatched = await db
+          .selectFrom("Integration")
+          .where("kofiSecret", "=", verificationToken)
+          .where("deletedAt", "is", null)
+          .select([
+            "orgId",
+            "streamerId",
+            "kofiSecret",
+            "streamlabsSecret",
+            "streamlabsRefreshToken",
+            "streamlabsOptions",
+          ])
+          .executeTakeFirst();
 
         if (dbMatched && timingSafeEqualString(dbMatched.kofiSecret, verificationToken)) {
-          matchedIntegration = dbMatched;
+          matchedIntegration = dbMatched as any;
           this.invalidateIntegrations();
         }
       }

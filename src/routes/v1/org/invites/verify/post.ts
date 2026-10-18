@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -14,22 +14,29 @@ export const endpoint = new Elysia()
         return "Invalid 8-digit invitation code";
       }
 
-      const invite = await prisma.client.organizationInvite.findFirst({
-        where: {
-          token: code,
-          acceptedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        include: {
-          organization: {
-            select: { id: true, name: true, slug: true, avatar: true },
-          },
-          inviter: {
-            select: { name: true, avatar: true, email: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      });
+      const invite = await db
+        .selectFrom("OrganizationInvite")
+        .innerJoin("Organization", "Organization.id", "OrganizationInvite.orgId")
+        .innerJoin("User as inviter", "inviter.id", "OrganizationInvite.inviterId")
+        .select([
+          "OrganizationInvite.id",
+          "OrganizationInvite.orgId",
+          "OrganizationInvite.token",
+          "OrganizationInvite.email",
+          "OrganizationInvite.role",
+          "OrganizationInvite.expiresAt",
+          "Organization.id as orgIdVal",
+          "Organization.name as orgName",
+          "Organization.slug as orgSlug",
+          "Organization.avatar as orgAvatar",
+          "inviter.name as inviterName",
+          "inviter.avatar as inviterAvatar",
+        ])
+        .where("OrganizationInvite.token", "=", code)
+        .where("OrganizationInvite.acceptedAt", "is", null)
+        .where("OrganizationInvite.expiresAt", ">", new Date())
+        .orderBy("OrganizationInvite.createdAt", "desc")
+        .executeTakeFirst();
 
       if (!invite) {
         set.status = "Bad Request";
@@ -37,10 +44,15 @@ export const endpoint = new Elysia()
       }
 
       // Verify this is the latest unaccepted invite for this email
-      const latestOrgInvite = await prisma.client.organizationInvite.findFirst({
-        where: { orgId: invite.orgId, email: invite.email, acceptedAt: null, expiresAt: { gt: new Date() } },
-        orderBy: { createdAt: "desc" },
-      });
+      const latestOrgInvite = await db
+        .selectFrom("OrganizationInvite")
+        .select(["id"])
+        .where("orgId", "=", Number(invite.orgId))
+        .where("email", "=", invite.email)
+        .where("acceptedAt", "is", null)
+        .where("expiresAt", ">", new Date())
+        .orderBy("createdAt", "desc")
+        .executeTakeFirst();
 
       if (!latestOrgInvite || latestOrgInvite.id !== invite.id) {
         set.status = "Bad Request";
@@ -57,14 +69,14 @@ export const endpoint = new Elysia()
         role: invite.role,
         expiresAt: invite.expiresAt,
         organization: {
-          id: String(invite.organization.id),
-          name: invite.organization.name,
-          slug: invite.organization.slug,
-          avatar: invite.organization.avatar,
+          id: String(invite.orgIdVal),
+          name: invite.orgName,
+          slug: invite.orgSlug,
+          avatar: invite.orgAvatar,
         },
         inviter: {
-          name: invite.inviter.name,
-          avatar: invite.inviter.avatar,
+          name: invite.inviterName,
+          avatar: invite.inviterAvatar,
         },
       };
     },

@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
@@ -56,15 +56,25 @@ export async function setConnection(
     return null;
   }
 
-  const updated = await prisma.client.integration.upsert({
-    where: { streamerId: targetStreamerId },
-    update: data,
-    create: {
-      streamerId: targetStreamerId,
-      orgId: targetOrgId,
+  await db
+    .insertInto("Integration")
+    .values({
+      streamerId: Number(targetStreamerId),
+      orgId: Number(targetOrgId),
       ...data,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .onDuplicateKeyUpdate({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .execute();
+
+  const updated = await db
+    .selectFrom("Integration")
+    .selectAll()
+    .where("streamerId", "=", Number(targetStreamerId))
+    .executeTakeFirst();
 
   await Promise.all([
     redis.redis.setex(
@@ -114,10 +124,20 @@ export async function removeConnection(
     data.streamlabsRefreshToken = null;
   }
 
-  const updated = await prisma.client.integration.update({
-    data,
-    where: { streamerId: targetStreamerId },
-  });
+  await db
+    .updateTable("Integration")
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where("streamerId", "=", Number(targetStreamerId))
+    .execute();
+
+  const updated = await db
+    .selectFrom("Integration")
+    .selectAll()
+    .where("streamerId", "=", Number(targetStreamerId))
+    .executeTakeFirst();
 
   await Promise.all([
     redis.redis.del(`streamer:${String(streamerId)}:connections:${provider}`),

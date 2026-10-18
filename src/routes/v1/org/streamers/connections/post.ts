@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import {
@@ -43,9 +43,12 @@ export const endpoint = new Elysia()
         }
       }
 
-      const existing = await prisma.client.integration.findUnique({
-        where: { streamerId },
-      });
+      const existing = await db
+        .selectFrom("Integration")
+        .select(["stripeSecret", "bmacSecret", "kofiSecret", "xenditSecret", "ffpSecret", "streamlabsSecret"])
+        .where("streamerId", "=", Number(streamerId))
+        .executeTakeFirst();
+
       const wasConfigured = existing
         ? Boolean(
             provider === "stripe"
@@ -71,7 +74,7 @@ export const endpoint = new Elysia()
         userId: user.data.id,
         action: wasConfigured ? "INTEGRATION_UPDATED" : "INTEGRATION_CONNECTED",
         targetType: "STREAMER",
-        targetId: streamerId,
+        targetId: BigInt(streamerId),
         payload: {
           streamerId: String(streamerId),
           platform: provider,

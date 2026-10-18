@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { nanoid } from "nanoid";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "@/utils/ip";
@@ -9,24 +9,24 @@ import { SessionMetadata } from "@/types/me.types";
  * Track a session usage event in the database.
  */
 export async function trackSessionUsage(
-  uid: string | bigint,
-  sessionId: string | bigint,
+  uid: string | bigint | number,
+  sessionId: string | bigint | number,
   ip: string,
 ) {
-  return prisma.client.sessionUsage
-    .create({
-      data: {
-        userId: BigInt(uid),
-        sessionId: BigInt(sessionId),
-        ipAddress: ip,
-      },
+  return db
+    .insertInto("SessionUsage")
+    .values({
+      userId: Number(uid),
+      sessionId: Number(sessionId),
+      ipAddress: ip,
     })
+    .executeTakeFirst()
     .catch((error) => {
       betterConsole.error(
         tsflag(
           "error",
           true,
-          `[Prisma > sessionUsage.create] Background insert failed: ${error}`,
+          `[SessionUsage > create] Background insert failed: ${error}`,
         ),
       );
     });
@@ -36,7 +36,7 @@ export async function trackSessionUsage(
  * Create a new session in the database.
  */
 export async function createSession(
-  uid: string | bigint,
+  uid: string | bigint | number,
   metadata: SessionMetadata,
 ): Promise<string | false> {
   let targetUid: bigint;
@@ -46,17 +46,11 @@ export async function createSession(
     return false;
   }
 
-  const user = await prisma.client.user.findUnique({
-    select: {
-      id: true,
-      secret: true,
-      disabledAt: true,
-      deletedAt: true,
-    },
-    where: {
-      id: targetUid,
-    },
-  });
+  const user = await db
+    .selectFrom("User")
+    .where("id", "=", Number(targetUid))
+    .select(["id", "secret", "disabledAt", "deletedAt"])
+    .executeTakeFirst();
 
   if (!user || user.disabledAt || user.deletedAt) return false;
 
@@ -69,16 +63,16 @@ export async function createSession(
     ipAddress: metadata.ipAddress,
     method: metadata.method,
     userAgent: metadata.userAgent,
-    os: useragent.os.name,
-    osVersion: useragent.os.version,
-    platform: useragent.browser.name,
-    platformVersion: useragent.browser.version,
-    platformMajor: useragent.browser.major,
-    platformType: useragent.browser.type,
-    deviceModel: useragent.device.model,
-    deviceType: useragent.device.type,
-    deviceVendor: useragent.device.vendor,
-    cpuArchitecture: useragent.cpu.architecture,
+    os: useragent.os.name ?? null,
+    osVersion: useragent.os.version ?? null,
+    platform: useragent.browser.name ?? null,
+    platformVersion: useragent.browser.version ?? null,
+    platformMajor: useragent.browser.major ?? null,
+    platformType: useragent.browser.type ?? null,
+    deviceModel: useragent.device.model ?? null,
+    deviceType: useragent.device.type ?? null,
+    deviceVendor: useragent.device.vendor ?? null,
+    cpuArchitecture: useragent.cpu.architecture ?? null,
     city: ip_geo ? ip_geo.city : null,
     asn: ip_geo ? ip_geo.asn?.asn : null,
     country: ip_geo ? ip_geo.country?.name : null,
@@ -86,23 +80,23 @@ export async function createSession(
     continent: ip_geo ? ip_geo.continent?.name : null,
     continentCode: ip_geo ? ip_geo.continent?.code : null,
     isp: ip_geo ? ip_geo.asn?.name : null,
-    latitude: ip_geo ? ip_geo.latitude : null,
-    longitude: ip_geo ? ip_geo.longitude : null,
+    latitude: ip_geo && "latitude" in ip_geo && ip_geo.latitude ? String(ip_geo.latitude) : null,
+    longitude: ip_geo && "longitude" in ip_geo && ip_geo.longitude ? String(ip_geo.longitude) : null,
     postal: ip_geo ? ip_geo.postal_code : null,
     region: ip_geo ? ip_geo.region?.name : null,
     regionCode: ip_geo ? ip_geo.region?.code : null,
     timezone: ip_geo ? ip_geo.timezone : null,
-    isMobile: ip_geo ? ip_geo.is_mobile : null,
-    isProxy: ip_geo ? ip_geo.is_proxy : null,
-    isHosting: ip_geo ? ip_geo.is_hosting : null,
+    isMobile: ip_geo ? (ip_geo.is_mobile ? 1 : 0) : null,
+    isProxy: ip_geo ? (ip_geo.is_proxy ? 1 : 0) : null,
+    isHosting: ip_geo ? (ip_geo.is_hosting ? 1 : 0) : null,
     ipVersion: ip_geo ? ip_geo.ip_version : null,
-    isAnonymous: ip_geo ? ip_geo.is_anonymous : null,
-    isAnycast: ip_geo ? ip_geo.is_anycast : null,
-    isSatellite: ip_geo ? ip_geo.is_satellite : null,
-    isRelay: ip_geo ? ip_geo.is_relay : null,
-    isTor: ip_geo ? ip_geo.is_tor : null,
-    isVpn: ip_geo ? ip_geo.is_vpn : null,
-    isResProxy: ip_geo ? ip_geo.is_res_proxy : null,
+    isAnonymous: ip_geo ? (ip_geo.is_anonymous ? 1 : 0) : null,
+    isAnycast: ip_geo ? (ip_geo.is_anycast ? 1 : 0) : null,
+    isSatellite: ip_geo ? (ip_geo.is_satellite ? 1 : 0) : null,
+    isRelay: ip_geo ? (ip_geo.is_relay ? 1 : 0) : null,
+    isTor: ip_geo ? (ip_geo.is_tor ? 1 : 0) : null,
+    isVpn: ip_geo ? (ip_geo.is_vpn ? 1 : 0) : null,
+    isResProxy: ip_geo ? (ip_geo.is_res_proxy ? 1 : 0) : null,
   };
 
   let attempts = 0;
@@ -112,22 +106,27 @@ export async function createSession(
     const timestamp = Date.now();
     const combinedToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
     try {
-      await prisma.client.session.create({
-        data: {
+      await db
+        .insertInto("Session")
+        .values({
           ...payload,
           token: combinedToken,
           expiresAt: new Date(timestamp + 2 * 60 * 60 * 1000),
-        },
-      });
+        })
+        .execute();
       return combinedToken;
     } catch (error: any) {
-      if (error?.code === "P2002") {
+      if (
+        error?.code === "ER_DUP_ENTRY" ||
+        error?.errno === 1062 ||
+        error?.code === "P2002"
+      ) {
         attempts++;
         betterConsole.warn(
           tsflag(
             "warn",
             true,
-            `[Prisma > createSession] Collision for token. Retrying...`,
+            `[Kysely > createSession] Collision for token. Retrying...`,
           ),
         );
       } else {
@@ -144,15 +143,14 @@ export async function createSession(
  */
 export async function destroySession(token: string): Promise<boolean> {
   try {
-    const result = await prisma.client.session.update({
-      data: {
+    const result = await db
+      .updateTable("Session")
+      .set({
         disabledAt: new Date(),
-      },
-      where: {
-        token,
-      },
-    });
-    return !!result;
+      })
+      .where("token", "=", token)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0) > 0;
   } catch {
     return false;
   }

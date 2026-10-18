@@ -1,5 +1,5 @@
 import Elysia, { t } from "elysia";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
@@ -22,14 +22,14 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to edit streamer profile";
       }
 
-      await prisma.client.streamer.update({
-        data: {
+      await db
+        .updateTable("Streamer")
+        .set({
           publishedAt: null,
-        },
-        where: {
-          id: org.streamerId,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where("id", "=", Number(org.streamerId))
+        .execute();
 
       await updateStreamerCache({
         id: org.streamerId,

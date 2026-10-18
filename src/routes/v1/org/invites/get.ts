@@ -1,6 +1,6 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
@@ -17,25 +17,32 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBER_ADD)) {
+      if (!callerMember || !hasPermission(BigInt(callerMember.permissions), OrgPerm.ORG_MEMBER_ADD)) {
         set.status = "Forbidden";
         return "Insufficient permissions to view invites";
       }
 
-      const invites = await prisma.client.organizationInvite.findMany({
-        where: { orgId, acceptedAt: null, expiresAt: { gt: new Date() } },
-        orderBy: { createdAt: "desc" },
-      });
+      const invites = await db
+        .selectFrom("OrganizationInvite")
+        .select(["id", "email", "role", "permissions", "token", "expiresAt", "createdAt"])
+        .where("orgId", "=", Number(orgId))
+        .where("acceptedAt", "is", null)
+        .where("expiresAt", ">", new Date())
+        .orderBy("createdAt", "desc")
+        .execute();
 
       return invites.map((inv) => ({
         id: String(inv.id),
         email: inv.email,
         role: inv.role,
-        permissions: inv.permissions.toString(),
+        permissions: String(inv.permissions),
         token: inv.token,
         code: inv.token,
         expiresAt: inv.expiresAt,

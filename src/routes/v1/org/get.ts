@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
 
@@ -18,59 +18,87 @@ export const listOrgsEndpoint = new Elysia()
         } catch {}
       }
 
-      const memberships = await prisma.client.organizationMember.findMany({
-        where: { userId: user.data.id, isDeleted: null, organization: { deletedAt: null } },
-        include: {
-          organization: {
-            include: {
-              _count: { select: { members: { where: { isDeleted: null } }, streamers: true } },
-              streamers: {
-                where: { deletedAt: null },
-                select: {
-                  id: true,
-                  name: true,
-                  displayName: true,
-                  avatar: true,
-                  uri: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: "asc" },
-      });
+      const memberships = await db
+        .selectFrom("OrganizationMember")
+        .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+        .select([
+          "Organization.id as orgId",
+          "Organization.type as type",
+          "Organization.name as name",
+          "Organization.slug as slug",
+          "Organization.avatar as avatar",
+          "Organization.banner as banner",
+          "Organization.ownerId as ownerId",
+          "Organization.createBy as createBy",
+          "Organization.createdAt as orgCreatedAt",
+          "OrganizationMember.role as role",
+          "OrganizationMember.permissions as permissions",
+          "OrganizationMember.createdAt as joinedAt",
+        ])
+        .where("OrganizationMember.userId", "=", Number(user.data.id))
+        .where("OrganizationMember.isDeleted", "is", null)
+        .where("Organization.deletedAt", "is", null)
+        .orderBy("OrganizationMember.createdAt", "asc")
+        .execute();
+
+      if (memberships.length === 0) return [];
+
+      const orgIds = memberships.map((m) => m.orgId);
+      const [streamers, memberCounts] = await Promise.all([
+        db
+          .selectFrom("Streamer")
+          .select(["id", "orgId", "name", "displayName", "avatar", "uri"])
+          .where("orgId", "in", orgIds)
+          .where("deletedAt", "is", null)
+          .execute(),
+        db
+          .selectFrom("OrganizationMember")
+          .select(["orgId", (eb) => eb.fn.count("id").as("count")])
+          .where("orgId", "in", orgIds)
+          .where("isDeleted", "is", null)
+          .groupBy("orgId")
+          .execute(),
+      ]);
+
+      const streamersByOrg = new Map<string, any[]>();
+      for (const s of streamers) {
+        const key = String(s.orgId);
+        const list = streamersByOrg.get(key) ?? [];
+        list.push({ ...s, id: String(s.id) });
+        streamersByOrg.set(key, list);
+      }
+
+      const countsByOrg = new Map<string, number>();
+      for (const c of memberCounts) {
+        countsByOrg.set(String(c.orgId), Number(c.count));
+      }
 
       const result = memberships.map((m) => {
-        const org = m.organization;
-        // write-through centralized org info
         const orgInfo = {
-          id: String(org.id),
-          type: org.type,
-          name: org.name,
-          slug: org.slug,
-          avatar: org.avatar,
-          banner: org.banner,
-          ownerId: String(org.ownerId),
-          createBy: String(org.createBy),
-          createdAt: org.createdAt,
+          id: String(m.orgId),
+          type: m.type,
+          name: m.name,
+          slug: m.slug,
+          avatar: m.avatar,
+          banner: m.banner,
+          ownerId: String(m.ownerId),
+          createBy: String(m.createBy),
+          createdAt: m.orgCreatedAt,
         };
-        void redis.redis.setex(`org:${String(org.id)}:info`, day, JSON.stringify(orgInfo)).catch(() => {});
+        void redis.redis.setex(`org:${String(m.orgId)}:info`, day, JSON.stringify(orgInfo)).catch(() => {});
 
         return {
-          id: String(org.id),
-          type: org.type,
-          name: org.name,
-          slug: org.slug,
-          avatar: org.avatar,
-          banner: org.banner,
+          id: String(m.orgId),
+          type: m.type,
+          name: m.name,
+          slug: m.slug,
+          avatar: m.avatar,
+          banner: m.banner,
           role: m.role,
           permissions: m.permissions.toString(),
-          memberCount: org._count.members,
-          streamers: org.streamers.map((s) => ({
-            ...s,
-            id: String(s.id),
-          })),
-          joinedAt: m.createdAt,
+          memberCount: countsByOrg.get(String(m.orgId)) ?? 0,
+          streamers: streamersByOrg.get(String(m.orgId)) ?? [],
+          joinedAt: m.joinedAt,
         };
       });
 

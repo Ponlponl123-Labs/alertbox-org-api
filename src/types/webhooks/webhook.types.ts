@@ -1,4 +1,4 @@
-import { AlertEventType, TransactionStatus } from "@/generated/prisma/client";
+import { AlertEventType, TransactionStatus } from "@/db/enums";
 
 export interface WebhookResponse {
   status: number;

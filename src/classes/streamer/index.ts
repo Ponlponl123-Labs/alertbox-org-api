@@ -1,4 +1,4 @@
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import {
   setConnection,
@@ -58,16 +58,46 @@ export class Streamer {
    * Fetch full streamer channel data from database/cache.
    */
   public async fetch(): Promise<any> {
-    const record = await prisma.client.streamer.findUnique({
-      where: { id: this.id, deletedAt: null },
-      include: {
-        organization: {
-          select: { id: true, name: true, slug: true, avatar: true },
-        },
-        widgets: true,
-        integration: true,
-      },
-    });
+    const numId = Number(this.id);
+    const [streamer, org, widgets, integration] = await Promise.all([
+      db
+        .selectFrom("Streamer")
+        .selectAll()
+        .where("id", "=", numId)
+        .where("deletedAt", "is", null)
+        .executeTakeFirst(),
+      db
+        .selectFrom("Streamer")
+        .innerJoin("Organization", "Organization.id", "Streamer.orgId")
+        .select([
+          "Organization.id as id",
+          "Organization.name as name",
+          "Organization.slug as slug",
+          "Organization.avatar as avatar",
+        ])
+        .where("Streamer.id", "=", numId)
+        .executeTakeFirst(),
+      db
+        .selectFrom("Widget")
+        .selectAll()
+        .where("streamerId", "=", numId)
+        .where("deletedAt", "is", null)
+        .execute(),
+      db
+        .selectFrom("Integration")
+        .selectAll()
+        .where("streamerId", "=", numId)
+        .executeTakeFirst(),
+    ]);
+
+    if (!streamer) return null;
+
+    const record = {
+      ...streamer,
+      organization: org,
+      widgets,
+      integration: integration ?? null,
+    };
 
     this.data = record;
     return record;

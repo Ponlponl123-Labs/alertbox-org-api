@@ -1,6 +1,5 @@
 import { redis } from "@/core/redis";
 import { day } from "@/consts/time";
-import { Prisma } from "@/generated/prisma/client";
 
 /**
  * Retrieves the full user object from the Redis cache.
@@ -35,7 +34,7 @@ export async function getCachedUser(uid: string | bigint): Promise<any | null> {
  * @param user - The user object retrieved from the database or caller.
  * @returns The sanitized pure user identity object.
  */
-export async function setCachedUser(uid: string | bigint, user: any): Promise<any> {
+export async function setCachedUser(uid: string | bigint | number, user: any): Promise<any> {
   const userKey = String(uid);
   const pureUser = {
     id: user.id,
@@ -66,7 +65,7 @@ export async function setCachedUser(uid: string | bigint, user: any): Promise<an
  * @param select - The fields to select.
  * @returns The filtered user object.
  */
-export function filterUserSelection(user: any, select: Prisma.UserSelect): any {
+export function filterUserSelection(user: any, select: any): any {
   if (!select) return user;
 
   const filtered: Record<string, any> = { id: user.id };

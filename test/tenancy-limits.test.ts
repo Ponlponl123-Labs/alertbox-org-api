@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { UserType, OrgType } from "../src/generated/prisma/client";
+import { UserType, OrgType } from "../src/db";
 
 describe("Tenancy Types & Quota Enforcement (User & Org Levels)", () => {
   it("verifies UserType and OrgType enum values", () => {

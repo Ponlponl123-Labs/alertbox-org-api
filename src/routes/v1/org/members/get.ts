@@ -1,10 +1,9 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
-import { authorizeOrg, resolveOrgId } from "@/core/org";
+import { authorizeOrg } from "@/core/org";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -23,34 +22,32 @@ export const endpoint = new Elysia()
         } catch {}
       }
 
-      const [org, members] = await Promise.all([
-        prisma.client.organization.findUnique({
-          where: { id: orgId },
-          include: {
-            streamers: {
-              where: { deletedAt: null },
-              select: { id: true, name: true, displayName: true, avatar: true },
-            },
-          },
-        }),
-        prisma.client.organizationMember.findMany({
-          where: { orgId, isDeleted: null },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                avatar: true,
-                disabledAt: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "asc" },
-        }),
+      const [streamers, members] = await Promise.all([
+        db.selectFrom("Streamer")
+          .select(["id", "name", "displayName", "avatar"])
+          .where("orgId", "=", Number(orgId))
+          .where("deletedAt", "is", null)
+          .execute(),
+        db.selectFrom("OrganizationMember")
+          .innerJoin("User", "User.id", "OrganizationMember.userId")
+          .select([
+            "OrganizationMember.id",
+            "OrganizationMember.userId",
+            "OrganizationMember.role",
+            "OrganizationMember.permissions",
+            "OrganizationMember.createdAt",
+            "User.email",
+            "User.name",
+            "User.avatar",
+            "User.disabledAt",
+          ])
+          .where("OrganizationMember.orgId", "=", Number(orgId))
+          .where("OrganizationMember.isDeleted", "is", null)
+          .orderBy("OrganizationMember.createdAt", "asc")
+          .execute(),
       ]);
 
-      const allStreamers = (org?.streamers || []).map((s) => ({
+      const allStreamers = streamers.map((s) => ({
         id: String(s.id),
         name: s.name,
         displayName: s.displayName,
@@ -87,12 +84,12 @@ export const endpoint = new Elysia()
         return {
           id: String(m.id),
           userId: String(m.userId),
-          email: m.user.email,
-          name: m.user.name,
-          avatar: m.user.avatar,
+          email: m.email,
+          name: m.name,
+          avatar: m.avatar,
           role: m.role,
-          status: m.user.disabledAt ? "Offline" : "Active",
-          permissions: m.permissions.toString(),
+          status: m.disabledAt ? "Offline" : "Active",
+          permissions: String(m.permissions),
           joinedAt: m.createdAt,
           streamerAssignments: assignments,
           streamers: memberStreamers,

@@ -1,5 +1,5 @@
 import Elysia, { t } from "elysia";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { getBunServer } from "@/core/bun-server";
 import tomlConfig from "@/config/toml";
@@ -105,23 +105,34 @@ export async function resolveWidgetWithSettings(token: string): Promise<CachedWi
     }
   }
 
-  const widget = await prisma.client.widget.findUnique({
-    where: { token },
-    include: {
-      alertbox: {
-        include: {
-          events: true,
-        },
-      },
-    },
-  });
+  const widget = await db
+    .selectFrom("Widget")
+    .selectAll()
+    .where("token", "=", token)
+    .where("deletedAt", "is", null)
+    .executeTakeFirst();
 
-  if (!widget || widget.deletedAt) return null;
+  if (!widget) return null;
+
+  const alertbox = await db
+    .selectFrom("AlertboxSetting")
+    .selectAll()
+    .where("widgetId", "=", widget.id)
+    .executeTakeFirst();
+
+  let events: any[] = [];
+  if (alertbox) {
+    events = await db
+      .selectFrom("AlertboxEvent")
+      .selectAll()
+      .where("alertboxId", "=", alertbox.id)
+      .execute();
+  }
 
   const result: CachedWidgetSettings = {
     widgetId: String(widget.id),
     type: widget.type,
-    alertbox: widget.alertbox,
+    alertbox: alertbox ? { ...alertbox, events } : null,
   };
 
   await Promise.all([
@@ -154,10 +165,11 @@ export async function broadcastWidgetSettingsUpdate(
   }
 
   // Find token to write-through update token-based cache
-  const widget = await prisma.client.widget.findUnique({
-    where: { id: targetWidgetId },
-    select: { token: true },
-  });
+  const widget = await db
+    .selectFrom("Widget")
+    .select("token")
+    .where("id", "=", Number(targetWidgetId))
+    .executeTakeFirst();
 
   const actions: Promise<any>[] = [
     redis.redis.publish(`${ALERTS_PREFIX}${widgetId}`, JSON.stringify(payload)),

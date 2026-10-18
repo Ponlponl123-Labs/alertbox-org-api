@@ -1,6 +1,5 @@
-import { prisma } from "@/core/prisma";
+import { db, OrgRole } from "@/db";
 import { redis } from "@/core/redis";
-import { OrgRole } from "@/generated/prisma/client";
 import { RolePresets } from "@/consts/permission";
 import { customAlphabet } from "nanoid";
 import { logOrgAudit } from "@/core/audit";
@@ -14,21 +13,26 @@ export async function createOrgInvite(
   role: OrgRole = OrgRole.MEMBER,
   permissions?: bigint,
 ) {
-  const targetOrgId = BigInt(orgId);
+  const targetOrgId = Number(orgId);
   const cleanEmail = email.trim().toLowerCase();
 
-  const targetUser = await prisma.client.user.findUnique({
-    where: { email: cleanEmail },
-    select: { id: true, name: true, avatar: true },
-  });
+  const targetUser = await db
+    .selectFrom("User")
+    .select(["id", "name", "avatar"])
+    .where("email", "=", cleanEmail)
+    .executeTakeFirst();
 
   if (!targetUser) {
     throw new Error("No registered user found with this email");
   }
 
-  const alreadyMember = await prisma.client.organizationMember.findUnique({
-    where: { orgId_userId: { orgId: targetOrgId, userId: targetUser.id } },
-  });
+  const alreadyMember = await db
+    .selectFrom("OrganizationMember")
+    .select(["id", "isDeleted"])
+    .where("orgId", "=", targetOrgId)
+    .where("userId", "=", targetUser.id)
+    .executeTakeFirst();
+
   if (alreadyMember && !alreadyMember.isDeleted) {
     throw new Error("User is already a member of this organization");
   }
@@ -36,42 +40,47 @@ export async function createOrgInvite(
   const effectivePerms = permissions !== undefined ? permissions : (RolePresets[role] ?? RolePresets.MEMBER);
 
   // Invalidate any older unaccepted invites for this org to keep single active code
-  await prisma.client.organizationInvite.updateMany({
-    where: { orgId: targetOrgId, acceptedAt: null },
-    data: { expiresAt: new Date() },
-  });
+  await db
+    .updateTable("OrganizationInvite")
+    .set({ expiresAt: new Date() })
+    .where("orgId", "=", targetOrgId)
+    .where("acceptedAt", "is", null)
+    .execute();
 
   const token = generate8DigitCode();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min TTL
 
-  const invite = await prisma.client.organizationInvite.create({
-    data: {
+  const insertRes = await db
+    .insertInto("OrganizationInvite")
+    .values({
       orgId: targetOrgId,
-      inviterId,
+      inviterId: Number(inviterId),
       email: cleanEmail,
       role,
-      permissions: effectivePerms,
+      permissions: Number(effectivePerms),
       token,
       expiresAt,
-    },
-  });
+    })
+    .executeTakeFirstOrThrow();
+
+  const insertedId = insertRes.insertId ? String(insertRes.insertId) : "";
 
   await logOrgAudit({
-    orgId: targetOrgId,
+    orgId: BigInt(targetOrgId),
     userId: inviterId,
     action: "MEMBER_INVITED",
     targetType: "MEMBER",
-    targetId: targetUser.id,
+    targetId: BigInt(targetUser.id),
     payload: { email: cleanEmail, role, expiresAt: expiresAt.toISOString() },
   });
 
   return {
-    id: String(invite.id),
-    email: invite.email,
-    role: invite.role,
-    code: invite.token,
-    token: invite.token,
-    expiresAt: invite.expiresAt,
+    id: insertedId,
+    email: cleanEmail,
+    role,
+    code: token,
+    token,
+    expiresAt,
   };
 }
 
@@ -79,29 +88,28 @@ export async function verifyOrgInviteCode(code: string, userEmail: string) {
   const cleanCode = code.trim();
   const cleanEmail = userEmail.trim().toLowerCase();
 
-  const invite = await prisma.client.organizationInvite.findUnique({
-    where: { token: cleanCode },
-    include: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          avatar: true,
-          banner: true,
-          _count: { select: { members: true } },
-        },
-      },
-      inviter: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          avatar: true,
-        },
-      },
-    },
-  });
+  const invite = await db
+    .selectFrom("OrganizationInvite")
+    .innerJoin("Organization", "Organization.id", "OrganizationInvite.orgId")
+    .innerJoin("User as inviter", "inviter.id", "OrganizationInvite.inviterId")
+    .select([
+      "OrganizationInvite.id as id",
+      "OrganizationInvite.token as token",
+      "OrganizationInvite.role as role",
+      "OrganizationInvite.email as email",
+      "OrganizationInvite.acceptedAt as acceptedAt",
+      "OrganizationInvite.expiresAt as expiresAt",
+      "Organization.id as orgId",
+      "Organization.name as orgName",
+      "Organization.slug as orgSlug",
+      "Organization.avatar as orgAvatar",
+      "Organization.banner as orgBanner",
+      "inviter.id as inviterId",
+      "inviter.name as inviterName",
+      "inviter.avatar as inviterAvatar",
+    ])
+    .where("OrganizationInvite.token", "=", cleanCode)
+    .executeTakeFirst();
 
   if (!invite) throw new Error("Invalid or expired invitation code");
   if (invite.acceptedAt) throw new Error("Invitation has already been used");
@@ -110,22 +118,29 @@ export async function verifyOrgInviteCode(code: string, userEmail: string) {
     throw new Error("This invitation was issued for another email address");
   }
 
+  const countRow = await db
+    .selectFrom("OrganizationMember")
+    .select((eb) => eb.fn.count("id").as("count"))
+    .where("orgId", "=", invite.orgId)
+    .where("isDeleted", "is", null)
+    .executeTakeFirst();
+
   return {
     id: String(invite.id),
     code: invite.token,
     role: invite.role,
     organization: {
-      id: String(invite.organization.id),
-      name: invite.organization.name,
-      slug: invite.organization.slug,
-      avatar: invite.organization.avatar,
-      banner: invite.organization.banner,
-      memberCount: invite.organization._count.members,
+      id: String(invite.orgId),
+      name: invite.orgName,
+      slug: invite.orgSlug,
+      avatar: invite.orgAvatar,
+      banner: invite.orgBanner,
+      memberCount: Number(countRow?.count ?? 0),
     },
     inviter: {
-      id: String(invite.inviter.id),
-      name: invite.inviter.name,
-      avatar: invite.inviter.avatar,
+      id: String(invite.inviterId),
+      name: invite.inviterName,
+      avatar: invite.inviterAvatar,
     },
     expiresAt: invite.expiresAt,
   };
@@ -134,35 +149,49 @@ export async function verifyOrgInviteCode(code: string, userEmail: string) {
 export async function acceptOrgInviteCode(code: string, userId: bigint) {
   const cleanCode = code.trim();
 
-  const invite = await prisma.client.organizationInvite.findUnique({
-    where: { token: cleanCode },
-    include: { organization: true },
-  });
+  const invite = await db
+    .selectFrom("OrganizationInvite")
+    .innerJoin("Organization", "Organization.id", "OrganizationInvite.orgId")
+    .select([
+      "OrganizationInvite.id as id",
+      "OrganizationInvite.token as token",
+      "OrganizationInvite.orgId as orgId",
+      "OrganizationInvite.role as role",
+      "OrganizationInvite.permissions as permissions",
+      "OrganizationInvite.acceptedAt as acceptedAt",
+      "OrganizationInvite.expiresAt as expiresAt",
+      "Organization.slug as orgSlug",
+    ])
+    .where("OrganizationInvite.token", "=", cleanCode)
+    .executeTakeFirst();
 
   if (!invite) throw new Error("Invalid invitation code");
   if (invite.acceptedAt) throw new Error("Invitation has already been accepted");
   if (new Date() > invite.expiresAt) throw new Error("Invitation code has expired");
 
-  const member = await prisma.client.$transaction(async (tx) => {
-    await tx.organizationInvite.update({
-      where: { id: invite.id },
-      data: { acceptedAt: new Date() },
-    });
+  await db.transaction().execute(async (trx) => {
+    await trx
+      .updateTable("OrganizationInvite")
+      .set({ acceptedAt: new Date() })
+      .where("id", "=", invite.id)
+      .execute();
 
-    return tx.organizationMember.upsert({
-      where: { orgId_userId: { orgId: invite.orgId, userId } },
-      create: {
+    await trx
+      .insertInto("OrganizationMember")
+      .values({
         orgId: invite.orgId,
-        userId,
+        userId: Number(userId),
         role: invite.role,
-        permissions: invite.permissions,
-      },
-      update: {
+        permissions: Number(invite.permissions),
+        updatedAt: new Date(),
+      })
+      .onDuplicateKeyUpdate({
         role: invite.role,
-        permissions: invite.permissions,
+        permissions: Number(invite.permissions),
         isDeleted: null,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .execute();
   });
 
   await Promise.all([
@@ -172,7 +201,7 @@ export async function acceptOrgInviteCode(code: string, userId: bigint) {
 
   return {
     orgId: String(invite.orgId),
-    role: member.role,
-    orgSlug: invite.organization.slug,
+    role: invite.role,
+    orgSlug: invite.orgSlug,
   };
 }

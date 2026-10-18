@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { prisma } from "@/core/prisma";
+import { db } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
@@ -17,11 +17,14 @@ export const endpoint = new Elysia()
         return "Invalid organization ID";
       }
 
-      const callerMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: user.data.id } },
-      });
+      const callerMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["permissions"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(user.data.id))
+        .executeTakeFirst();
 
-      if (!callerMember || !hasPermission(callerMember.permissions, OrgPerm.ORG_MEMBER_ADD)) {
+      if (!callerMember || !hasPermission(BigInt(callerMember.permissions), OrgPerm.ORG_MEMBER_ADD)) {
         set.status = "Forbidden";
         return "Insufficient permissions to invite members";
       }
@@ -32,26 +35,23 @@ export const endpoint = new Elysia()
         return "Email is required";
       }
 
-      const targetUser = await prisma.client.user.findUnique({
-        where: { email: cleanEmail },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          avatar: true,
-          disabledAt: true,
-          deletedAt: true,
-        },
-      });
+      const targetUser = await db
+        .selectFrom("User")
+        .select(["id", "email", "name", "avatar", "disabledAt", "deletedAt"])
+        .where("email", "=", cleanEmail)
+        .executeTakeFirst();
 
       if (!targetUser || targetUser.disabledAt || targetUser.deletedAt) {
         set.status = "Not Found";
         return "No active registered user found with this email";
       }
 
-      const alreadyMember = await prisma.client.organizationMember.findUnique({
-        where: { orgId_userId: { orgId, userId: targetUser.id } },
-      });
+      const alreadyMember = await db
+        .selectFrom("OrganizationMember")
+        .select(["id", "isDeleted"])
+        .where("orgId", "=", Number(orgId))
+        .where("userId", "=", Number(targetUser.id))
+        .executeTakeFirst();
 
       if (alreadyMember && !alreadyMember.isDeleted) {
         set.status = "Conflict";
