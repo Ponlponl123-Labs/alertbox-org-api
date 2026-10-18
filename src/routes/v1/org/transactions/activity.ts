@@ -53,27 +53,23 @@ export const endpoint = new Elysia()
       const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const startDate = new Date(todayUtc.getTime() - (totalDays - 1) * 86400000);
 
-      const { rows } = await sql<
-        { day: string; count: number | string; testCount: number | string; realCount: number | string }
-      >`
-        SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as day,
-               COUNT(*) as count,
-               CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
-               CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
-        FROM TransactionLog FORCE INDEX (TransactionLog_orgId_createdAt_idx)
+      const { rows } = await sql<{ createdAt: Date; isTest: number }>`
+        SELECT createdAt, isTest
+        FROM TransactionLog FORCE INDEX (TransactionLog_orgId_activity_cover_idx)
         WHERE orgId = ${Number(orgId)}
           AND createdAt >= ${startDate}
           AND status != 'FAILED'
-        GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
       `.execute(db);
 
       const countMap = new Map<string, { total: number; test: number; real: number }>();
       for (const row of rows) {
-        countMap.set(row.day, {
-          total: Number(row.count),
-          test: Number(row.testCount || 0),
-          real: Number(row.realCount || 0),
-        });
+        const d = new Date(row.createdAt);
+        const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+        const existing = countMap.get(day) ?? { total: 0, test: 0, real: 0 };
+        existing.total++;
+        if (row.isTest) existing.test++;
+        else existing.real++;
+        countMap.set(day, existing);
       }
 
       const days: OrgActivityDay[] = [];

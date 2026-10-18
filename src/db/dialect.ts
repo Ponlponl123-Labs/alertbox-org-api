@@ -13,7 +13,10 @@ import { sql } from "./index";
 
 class BunSqlConnection implements DatabaseConnection {
   async executeQuery<R>(compiledQuery: CompiledQuery): Promise<QueryResult<R>> {
-    const rawRows = await sql.unsafe(compiledQuery.sql, compiledQuery.parameters as any);
+    const parameters = compiledQuery.parameters.map((p) =>
+      typeof p === "bigint" ? String(p) : p
+    );
+    const rawRows = await sql.unsafe(compiledQuery.sql, parameters as any);
     const rows = Array.isArray(rawRows) ? rawRows : [];
     const numAffectedRows = BigInt(rawRows?.affectedRows ?? 0);
     const insertId = BigInt(rawRows?.lastInsertRowid ?? 0);

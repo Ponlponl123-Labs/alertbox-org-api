@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { sql } from "kysely";
 import { redis } from "@/core/redis";
 import { basicUserSelect, pureUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
@@ -309,13 +310,14 @@ export class Me<T = any> {
         "Session.disabledAt",
         "Session.expiresAt",
         "User.id as validUserId",
+        sql<number>`Session.expiresAt <= NOW()`.as("isExpired"),
       ])
       .executeTakeFirst();
 
     if (
       !session_info ||
       session_info.disabledAt ||
-      session_info.expiresAt <= new Date() ||
+      Boolean(session_info.isExpired) ||
       !session_info.validUserId
     ) {
       if (session_info) void destroySession(session);
@@ -325,7 +327,17 @@ export class Me<T = any> {
     // Track session usage in background
     void trackSessionUsage(session_info.userId, session_info.sessionId, ip);
 
-    if (session_info.ipAddress !== ip) {
+    const isLoopback = (addr: string) =>
+      addr === "127.0.0.1" ||
+      addr === "::1" ||
+      addr === "::ffff:127.0.0.1" ||
+      addr === "localhost";
+
+    const isIpMatch =
+      session_info.ipAddress === ip ||
+      (isLoopback(session_info.ipAddress) && isLoopback(ip));
+
+    if (!isIpMatch) {
       void destroySession(session);
       return false;
     }

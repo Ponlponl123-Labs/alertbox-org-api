@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { sql } from "kysely";
 import { nanoid } from "nanoid";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "@/utils/ip";
@@ -111,7 +112,7 @@ export async function createSession(
         .values({
           ...payload,
           token: combinedToken,
-          expiresAt: new Date(timestamp + 2 * 60 * 60 * 1000),
+          expiresAt: sql`DATE_ADD(NOW(), INTERVAL 7 DAY)` as any,
         })
         .execute();
       return combinedToken;
@@ -146,7 +147,7 @@ export async function destroySession(token: string): Promise<boolean> {
     const result = await db
       .updateTable("Session")
       .set({
-        disabledAt: new Date(),
+        disabledAt: sql`NOW()` as any,
       })
       .where("token", "=", token)
       .executeTakeFirst();

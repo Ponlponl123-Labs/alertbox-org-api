@@ -281,18 +281,18 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     {
       const res = await inspectQuery(
         "TransactionLog.byOrgActivity",
-        "SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as day, COUNT(*) as count " +
-        "FROM `TransactionLog` FORCE INDEX (`TransactionLog_orgId_createdAt_idx`) " +
-        "WHERE orgId = 1 AND createdAt >= DATE_SUB(NOW(), INTERVAL 365 DAY) AND status != 'FAILED' " +
-        "GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')"
+        "SELECT createdAt, isTest " +
+        "FROM `TransactionLog` FORCE INDEX (`TransactionLog_orgId_activity_cover_idx`) " +
+        "WHERE orgId = 1 AND createdAt >= DATE_SUB(NOW(), INTERVAL 365 DAY) AND status != 'FAILED'"
       );
-      expect(res.logicalReads).toBeLessThanOrEqual(20);
+      expect(res.scanCount).toBe(0);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBeLessThanOrEqual(2);
       expect(res.hasFullTableScan).toBe(false);
-      const usedKey = res.explain.find((r) => r.key?.includes("TransactionLog_orgId_createdAt_idx"));
+      const usedKey = res.explain.find((r) => r.key?.includes("TransactionLog_orgId_activity_cover_idx"));
       expect(usedKey).toBeDefined();
       expect(usedKey?.type).toBe("range");
-      expect(res.durationMs).toBeLessThanOrEqual(15);
+      expect(res.durationMs).toBeLessThanOrEqual(10);
     }
 
     {
@@ -460,10 +460,12 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     {
       const res = await inspectQuery(
         "OrganizationAuditLog.byOrg",
-        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 ORDER BY createdAt DESC LIMIT 10"
+        "SELECT id, orgId, userId, action, targetType, targetId, ipAddress, createdAt " +
+        "FROM `OrganizationAuditLog` FORCE INDEX (`OrganizationAuditLog_orgId_cover_idx`) " +
+        "WHERE orgId = 1 ORDER BY createdAt DESC LIMIT 10"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(25);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBeLessThanOrEqual(2);
       expect(res.hasFullTableScan).toBe(false);
     }
@@ -471,10 +473,12 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     {
       const res = await inspectQuery(
         "OrganizationAuditLog.byStreamer",
-        "SELECT id, orgId, userId, action, targetType, targetId, payload, ipAddress, createdAt FROM `OrganizationAuditLog` WHERE orgId = 1 AND targetType = 'STREAMER' AND targetId = 1 ORDER BY createdAt DESC LIMIT 10"
+        "SELECT id, orgId, userId, action, targetType, targetId, ipAddress, createdAt " +
+        "FROM `OrganizationAuditLog` FORCE INDEX (`OrganizationAuditLog_streamer_cover_idx`) " +
+        "WHERE orgId = 1 AND targetType = 'STREAMER' AND targetId = 1 ORDER BY createdAt DESC LIMIT 10"
       );
       expect(res.scanCount).toBe(0);
-      expect(res.logicalReads).toBeLessThanOrEqual(25);
+      expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBeLessThanOrEqual(2);
       expect(res.hasFullTableScan).toBe(false);
     }
