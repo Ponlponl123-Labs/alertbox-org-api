@@ -1,6 +1,8 @@
 export interface User {
   id: bigint;
   email: string;
+  name?: string | null;
+  displayName?: string | null;
   createWith: string;
   createdAt: Date;
   updatedAt: Date;

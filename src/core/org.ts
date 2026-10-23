@@ -15,6 +15,7 @@ export interface OrgContext {
 export async function resolveOrgId(param?: string | null): Promise<bigint | null> {
   if (!param) return null;
   const trimmed = param.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed) || trimmed.includes("GMT")) return null;
   if (/^\d+$/.test(trimmed)) {
     try {
       const cached = await redis.redis.get(`org:${trimmed}:info`);
@@ -141,10 +142,14 @@ export const orgContext = new Elysia({ name: "org-context" })
       const memberRecord = await query.orderBy("createdAt", "asc").executeTakeFirst();
 
       if (memberRecord) {
+        let perms = 0n;
+        try {
+          perms = typeof memberRecord.permissions === "bigint" ? memberRecord.permissions : BigInt(memberRecord.permissions ?? 0);
+        } catch {}
         membership = {
           orgId: BigInt(memberRecord.orgId),
           role: memberRecord.role,
-          permissions: BigInt(memberRecord.permissions),
+          permissions: perms,
         };
         try {
           await redis.redis.hset(

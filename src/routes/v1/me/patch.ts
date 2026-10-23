@@ -20,16 +20,24 @@ export const endpoint = new Elysia()
     async ({ getAuthenticatedUser, body, set }) => {
       const user = await getAuthenticatedUser(sessionUserSelect);
 
-      const nameInput = (body as any).name || (body as any).userName || (body as any).displayName || body.displayname;
-      if (nameInput) {
-        const check = await Moderation.moderateText(nameInput);
+      const userNameInput = body.name || (body as any).userName;
+      const displayNameInput = body.displayName || (body as any).displayname;
+      if (userNameInput) {
+        const check = await Moderation.moderateText(userNameInput);
         if (check.flagged) {
           set.status = "Unavailable For Legal Reasons";
-          return "Name contains inappropriate content";
+          return "Username contains inappropriate content";
+        }
+      }
+      if (displayNameInput) {
+        const check = await Moderation.moderateText(displayNameInput);
+        if (check.flagged) {
+          set.status = "Unavailable For Legal Reasons";
+          return "Display name contains inappropriate content";
         }
       }
 
-      const updateData: { avatar?: string; name?: string } = {};
+      const updateData: { avatar?: string; name?: string; displayName?: string } = {};
 
       if (body.avatar) {
         const buf = Buffer.from(await body.avatar.arrayBuffer());
@@ -48,8 +56,11 @@ export const endpoint = new Elysia()
         } catch {}
       }
 
-      if (nameInput) {
-        updateData.name = nameInput.trim().slice(0, 64);
+      if (userNameInput) {
+        updateData.name = userNameInput.trim().slice(0, 64);
+      }
+      if (displayNameInput) {
+        updateData.displayName = displayNameInput.trim().slice(0, 64);
       }
 
       if (Object.keys(updateData).length === 0) return "No changes";

@@ -41,6 +41,7 @@ export async function setCachedUser(uid: string | bigint | number, user: any): P
     type: user.type ?? "REGULAR",
     email: user.email,
     name: user.name,
+    displayName: user.displayName ?? user.name ?? null,
     avatar: user.avatar ?? null,
     createWith: user.createWith,
     createdAt: user.createdAt,
@@ -76,4 +77,3 @@ export function filterUserSelection(user: any, select: any): any {
   }
   return filtered;
 }
-

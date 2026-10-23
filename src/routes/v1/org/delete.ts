@@ -71,6 +71,8 @@ export const endpoint = new Elysia()
       ];
 
       for (const m of members) {
+        keysToDelete.push(`user:${m.userId}:info`);
+        keysToDelete.push(`user:${m.userId}:orgs`);
         keysToDelete.push(`user:orgs:${m.userId}`);
         keysToDelete.push(`user:${m.userId}:org_list`);
         keysToDelete.push(`user:primary_org:${m.userId}`);

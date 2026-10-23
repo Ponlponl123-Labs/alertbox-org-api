@@ -277,7 +277,7 @@ class Server {
         return;
       }
       logger.error(
-        tsflag("error", true, s("An error occurred:", { color: "red" }), error),
+        tsflag("error", true, s("An error occurred:", { color: "red" }), (error as any)?.stack || error),
       );
       set.status = 500;
       return "Internal Server Error";

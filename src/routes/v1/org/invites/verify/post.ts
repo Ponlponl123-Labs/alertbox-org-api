@@ -29,6 +29,7 @@ export const endpoint = new Elysia()
           "Organization.name as orgName",
           "Organization.slug as orgSlug",
           "Organization.avatar as orgAvatar",
+          "Organization.banner as orgBanner",
           "inviter.name as inviterName",
           "inviter.avatar as inviterAvatar",
         ])
@@ -73,6 +74,7 @@ export const endpoint = new Elysia()
           name: invite.orgName,
           slug: invite.orgSlug,
           avatar: invite.orgAvatar,
+          banner: invite.orgBanner,
         },
         inviter: {
           name: invite.inviterName,

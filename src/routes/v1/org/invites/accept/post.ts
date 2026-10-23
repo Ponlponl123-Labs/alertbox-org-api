@@ -66,13 +66,13 @@ export const endpoint = new Elysia()
             orgId: Number(invite.orgId),
             userId: Number(user.data.id),
             role: invite.role,
-            permissions: Number(invite.permissions),
+            permissions: BigInt(invite.permissions),
             isDeleted: null,
             updatedAt: new Date(),
           })
           .onDuplicateKeyUpdate({
             role: invite.role,
-            permissions: Number(invite.permissions),
+            permissions: BigInt(invite.permissions),
             isDeleted: null,
             updatedAt: new Date(),
           })
@@ -86,6 +86,7 @@ export const endpoint = new Elysia()
       });
 
       await Promise.all([
+        redis.redis.del(`user:${String(user.data.id)}:info`),
         redis.redis.del(`user:${String(user.data.id)}:orgs`),
         redis.redis.del(`user:${String(user.data.id)}:org_list`),
         redis.redis.del(`org:${String(invite.orgId)}:members`),
@@ -149,13 +150,13 @@ export const endpoint = new Elysia()
             orgId: Number(invite.orgId),
             userId: Number(user.data.id),
             role: invite.role,
-            permissions: Number(invite.permissions),
+            permissions: BigInt(invite.permissions),
             isDeleted: null,
             updatedAt: new Date(),
           })
           .onDuplicateKeyUpdate({
             role: invite.role,
-            permissions: Number(invite.permissions),
+            permissions: BigInt(invite.permissions),
             isDeleted: null,
             updatedAt: new Date(),
           })
@@ -169,6 +170,7 @@ export const endpoint = new Elysia()
       });
 
       await Promise.all([
+        redis.redis.del(`user:${String(user.data.id)}:info`),
         redis.redis.del(`user:${String(user.data.id)}:orgs`),
         redis.redis.del(`user:${String(user.data.id)}:org_list`),
         redis.redis.del(`org:${String(invite.orgId)}:members`),

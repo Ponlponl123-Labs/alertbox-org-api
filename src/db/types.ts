@@ -15,6 +15,7 @@ export interface User {
   createWith: string;
   secret: string;
   name: string | null;
+  displayName: string | null;
   avatar: string | null;
   disabledAt: Date | string | null;
   deletedAt: Date | string | null;

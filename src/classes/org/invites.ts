@@ -57,7 +57,7 @@ export async function createOrgInvite(
       inviterId: Number(inviterId),
       email: cleanEmail,
       role,
-      permissions: Number(effectivePerms),
+      permissions: BigInt(effectivePerms),
       token,
       expiresAt,
     })
@@ -182,12 +182,12 @@ export async function acceptOrgInviteCode(code: string, userId: bigint) {
         orgId: invite.orgId,
         userId: Number(userId),
         role: invite.role,
-        permissions: Number(invite.permissions),
+        permissions: BigInt(invite.permissions),
         updatedAt: new Date(),
       })
       .onDuplicateKeyUpdate({
         role: invite.role,
-        permissions: Number(invite.permissions),
+        permissions: BigInt(invite.permissions),
         isDeleted: null,
         updatedAt: new Date(),
       })
@@ -196,7 +196,9 @@ export async function acceptOrgInviteCode(code: string, userId: bigint) {
 
   await Promise.all([
     redis.redis.del(`org:${String(invite.orgId)}:members`),
+    redis.redis.del(`user:${String(userId)}:info`),
     redis.redis.del(`user:${String(userId)}:orgs`),
+    redis.redis.del(`user:${String(userId)}:org_list`),
   ]);
 
   return {

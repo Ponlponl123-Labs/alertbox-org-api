@@ -11,17 +11,6 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
-export interface _PrismaMigrations {
-  applied_steps_count: Generated<number>;
-  checksum: string;
-  finished_at: Generated<Date | null>;
-  id: string;
-  logs: Generated<string | null>;
-  migration_name: string;
-  rolled_back_at: Generated<Date | null>;
-  started_at: Generated<Date>;
-}
-
 export interface AlertboxEvent {
   accentColor: Generated<number>;
   alertboxId: number;
@@ -65,6 +54,13 @@ export interface AlertboxSetting {
   globalVolume: Generated<number | null>;
   id: Generated<number>;
   widgetId: number;
+}
+
+export interface GooseDbVersion {
+  id: Generated<number>;
+  is_applied: number;
+  tstamp: Generated<Date | null>;
+  version_id: number;
 }
 
 export interface Integration {
@@ -296,6 +292,7 @@ export interface User {
   createWith: string;
   deletedAt: Generated<Date | null>;
   disabledAt: Generated<Date | null>;
+  displayName: Generated<string | null>;
   email: string;
   id: Generated<number>;
   name: Generated<string | null>;
@@ -335,9 +332,9 @@ export interface WidgetTokenLog {
 }
 
 export interface DB {
-  _prisma_migrations: _PrismaMigrations;
   AlertboxEvent: AlertboxEvent;
   AlertboxSetting: AlertboxSetting;
+  goose_db_version: GooseDbVersion;
   Integration: Integration;
   Organization: Organization;
   OrganizationAuditLog: OrganizationAuditLog;

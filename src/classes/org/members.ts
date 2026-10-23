@@ -67,7 +67,7 @@ export async function updateOrgMemberRole(
 
   const patch: any = { role, updatedAt: new Date() };
   if (permissions !== undefined) {
-    patch.permissions = Number(permissions);
+    patch.permissions = permissions;
   }
 
   await db
@@ -96,7 +96,9 @@ export async function updateOrgMemberRole(
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),
+    redis.redis.del(`user:${String(targetUserId)}:info`),
     redis.redis.del(`user:${String(targetUserId)}:orgs`),
+    redis.redis.del(`user:${String(targetUserId)}:org_list`),
   ]);
 
   return {
@@ -129,6 +131,7 @@ export async function removeOrgMember(
 
   await Promise.all([
     redis.redis.del(`org:${String(orgId)}:members`),
+    redis.redis.del(`user:${String(targetUserId)}:info`),
     redis.redis.del(`user:${String(targetUserId)}:orgs`),
     redis.redis.del(`user:${String(targetUserId)}:org_list`),
   ]);

@@ -5,14 +5,16 @@
   "scripts": {
     "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch src/index.ts",
-    "db:codegen": "kysely-codegen --dialect mysql --out src/db/types.d.ts",
-    "db:migrate:up": "goose -dir migrations mysql \"$DATABASE_URL\" up",
-    "db:migrate:deploy": "goose -dir migrations ${GOOSE_EXTRA_FLAGS:-} mysql \"${MIGRATION_DATABASE_URL:-$DATABASE_URL}\" up",
-    "db:migrate:down": "goose -dir migrations mysql \"$DATABASE_URL\" down",
-    "db:migrate:status": "goose -dir migrations mysql \"$DATABASE_URL\" status",
+    "db:codegen": "bun scripts/codegen.ts",
+    "db:migrate:up": "bun src/db/migrate.ts up",
+    "db:migrate:deploy": "bun src/db/migrate.ts up",
+    "db:migrate:down": "bun src/db/migrate.ts down",
+    "db:migrate:status": "bun src/db/migrate.ts status",
     "build": "bun build --compile --minify-whitespace --minify-syntax --target bun src/index.ts --outfile dist/server",
     "build:windows": "bun build ./src/index.ts --compile --minify-whitespace --minify-syntax --target=bun-windows-x64 --outfile dist/server.exe",
-    "db:inspect": "bun test test/queries.performance.test.ts"
+    "db:inspect": "bun test test/queries.performance.test.ts",
+    "db:state": "bun test/inspect-db-state.ts",
+    "db:debug": "bun test/inspect-db-state.ts"
   },
   "dependencies": {
     "@elysia/openapi": "^1.4.16",

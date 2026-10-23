@@ -89,7 +89,7 @@ export const endpoint = new Elysia()
           inviterId: Number(user.data.id),
           email: cleanEmail,
           role,
-          permissions: Number(permissions),
+          permissions: permissions,
           token,
           expiresAt,
         })

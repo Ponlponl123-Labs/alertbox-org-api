@@ -88,7 +88,7 @@ export const endpoint = new Elysia()
           return "Cannot assign a role with permissions higher than your own.";
         }
         updateData.role = body.role;
-        updateData.permissions = Number(rolePerms);
+        updateData.permissions = rolePerms;
       }
 
       if (body.permissions !== undefined) {
@@ -97,7 +97,7 @@ export const endpoint = new Elysia()
           set.status = "Forbidden";
           return "Cannot grant permissions higher than your own.";
         }
-        updateData.permissions = Number(requestedPerms);
+        updateData.permissions = requestedPerms;
       }
 
       await db

@@ -74,7 +74,7 @@ export const createOrgEndpoint = new Elysia()
             orgId,
             userId: Number(user.data.id),
             role: "OWNER",
-            permissions: Number(OrgPerm.ALL),
+            permissions: OrgPerm.ALL,
             updatedAt: new Date(),
           })
           .execute();
@@ -82,8 +82,9 @@ export const createOrgEndpoint = new Elysia()
         return { id: orgId, type: orgType, name, slug };
       });
 
-      // Invalidate user orgs cache
+      // Invalidate user cache (info, orgs, org_list)
       await Promise.all([
+        redis.redis.del(`user:${String(user.data.id)}:info`),
         redis.redis.del(`user:${String(user.data.id)}:orgs`),
         redis.redis.del(`user:${String(user.data.id)}:org_list`),
       ]);

@@ -78,6 +78,7 @@ describe("User Cache Decoupling & Pure Identity Isolation", () => {
     expect(cachedPureUser.id).toBe(9001n);
     expect(cachedPureUser.email).toBe("creator@alertbox.org");
     expect(cachedPureUser.name).toBe("SuperCreator");
+    expect(cachedPureUser.displayName).toBe("SuperCreator");
     expect(cachedPureUser.avatar).toBe("https://static.alertbox.org/avatars/user-9001.webp");
     expect(cachedPureUser.createWith).toBe("discord");
 
@@ -93,8 +94,8 @@ describe("User Cache Decoupling & Pure Identity Isolation", () => {
     expect(storedInRedis).not.toBeNull();
     const byteSize = Buffer.byteLength(storedInRedis!, "utf8");
 
-    // Decoupled user cache must be ultra-compact (< 250 bytes)
-    expect(byteSize).toBeLessThan(250);
+    // Decoupled user cache must be ultra-compact (< 300 bytes)
+    expect(byteSize).toBeLessThan(300);
 
     // Verify reading back from cache parses BigInt ID
     const retrieved = await getCachedUser(9001n);

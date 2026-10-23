@@ -53,6 +53,7 @@ export const endpoint = new Elysia()
         .execute();
 
       await Promise.all([
+        redis.redis.del(`user:${String(targetMember.userId)}:info`),
         redis.redis.del(`user:${String(targetMember.userId)}:orgs`),
         redis.redis.del(`user:${String(targetMember.userId)}:org_list`),
         redis.redis.del(`org:${String(orgId)}:members`),

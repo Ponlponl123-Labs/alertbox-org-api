@@ -35,7 +35,7 @@ export class Me<T = any> {
       .where("Organization.deletedAt", "is", null)
       .select([
         "OrganizationMember.id as memberId",
-        "OrganizationMember.orgId",
+        "OrganizationMember.orgId as memberOrgId",
         "OrganizationMember.userId",
         "OrganizationMember.role",
         "OrganizationMember.permissions",
@@ -129,20 +129,20 @@ export class Me<T = any> {
     }
 
     const rawMemberships = rawMembers.map((m) => ({
-      id: m.memberId,
-      orgId: m.orgId,
-      userId: m.userId,
+      id: String(m.memberId),
+      orgId: String(m.orgId),
+      userId: String(m.userId),
       role: m.role,
       permissions: m.permissions,
       createdAt: m.memberCreatedAt,
       organization: {
-        id: m.orgId,
+        id: String(m.orgId),
         type: m.orgType,
         name: m.orgName,
         slug: m.orgSlug,
         avatar: m.orgAvatar,
         banner: m.orgBanner,
-        ownerId: m.orgOwnerId,
+        ownerId: String(m.orgOwnerId),
         createdAt: m.orgCreatedAt,
         streamers: streamerOrgMap.get(String(m.orgId)) || [],
       },
@@ -153,7 +153,12 @@ export class Me<T = any> {
 
     const memberships = rawMemberships.map((m, idx) => {
       const isOwnerOrAdmin = m.role === "OWNER" || m.role === "ADMIN";
-      const permBig = BigInt(m.permissions);
+      let permBig = 0n;
+      try {
+        permBig = typeof m.permissions === "bigint" ? m.permissions : BigInt(m.permissions ?? 0);
+      } catch {
+        permBig = 0n;
+      }
       const hasOrgViewStreamers = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.STREAMER_VIEW);
       const hasOrgEditProfile = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.STREAMER_MANAGE);
       const hasOrgViewTransactions = isOwnerOrAdmin || hasPermission(permBig, OrgPerm.TRANSACTION_VIEW);
@@ -375,6 +380,7 @@ export class Me<T = any> {
           "type",
           "email",
           "name",
+          "displayName",
           "avatar",
           "createWith",
           "createdAt",
@@ -407,7 +413,7 @@ export class Me<T = any> {
    * Create a new account.
    */
   public async create(
-    data: { name: string; email: string; createWith: string },
+    data: { name: string; displayName?: string; email: string; createWith: string },
     select: any = basicUserSelect,
   ): Promise<any> {
     this.lastSelect = select;
@@ -519,27 +525,10 @@ export class Me<T = any> {
   }
 
   /**
-   * Return the loaded data with fallback profile and widgets for backward compatibility.
+   * Return the pure authenticated user data.
    */
   public toJSON() {
-    const rawData = this.data as any;
-    if (!rawData) return rawData;
-
-    let primaryStreamer: any = null;
-    if (rawData.memberships && rawData.memberships.length > 0) {
-      for (const m of rawData.memberships) {
-        if (m.organization?.streamers && m.organization.streamers.length > 0) {
-          primaryStreamer = m.organization.streamers[0];
-          break;
-        }
-      }
-    }
-
-    return {
-      ...rawData,
-      profile: rawData.profile || primaryStreamer || null,
-      widgets: rawData.widgets || primaryStreamer?.widgets || [],
-    };
+    return this.data;
   }
 
   /**

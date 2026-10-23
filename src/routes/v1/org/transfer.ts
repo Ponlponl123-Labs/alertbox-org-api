@@ -88,7 +88,7 @@ export const endpoint = new Elysia()
           .updateTable("OrganizationMember")
           .set({
             role: "ADMIN",
-            permissions: Number(RolePresets.ADMIN),
+            permissions: RolePresets.ADMIN,
             updatedAt: new Date(),
           })
           .where("orgId", "=", Number(orgId))
@@ -99,7 +99,7 @@ export const endpoint = new Elysia()
           .updateTable("OrganizationMember")
           .set({
             role: "OWNER",
-            permissions: Number(RolePresets.OWNER),
+            permissions: RolePresets.OWNER,
             updatedAt: new Date(),
           })
           .where("id", "=", Number(targetMemberId))
@@ -107,10 +107,12 @@ export const endpoint = new Elysia()
       });
 
       await Promise.all([
+        redis.redis.del(`user:${user.data.id}:info`),
         redis.redis.del(`user:${user.data.id}:org_list`),
         redis.redis.del(`user:orgs:${user.data.id}`),
         redis.redis.del(`user:primary_org:${user.data.id}`),
         redis.redis.hdel(`user:${user.data.id}:orgs`, String(orgId)),
+        redis.redis.del(`user:${targetMember.userId}:info`),
         redis.redis.del(`user:${targetMember.userId}:org_list`),
         redis.redis.del(`user:orgs:${targetMember.userId}`),
         redis.redis.del(`user:primary_org:${targetMember.userId}`),

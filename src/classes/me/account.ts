@@ -11,6 +11,7 @@ import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
  */
 export async function createAccount(data: {
   name: string;
+  displayName?: string;
   email: string;
   createWith: string;
 }) {
@@ -32,6 +33,7 @@ export async function createAccount(data: {
           .values({
             email: data.email,
             name: data.name,
+            displayName: data.displayName ?? data.name,
             createWith: data.createWith,
             secret: internalSecret,
             updatedAt: now,
@@ -47,6 +49,7 @@ export async function createAccount(data: {
             "type",
             "email",
             "name",
+            "displayName",
             "avatar",
             "createWith",
             "createdAt",

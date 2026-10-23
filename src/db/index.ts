@@ -1,7 +1,7 @@
 import { SQL } from "bun";
 import { dbConfig, nodeEnv } from "@/config/env";
 import { logger } from "@/utils/log";
-import betterConsole, { Card, cs, s, tsflag } from "ts-better-console";
+import betterConsole, { Card, cs, rgb, s, tsflag } from "ts-better-console";
 
 export * from "./enums";
 export * from "./types";
@@ -27,13 +27,17 @@ const buildTlsOptions = () => {
   return { rejectUnauthorized: true };
 };
 
-logger.process(
-  tsflag(
-    "info",
-    true,
-    "· Initializing native Bun.SQL connection pool (mTLS enabled)...",
-  ),
-);
+if (logger.isVerbose()) {
+  new Card("· Starting native Bun.SQL Database Pool...", undefined, {
+    border: {
+      style: { color: rgb(90, 103, 216) },
+      symbols: { style: "round" },
+    },
+  })
+    .render()
+    .split("\n")
+    .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+}
 
 export const sql = new SQL({
   adapter: "mysql",
@@ -75,17 +79,60 @@ export async function verifyConnection() {
         }),
       ),
     );
-    await sql`SELECT 1`;
+    const start = performance.now();
+    const rows = await sql<{ db: string; user: string; version: string }[]>`
+      SELECT DATABASE() as db, USER() as user, @@version as version
+    `;
+    const latency = (performance.now() - start).toFixed(2);
     isConnected = true;
     logger.process(
       tsflag(
         "info",
         true,
-        s("✓ Database connection established successfully via native Bun.SQL!", {
+        s(`✓ Database connection established successfully via native Bun.SQL! [${latency}ms]`, {
           color: "green",
         }),
       ),
     );
+
+    if (logger.isVerbose()) {
+      const info = rows[0];
+      new Card(
+        cs(
+          [
+            "Host: " + dbConfig.host,
+            "Port: " + dbConfig.port,
+            "User: " + (info?.user || dbConfig.user),
+            "Database: " + (info?.db || dbConfig.database),
+            "Version: " + (info?.version || "MariaDB Galera"),
+            "SSL: " + (dbConfig.sslMode || (dbConfig.ssl ? "Enabled (mTLS)" : "Disabled")),
+            "Pool Max: " + (process.platform === "win32" ? "1 (Windows IOCP Guard)" : "10"),
+            "Ping Latency: " + latency + "ms",
+          ],
+          "   \n",
+        ),
+        undefined,
+        {
+          title: {
+            content: `Database Connection Details`,
+          },
+          footer: {
+            content: `· Connection Status: ${isConnected ? "Connected" : "Disconnected"}`,
+            style: {
+              color: isConnected ? "green" : "red",
+            },
+          },
+          border: {
+            symbols: {
+              style: "round",
+            },
+          },
+        },
+      )
+        .render()
+        .split("\n")
+        .forEach((line) => betterConsole.log(tsflag("info", true, line)));
+    }
   } catch (error) {
     logger.error(
       tsflag(
@@ -99,6 +146,10 @@ export async function verifyConnection() {
     );
     process.exit(1);
   }
+}
+
+if (nodeEnv !== "test") {
+  verifyConnection();
 }
 
 export default sql;
