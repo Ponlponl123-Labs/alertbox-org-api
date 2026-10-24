@@ -132,4 +132,55 @@ describe("Tenancy Types & Quota Enforcement (User & Org Levels)", () => {
     expect(CHANNEL_NAME_REGEX.test("live.stream")).toBe(false); // dot
     expect(CHANNEL_NAME_REGEX.test("")).toBe(false); // empty
   });
+
+  it("verifies reserved channel names protection", () => {
+    const { reserved_uri } = require("../src/consts/reserved");
+    expect(reserved_uri.has("admin")).toBe(true);
+    expect(reserved_uri.has("system")).toBe(true);
+    expect(reserved_uri.has("alertbox")).toBe(true);
+    expect(reserved_uri.has("valid_streamer")).toBe(false);
+  });
+
+  it("verifies ChannelNameRegistry cache-first availability and claim/invalidate", async () => {
+    const { ChannelNameRegistry } = await import("../src/classes/streamer/channel-name");
+    const { redis } = await import("../src/core/redis");
+
+    const mockStore = new Map<string, string>();
+    (redis.redis as any).get = async (key: string) => mockStore.get(key) ?? null;
+    (redis.redis as any).setex = async (key: string, _ttl: number, val: string) => {
+      mockStore.set(key, val);
+      return "OK";
+    };
+    (redis.redis as any).del = async (key: string) => {
+      mockStore.delete(key);
+      return 1;
+    };
+
+    const testName = "unique_unit_test_channel";
+
+    // 1. Invalid and reserved instant rejection
+    expect((await ChannelNameRegistry.checkAvailability("")).status).toBe("invalid");
+    expect((await ChannelNameRegistry.checkAvailability("admin")).status).toBe("reserved");
+
+    // 2. Cache hit (available via negative cache "noone")
+    mockStore.set(`streamer:username:${testName}:owner`, "noone");
+    const checkAvailable = await ChannelNameRegistry.checkAvailability(testName);
+    expect(checkAvailable.available).toBe(true);
+    expect(checkAvailable.status).toBe("available");
+
+    // 3. Claim channel name
+    await ChannelNameRegistry.claim(testName, 9999);
+    expect(mockStore.get(`streamer:username:${testName}:owner`)).toBe("9999");
+
+    // 4. Cache hit (taken)
+    const checkTaken = await ChannelNameRegistry.checkAvailability(testName);
+    expect(checkTaken.available).toBe(false);
+    expect(checkTaken.status).toBe("taken");
+    expect(checkTaken.ownerId).toBe("9999");
+
+    // 5. Invalidation
+    await ChannelNameRegistry.invalidate(testName);
+    expect(mockStore.has(`streamer:username:${testName}:owner`)).toBe(false);
+  });
 });
+

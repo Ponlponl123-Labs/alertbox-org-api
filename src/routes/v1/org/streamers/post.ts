@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import { authorizeOrg, authorizeStreamer } from "@/core/org";
 import { isSelfHosted } from "@/utils/instance";
 import { logOrgAudit } from "@/core/audit";
+import { ChannelNameRegistry } from "@/classes/streamer/channel-name";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -40,9 +41,21 @@ export const endpoint = new Elysia()
       }
 
       const name = body.name.trim().toLowerCase();
-      if (!/^[a-z0-9_-]+$/.test(name)) {
+      const availability = await ChannelNameRegistry.checkAvailability(name);
+
+      if (availability.status === "invalid") {
         set.status = "Bad Request";
         return "Channel name can only contain lowercase alphanumeric characters, hyphens, and underscores";
+      }
+
+      if (availability.status === "reserved") {
+        set.status = "Forbidden";
+        return "Channel name is reserved";
+      }
+
+      if (availability.status === "taken") {
+        set.status = "Conflict";
+        return "Channel name already taken";
       }
       const displayName = (body.displayName?.trim() || name).slice(0, 64);
       const timestamp = Date.now();
@@ -119,10 +132,12 @@ export const endpoint = new Elysia()
         `org:${String(orgId)}:streamers`,
         `org:${String(orgId)}:primary_streamer`,
         `org:${String(orgId)}:members`,
+        `uri:${name}:owner`,
         ...members.map((m) => `user:${String(m.userId)}:org_list`),
       ];
 
       await Promise.all(keysToDelete.map((k) => redis.redis.del(k)));
+      await ChannelNameRegistry.claim(name, streamer.id);
 
       await logOrgAudit({
         orgId,

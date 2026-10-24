@@ -7,6 +7,7 @@ import { endpoint as ConnectionsEndpoint } from "./connections/index";
 import { endpoint as AuditEndpoint } from "./audit/index";
 import { endpoint as TransactionsEndpoint } from "./transactions/index";
 import { endpoint as TinyEndpoint } from "./tiny";
+import { endpoint as CheckUsernameEndpoint } from "./check-username";
 
 export const endpoint = new Elysia()
   .use(GetEndpoint)
@@ -16,6 +17,7 @@ export const endpoint = new Elysia()
   .use(ConnectionsEndpoint)
   .use(AuditEndpoint)
   .use(TransactionsEndpoint)
-  .use(TinyEndpoint);
+  .use(TinyEndpoint)
+  .use(CheckUsernameEndpoint);
 
 export default endpoint;

@@ -14,6 +14,7 @@ import { nanoid } from "nanoid";
 import { inflateSync } from "node:zlib";
 import { logOrgAudit } from "@/core/audit";
 import { updateStreamerCache } from "@/utils/cache-sync";
+import { ChannelNameRegistry } from "@/classes/streamer/channel-name";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -55,6 +56,24 @@ export const endpoint = new Elysia()
         if (!/^[a-z0-9_-]+$/.test(newName)) {
           set.status = "Bad Request";
           return "Channel name can only contain lowercase alphanumeric characters, hyphens, and underscores";
+        }
+        if (newName !== streamer.name) {
+          const availability = await ChannelNameRegistry.checkAvailability(newName);
+
+          if (availability.status === "invalid") {
+            set.status = "Bad Request";
+            return "Channel name can only contain lowercase alphanumeric characters, hyphens, and underscores";
+          }
+          if (availability.status === "reserved") {
+            set.status = "Forbidden";
+            return "Channel name is reserved";
+          }
+          if (availability.status === "taken") {
+            set.status = "Conflict";
+            return "Channel name already taken";
+          }
+          await ChannelNameRegistry.invalidate(streamer.name);
+          await ChannelNameRegistry.claim(newName, streamerId);
         }
         data.name = newName.slice(0, 64);
       }

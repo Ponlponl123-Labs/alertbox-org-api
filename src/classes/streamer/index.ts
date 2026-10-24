@@ -149,6 +149,7 @@ export default Streamer;
 // Re-export domain utilities and constants for convenience
 export * from "./connections";
 export * from "./profile";
+export * from "./channel-name";
 export {
   supported_providers,
   allowed_user_update_providers,

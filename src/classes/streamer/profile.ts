@@ -266,17 +266,15 @@ export async function getURIOwner(uri: string): Promise<string | false> {
     .where("uri", "=", parsedUri)
     .executeTakeFirst();
 
-  if (!lastRecord) {
-    void redis.redis.setex(`uri:${parsedUri}:owner`, week, "noone");
-    return false;
+  if (lastRecord) {
+    const status = lastRecord.disabledAt ? "disabled" : String(lastRecord.streamerId);
+    await Promise.all([
+      redis.redis.setex(`uri:${parsedUri}:owner`, week, status),
+      redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(new Date(lastRecord.createdAt).getTime())),
+    ]);
+    return lastRecord.disabledAt ? false : String(lastRecord.streamerId);
   }
 
-  const status = lastRecord.disabledAt ? "disabled" : String(lastRecord.streamerId);
-
-  await Promise.all([
-    redis.redis.setex(`uri:${parsedUri}:owner`, week, status),
-    redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(new Date(lastRecord.createdAt).getTime())),
-  ]);
-
-  return lastRecord.disabledAt ? false : String(lastRecord.streamerId);
+  void redis.redis.setex(`uri:${parsedUri}:owner`, week, "noone");
+  return false;
 }
