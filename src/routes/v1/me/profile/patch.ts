@@ -45,18 +45,6 @@ export const endpoint = new Elysia()
         return "Please retry again after " + cooldown.getTime();
       }
 
-      const orgCooldown = await db
-        .selectFrom("Streamer")
-        .select(["uriCooldownEnd"])
-        .where("orgId", "=", Number(org.orgId))
-        .where("uriCooldownEnd", ">", new Date())
-        .executeTakeFirst();
-
-      if (orgCooldown?.uriCooldownEnd && new Date(orgCooldown.uriCooldownEnd).getTime() > now) {
-        set.status = "Too Many Requests";
-        return "Please retry again after " + new Date(orgCooldown.uriCooldownEnd).getTime();
-      }
-
       const token = headers.authorization ? headers.authorization.replace(/^Bearer\s+/i, "") : "";
       const success = await registerURI(org.streamerId, parsedUri, token);
 

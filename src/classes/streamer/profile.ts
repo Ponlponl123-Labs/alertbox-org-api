@@ -202,19 +202,6 @@ export async function registerURI(
     return false;
   }
 
-  if (streamer.orgId) {
-    const orgCooldown = await db
-      .selectFrom("Streamer")
-      .select(["uriCooldownEnd"])
-      .where("orgId", "=", Number(streamer.orgId))
-      .where("uriCooldownEnd", ">", new Date())
-      .executeTakeFirst();
-
-    if (orgCooldown?.uriCooldownEnd && new Date(orgCooldown.uriCooldownEnd).getTime() > now) {
-      return false;
-    }
-  }
-
   const cachedOwner = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cachedOwner && cachedOwner !== "noone") return false;
 
