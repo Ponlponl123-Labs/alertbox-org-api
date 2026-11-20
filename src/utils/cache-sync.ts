@@ -96,6 +96,7 @@ export async function updateStreamerCache(
     reddit?: string | null;
     discord?: string | null;
     uri?: string | null;
+    uriCooldownEnd?: Date | string | null;
     publishedAt?: Date | string | null;
   },
   memberUserIds: (bigint | string)[] = [],
@@ -162,6 +163,15 @@ export async function updateStreamerCache(
           ...(streamer.displayName !== undefined ? { displayName: streamer.displayName } : {}),
           ...(streamer.avatar !== undefined ? { avatar: streamer.avatar } : {}),
           ...(streamer.uri !== undefined ? { uri: streamer.uri } : {}),
+          ...(streamer.uriCooldownEnd !== undefined
+            ? {
+                uriCooldownEnd: streamer.uriCooldownEnd
+                  ? streamer.uriCooldownEnd instanceof Date
+                    ? streamer.uriCooldownEnd.toISOString()
+                    : String(streamer.uriCooldownEnd)
+                  : null,
+              }
+            : {}),
           ...(streamer.publishedAt !== undefined
             ? {
                 publishedAt: streamer.publishedAt

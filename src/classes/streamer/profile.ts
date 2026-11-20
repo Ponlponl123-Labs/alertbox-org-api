@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { isValidUri } from "@/utils/regex";
 import { allowed_social } from "@/consts/regex";
-import { week } from "@/consts/time";
+import { week, weekMs } from "@/consts/time";
 import { processAvatar, processBanner } from "@/utils/image";
 import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { nanoid } from "nanoid";
@@ -180,6 +180,41 @@ export async function registerURI(
   const parsedUri = uri.trim().toLowerCase();
   if (!isValidUri(parsedUri)) return false;
 
+  let targetStreamerId: bigint;
+  try {
+    targetStreamerId = BigInt(streamerId);
+  } catch {
+    return false;
+  }
+  const targetId = Number(targetStreamerId);
+
+  const streamer = await db
+    .selectFrom("Streamer")
+    .select(["id", "orgId", "uriCooldownEnd", "uri"])
+    .where("id", "=", targetId)
+    .where("deletedAt", "is", null)
+    .executeTakeFirst();
+
+  if (!streamer) return false;
+
+  const now = Date.now();
+  if (streamer.uriCooldownEnd && new Date(streamer.uriCooldownEnd).getTime() > now) {
+    return false;
+  }
+
+  if (streamer.orgId) {
+    const orgCooldown = await db
+      .selectFrom("Streamer")
+      .select(["uriCooldownEnd"])
+      .where("orgId", "=", Number(streamer.orgId))
+      .where("uriCooldownEnd", ">", new Date())
+      .executeTakeFirst();
+
+    if (orgCooldown?.uriCooldownEnd && new Date(orgCooldown.uriCooldownEnd).getTime() > now) {
+      return false;
+    }
+  }
+
   const cachedOwner = await redis.redis.get(`uri:${parsedUri}:owner`);
   if (cachedOwner && cachedOwner !== "noone") return false;
 
@@ -187,6 +222,7 @@ export async function registerURI(
     .selectFrom("ReservedUri")
     .select(["streamerId", "disabledAt"])
     .where("uri", "=", parsedUri)
+    .where("deletedAt", "is", null)
     .executeTakeFirst();
 
   if (existingRecord) {
@@ -195,18 +231,20 @@ export async function registerURI(
     return false;
   }
 
-  let targetStreamerId: bigint;
-  try {
-    targetStreamerId = BigInt(streamerId);
-  } catch {
-    return false;
-  }
-
-  const cooldownDate = new Date(Date.now() + week);
-  const targetId = Number(targetStreamerId);
+  const cooldownDate = new Date(Date.now() + weekMs);
 
   try {
     await db.transaction().execute(async (trx) => {
+      if (streamer.uri && streamer.uri !== parsedUri) {
+        await trx
+          .updateTable("ReservedUri")
+          .set({ deletedAt: new Date() })
+          .where("streamerId", "=", targetId)
+          .where("uri", "=", streamer.uri)
+          .where("deletedAt", "is", null)
+          .execute();
+      }
+
       await trx
         .insertInto("ReservedUri")
         .values({
@@ -227,15 +265,26 @@ export async function registerURI(
         .execute();
     });
 
-    const now = Date.now();
-    await Promise.all([
+    const nowTimestamp = Date.now();
+    const redisTasks: Promise<any>[] = [
       redis.redis.setex(`uri:${parsedUri}:owner`, week, String(streamerId)),
-      redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(now)),
+      redis.redis.setex(`uri:${parsedUri}:registered_date`, week, String(nowTimestamp)),
       redis.redis.setex(`streamer:${String(streamerId)}:uri`, week, parsedUri),
       redis.redis.setex(`streamer:${String(streamerId)}:uri_cooldown`, week, String(cooldownDate.getTime())),
       redis.redis.del(`streamer:${String(streamerId)}:info`),
       redis.redis.del(`streamer:${String(streamerId)}:public_details`),
-    ]);
+    ];
+
+    if (streamer.uri && streamer.uri !== parsedUri) {
+      redisTasks.push(redis.redis.del(`uri:${streamer.uri}:owner`));
+      redisTasks.push(redis.redis.del(`uri:${streamer.uri}:registered_date`));
+    }
+
+    if (streamer.orgId) {
+      redisTasks.push(redis.redis.del(`org:${String(streamer.orgId)}:streamers`));
+    }
+
+    await Promise.all(redisTasks);
 
     return true;
   } catch (err) {

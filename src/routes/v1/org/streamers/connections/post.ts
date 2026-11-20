@@ -9,6 +9,7 @@ import {
   setConnection,
   providerToIntegrationType,
 } from "@/classes/streamer";
+import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { logOrgAudit } from "@/core/audit";
 
 export const endpoint = new Elysia()
@@ -32,7 +33,10 @@ export const endpoint = new Elysia()
       const { orgId, streamerId } = authRes;
 
       const provider = resolveProvider(params.provider ?? "");
-      if (!provider || !allowed_user_update_providers.includes(provider)) {
+      if (
+        !provider ||
+        (!allowed_user_update_providers.includes(provider) && provider !== "streamlabs")
+      ) {
         set.status = "Bad Request";
         return "Not supported provider";
       }
@@ -56,6 +60,55 @@ export const endpoint = new Elysia()
         : null;
 
       const wasConfigured = Boolean(existing?.secret);
+
+      if (provider === "streamlabs") {
+        const code = typeof body === "string" ? body : (body as any)?.code;
+        if (!code) {
+          set.status = "Bad Request";
+          return "Authorization code is required for Streamlabs";
+        }
+
+        const r = await fetch("https://streamlabs.com/api/v2.0/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: JSON.stringify({
+            grant_type: "authorization_code",
+            client_id: process.env.STREAMLABS_CLIENT_ID!,
+            client_secret: process.env.STREAMLABS_CLIENT_SECRET!,
+            redirect_uri: integrationRedirectUri[ConnectionProvider.STREAMLABS],
+            code,
+          }),
+        });
+
+        const data = await r.json();
+
+        if (!r.ok || !data.access_token) {
+          set.status = "Bad Request";
+          return "Failed to exchange Streamlabs authorization code";
+        }
+
+        await setConnection(streamerId, orgId, "streamlabs", {
+          secret: data.access_token,
+          refreshToken: data.refresh_token || null,
+        });
+
+        await logOrgAudit({
+          orgId,
+          userId: user.data.id,
+          action: wasConfigured ? "INTEGRATION_UPDATED" : "INTEGRATION_CONNECTED",
+          targetType: "STREAMER",
+          targetId: BigInt(streamerId),
+          payload: {
+            streamerId: String(streamerId),
+            platform: provider,
+          },
+        });
+
+        return "OK";
+      }
 
       await setConnection(streamerId, orgId, provider, body as any);
 
@@ -83,7 +136,8 @@ export const endpoint = new Elysia()
       body: t.Union([
         t.Object({
           username: t.Optional(t.Nullable(t.String())),
-          secret: t.String(),
+          secret: t.Optional(t.String()),
+          code: t.Optional(t.String()),
         }),
         t.String(),
       ]),

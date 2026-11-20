@@ -31,18 +31,30 @@ export const endpoint = new Elysia()
         return "Bad Request";
       }
 
+      const now = Date.now();
       const streamer = await db
         .selectFrom("Streamer")
-        .select("uriCooldownEnd")
+        .select(["uriCooldownEnd"])
         .where("id", "=", Number(org.streamerId))
         .executeTakeFirst();
 
-      const now = Date.now();
       const cooldown =
         streamer?.uriCooldownEnd && new Date(streamer.uriCooldownEnd);
       if (cooldown && cooldown.getTime() > now) {
         set.status = "Too Many Requests";
         return "Please retry again after " + cooldown.getTime();
+      }
+
+      const orgCooldown = await db
+        .selectFrom("Streamer")
+        .select(["uriCooldownEnd"])
+        .where("orgId", "=", Number(org.orgId))
+        .where("uriCooldownEnd", ">", new Date())
+        .executeTakeFirst();
+
+      if (orgCooldown?.uriCooldownEnd && new Date(orgCooldown.uriCooldownEnd).getTime() > now) {
+        set.status = "Too Many Requests";
+        return "Please retry again after " + new Date(orgCooldown.uriCooldownEnd).getTime();
       }
 
       const token = headers.authorization ? headers.authorization.replace(/^Bearer\s+/i, "") : "";

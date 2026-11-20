@@ -279,6 +279,7 @@ export class Me<T = any> {
               displayName: s.displayName,
               avatar: s.avatar,
               uri: s.uri,
+              uriCooldownEnd: s.uriCooldownEnd,
               publishedAt: s.publishedAt,
               widgets: (s.widgets || []).map((w: any) => ({
                 ...w,

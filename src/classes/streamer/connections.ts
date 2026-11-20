@@ -166,6 +166,11 @@ export async function setConnectionDisabled(
     .where("type", "=", intType)
     .execute();
 
+  await Promise.all([
+    redis.redis.del(`streamer:${String(streamerId)}:public_details`),
+    redis.redis.del(`streamer:${String(streamerId)}:info`),
+  ]);
+
   if (intType === IntegrationType.BUYMEACOFFEE) {
     invalidateBmacIntegrations();
   }

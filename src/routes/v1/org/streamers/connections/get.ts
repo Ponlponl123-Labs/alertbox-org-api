@@ -70,6 +70,16 @@ export const endpoint = new Elysia()
         twitch: null,
         patreon: null,
         streamlabs: streamlabs?.secret ? true : false,
+        disabled: {
+          stripe: Boolean(stripe?.disabledAt),
+          bmac: Boolean(bmac?.disabledAt),
+          buymeacoffee: Boolean(bmac?.disabledAt),
+          kofi: Boolean(kofi?.disabledAt),
+          xendit: Boolean(xendit?.disabledAt),
+          ffp: Boolean(ffp?.disabledAt),
+          feelfreepay: Boolean(ffp?.disabledAt),
+          streamlabs: Boolean(streamlabs?.disabledAt),
+        },
       };
     },
     {

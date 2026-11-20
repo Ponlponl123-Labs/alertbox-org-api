@@ -67,7 +67,7 @@ export const endpoint = new Elysia()
       if (!streamersData.length) {
         const streamers = await db
           .selectFrom("Streamer")
-          .select(["id", "name", "displayName", "avatar", "uri", "publishedAt", "createdAt"])
+          .select(["id", "name", "displayName", "avatar", "uri", "uriCooldownEnd", "publishedAt", "createdAt"])
           .where("orgId", "=", Number(orgId))
           .where("deletedAt", "is", null)
           .orderBy("createdAt", "asc")
@@ -97,6 +97,7 @@ export const endpoint = new Elysia()
           displayName: s.displayName,
           avatar: s.avatar,
           uri: s.uri,
+          uriCooldownEnd: s.uriCooldownEnd,
           publishedAt: s.publishedAt,
           widgets: (widgetsByStreamer.get(String(s.id)) || []).map((w) => ({
             ...w,
