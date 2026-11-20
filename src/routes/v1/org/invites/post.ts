@@ -23,7 +23,7 @@ export const endpoint = new Elysia()
 
       const callerMember = await db
         .selectFrom("OrganizationMember")
-        .select(["permissions"])
+        .select(["role", "permissions"])
         .where("orgId", "=", Number(orgId))
         .where("userId", "=", Number(user.data.id))
         .executeTakeFirst();
@@ -33,10 +33,18 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to invite members";
       }
 
+      const isOwner = callerMember.role === "OWNER";
+      const isAdmin = callerMember.role === "ADMIN";
+      const callerPerms = isOwner ? OrgPerm.ALL : BigInt(callerMember.permissions);
+
       const cleanEmail = body.email.trim().toLowerCase();
       if (body.role === "OWNER") {
         set.status = "Forbidden";
         return "Cannot invite a user as OWNER";
+      }
+      if (!isOwner && body.role === "ADMIN" && !isAdmin) {
+        set.status = "Forbidden";
+        return "Cannot invite an Administrator member";
       }
       const role = body.role ?? OrgRole.MEMBER;
       let permissions = (RolePresets[role] ?? RolePresets.MEMBER) & ~OrgPerm.ORG_DELETE;
@@ -46,6 +54,10 @@ export const endpoint = new Elysia()
         } catch {
           // fallback to role default
         }
+      }
+      if (!isOwner && (permissions & ~callerPerms) !== 0n) {
+        set.status = "Forbidden";
+        return "Cannot grant permissions higher than your own";
       }
 
       const targetUser = await db

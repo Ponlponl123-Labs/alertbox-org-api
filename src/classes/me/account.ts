@@ -171,7 +171,17 @@ export async function deleteAccount(uid: string | bigint, email: string) {
     throw new Error("User not found");
   }
 
-  // Fetch streamers where the user is an owner of the organization
+  // Fetch streamers and organizations where the user is an owner
+  const ownedMembers = await db
+    .selectFrom("OrganizationMember")
+    .where("userId", "=", Number(userId))
+    .where("role", "=", "OWNER")
+    .where("isDeleted", "is", null)
+    .select(["orgId"])
+    .execute();
+
+  const ownedOrgIds = ownedMembers.map((m) => m.orgId);
+
   const ownedStreamers = await db
     .selectFrom("OrganizationMember")
     .innerJoin("Streamer", "Streamer.orgId", "OrganizationMember.orgId")
@@ -220,6 +230,43 @@ export async function deleteAccount(uid: string | bigint, email: string) {
           .execute();
       }
     }
+
+    if (ownedOrgIds.length > 0) {
+      await trx
+        .updateTable("Organization")
+        .set({ deletedAt: now })
+        .where("id", "in", ownedOrgIds)
+        .where("deletedAt", "is", null)
+        .execute();
+
+      await trx
+        .updateTable("Integration")
+        .set({ deletedAt: now })
+        .where("orgId", "in", ownedOrgIds)
+        .where("deletedAt", "is", null)
+        .execute();
+
+      await trx
+        .updateTable("Widget")
+        .set({ deletedAt: now })
+        .where("orgId", "in", ownedOrgIds)
+        .where("deletedAt", "is", null)
+        .execute();
+    }
+
+    await trx
+      .updateTable("OrganizationMember")
+      .set({ isDeleted: now })
+      .where("userId", "=", Number(userId))
+      .where("isDeleted", "is", null)
+      .execute();
+
+    await trx
+      .updateTable("Session")
+      .set({ disabledAt: now })
+      .where("userId", "=", Number(userId))
+      .where("disabledAt", "is", null)
+      .execute();
 
     await trx
       .updateTable("User")

@@ -18,7 +18,7 @@ const MASTER_KEY = crypto.createHash("sha256").update(DEFAULT_SECRET).digest();
  * Packs payload into a compact Buffer:
  * - 1 byte type flag (0x01 = BigInt uint64, 0x02 = String UTF-8)
  * - 4 bytes expiresAt (uint32be)
- * - 2 bytes version (uint16be)
+ * - 4 bytes version (uint32be)
  * - N bytes userId data
  */
 function packPayload(payload: TokenPayload): Buffer {
@@ -31,10 +31,10 @@ function packPayload(payload: TokenPayload): Buffer {
     })()
     : Buffer.from(payload.userId as string, "utf8");
 
-  const header = Buffer.allocUnsafe(7);
+  const header = Buffer.allocUnsafe(9);
   header.writeUInt8(isBigInt ? 0x01 : 0x02, 0);
   header.writeUInt32BE(payload.expiresAt, 1);
-  header.writeUInt16BE(payload.version & 0xffff, 5);
+  header.writeUInt32BE(payload.version >>> 0, 5);
 
   return Buffer.concat([header, userBuf]);
 }
@@ -43,17 +43,18 @@ function packPayload(payload: TokenPayload): Buffer {
  * Unpacks Buffer back to TokenPayload:
  */
 function unpackPayload(buf: Buffer): TokenPayload | null {
-  if (buf.length < 7) return null;
+  if (buf.length < 9) return null;
   const typeFlag = buf.readUInt8(0);
   const expiresAt = buf.readUInt32BE(1);
-  const version = buf.readUInt16BE(5);
+  const version = buf.readUInt32BE(5);
 
   let userId: bigint | string;
   if (typeFlag === 0x01) {
-    if (buf.length < 15) return null;
-    userId = buf.readBigUInt64BE(7);
+    if (buf.length !== 17) return null;
+    userId = buf.readBigUInt64BE(9);
   } else if (typeFlag === 0x02) {
-    userId = buf.subarray(7).toString("utf8");
+    userId = buf.subarray(9).toString("utf8");
+    if (!userId) return null;
   } else {
     return null;
   }
@@ -90,7 +91,7 @@ export function parseToken(
   try {
     if (!tokenStr || typeof tokenStr !== "string") return null;
     const raw = Buffer.from(tokenStr, "base64url");
-    if (raw.length < 28 + 7) return null; // 12 IV + 16 Tag + min 7 Payload
+    if (raw.length < 28 + 9) return null; // 12 IV + 16 Tag + min 9 Payload
 
     const iv = raw.subarray(0, 12);
     const tag = raw.subarray(12, 28);

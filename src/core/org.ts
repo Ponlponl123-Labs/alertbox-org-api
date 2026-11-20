@@ -75,7 +75,6 @@ export async function resolveStreamerId(
       eb.or([
         eb("name", "=", trimmed),
         eb("uri", "=", trimmed),
-        eb("displayName", "=", trimmed),
       ])
     )
     .executeTakeFirst();

@@ -308,15 +308,15 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
 
     {
       const res = await inspectQuery(
-        "Integration.byStreamer",
-        "SELECT id, streamerId, stripeSecret, kofiUsername, bmacUsername FROM `Integration` " +
-        "WHERE streamerId = 1 LIMIT 1"
+        "Integration.byStreamerAndType",
+        "SELECT id, streamerId, type, secret, username, disabledAt FROM `Integration` " +
+        "WHERE streamerId = 1 AND type = 'STRIPE' LIMIT 1"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(5);
       expect(res.physicalReads).toBeLessThanOrEqual(2);
       expect(res.hasFullTableScan).toBe(false);
-      if (res.explain[0].key) expect(res.explain[0].key).toContain("Integration_streamerId_key");
+      if (res.explain[0].key) expect(res.explain[0].key).toContain("Integration_streamerId_type_key");
     }
 
     // 6. Organization & Multi-Tenant Read Queries
@@ -519,7 +519,7 @@ describe("MariaDB Galera Performance & Index Verification (All Prisma Queries)",
     {
       const res = await inspectQuery(
         "Integration.update",
-        "UPDATE `Integration` SET streamlabsSecret = 'secret_perf', updatedAt = NOW() WHERE streamerId = 1"
+        "UPDATE `Integration` SET secret = 'secret_perf', updatedAt = NOW() WHERE streamerId = 1 AND type = 'STREAMLABS'"
       );
       expect(res.scanCount).toBe(0);
       expect(res.logicalReads).toBeLessThanOrEqual(10);

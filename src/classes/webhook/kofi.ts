@@ -32,16 +32,25 @@ export class KofiWebhook {
     }
 
     const integrations = await db
-      .selectFrom("Integration")
-      .where("kofiSecret", "is not", null)
-      .where("deletedAt", "is", null)
+      .selectFrom("Integration as kofi")
+      .leftJoin("Integration as sl", (join) =>
+        join
+          .onRef("sl.streamerId", "=", "kofi.streamerId")
+          .on("sl.type", "=", "STREAMLABS")
+          .on("sl.disabledAt", "is", null)
+          .on("sl.deletedAt", "is", null),
+      )
+      .where("kofi.type", "=", "KOFI")
+      .where("kofi.secret", "is not", null)
+      .where("kofi.disabledAt", "is", null)
+      .where("kofi.deletedAt", "is", null)
       .select([
-        "orgId",
-        "streamerId",
-        "kofiSecret",
-        "streamlabsSecret",
-        "streamlabsRefreshToken",
-        "streamlabsOptions",
+        "kofi.orgId",
+        "kofi.streamerId",
+        "kofi.secret as kofiSecret",
+        "sl.secret as streamlabsSecret",
+        "sl.refreshToken as streamlabsRefreshToken",
+        "sl.options as streamlabsOptions",
       ])
       .execute();
 
@@ -81,16 +90,25 @@ export class KofiWebhook {
 
       if (!matchedIntegration) {
         const dbMatched = await db
-          .selectFrom("Integration")
-          .where("kofiSecret", "=", verificationToken)
-          .where("deletedAt", "is", null)
+          .selectFrom("Integration as kofi")
+          .leftJoin("Integration as sl", (join) =>
+            join
+              .onRef("sl.streamerId", "=", "kofi.streamerId")
+              .on("sl.type", "=", "STREAMLABS")
+              .on("sl.disabledAt", "is", null)
+              .on("sl.deletedAt", "is", null),
+          )
+          .where("kofi.type", "=", "KOFI")
+          .where("kofi.secret", "=", verificationToken)
+          .where("kofi.disabledAt", "is", null)
+          .where("kofi.deletedAt", "is", null)
           .select([
-            "orgId",
-            "streamerId",
-            "kofiSecret",
-            "streamlabsSecret",
-            "streamlabsRefreshToken",
-            "streamlabsOptions",
+            "kofi.orgId",
+            "kofi.streamerId",
+            "kofi.secret as kofiSecret",
+            "sl.secret as streamlabsSecret",
+            "sl.refreshToken as streamlabsRefreshToken",
+            "sl.options as streamlabsOptions",
           ])
           .executeTakeFirst();
 

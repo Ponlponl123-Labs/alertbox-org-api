@@ -11,6 +11,7 @@ import { listUserDevices, destroyUserDevice } from "./device";
 import { supported_providers } from "@/consts/providers";
 import { hasPermission, parseStreamerPermissions } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
+import { verifyTokenAndRevocation } from "@/utils/token-auth";
 import { nanoid } from "nanoid";
 
 export class Me<T = any> {
@@ -91,14 +92,10 @@ export class Me<T = any> {
             "id",
             "orgId",
             "streamerId",
-            "stripeSecret",
-            "bmacSecret",
-            "kofiSecret",
-            "xenditSecret",
-            "ffpSecret",
-            "streamlabsSecret",
-            "kofiUsername",
-            "bmacUsername",
+            "type",
+            "secret",
+            "username",
+            "disabledAt",
           ])
           .execute()
       : [];
@@ -111,9 +108,12 @@ export class Me<T = any> {
       widgetMap.set(key, list);
     }
 
-    const integrationMap = new Map<string, any>();
+    const integrationMap = new Map<string, any[]>();
     for (const i of integrations) {
-      integrationMap.set(String(i.streamerId), i);
+      const key = String(i.streamerId);
+      const list = integrationMap.get(key) || [];
+      list.push(i);
+      integrationMap.set(key, list);
     }
 
     const streamerOrgMap = new Map<string, any[]>();
@@ -202,23 +202,32 @@ export class Me<T = any> {
           if (hasOrgManageIntegrations) perms |= StreamerPerm.STREAMER_INTEGRATION_MANAGE;
         }
 
+        const intList = integrationMap.get(sId) || [];
+        const byType = new Map(intList.map((i: any) => [i.type, i]));
+        const stripe = byType.get("STRIPE");
+        const bmac = byType.get("BUYMEACOFFEE");
+        const kofi = byType.get("KOFI");
+        const xendit = byType.get("XENDIT");
+        const ffp = byType.get("FEELFREEPAY");
+        const streamlabs = byType.get("STREAMLABS");
+
         return {
           ...streamerRest,
           permissions: perms,
           isAssigned: isOwnerOrAdmin || assignmentsMap.has(sId),
-          integration: integration
+          integration: intList.length > 0
             ? {
-                id: String(integration.id),
-                orgId: String(integration.orgId),
-                streamerId: String(integration.streamerId),
-                stripe: Boolean(integration.stripeSecret),
-                bmac: Boolean(integration.bmacSecret),
-                kofi: Boolean(integration.kofiSecret),
-                xendit: Boolean(integration.xenditSecret),
-                ffp: Boolean(integration.ffpSecret),
-                streamlabs: Boolean(integration.streamlabsSecret),
-                kofiUsername: integration.kofiUsername,
-                bmacUsername: integration.bmacUsername,
+                id: String(intList[0].id),
+                orgId: String(intList[0].orgId),
+                streamerId: sId,
+                stripe: Boolean(stripe?.secret && !stripe?.disabledAt),
+                bmac: Boolean(bmac?.secret && !bmac?.disabledAt),
+                kofi: Boolean(kofi?.secret && !kofi?.disabledAt),
+                xendit: Boolean(xendit?.secret && !xendit?.disabledAt),
+                ffp: Boolean(ffp?.secret && !ffp?.disabledAt),
+                streamlabs: Boolean(streamlabs?.secret && !streamlabs?.disabledAt),
+                kofiUsername: kofi?.username ?? null,
+                bmacUsername: bmac?.username ?? null,
               }
             : null,
         };
@@ -303,6 +312,11 @@ export class Me<T = any> {
   public async use(session: string, ip: string, select: any = basicUserSelect): Promise<any> {
     this.currentSession = session;
     this.lastSelect = select;
+
+    const tokenAuth = await verifyTokenAndRevocation(session);
+    if (tokenAuth) {
+      return this.load(tokenAuth.userId, select);
+    }
 
     const session_info = await db
       .selectFrom("Session")

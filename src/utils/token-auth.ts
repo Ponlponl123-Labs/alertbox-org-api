@@ -21,7 +21,11 @@ export async function verifyTokenAndRevocation(
   const userKey = payload.userId.toString();
   const redisKey = `user:v:${userKey}`;
 
-  const cachedVersion = await redis.redis.get(redisKey);
+  let cachedVersion: string | null = null;
+  try {
+    cachedVersion = await redis.redis.get(redisKey);
+  } catch {}
+
   if (cachedVersion !== null) {
     if (parseInt(cachedVersion, 10) !== payload.version) {
       return null;
@@ -32,16 +36,17 @@ export async function verifyTokenAndRevocation(
   const user = await db
     .selectFrom("User")
     .where("id", "=", Number(payload.userId))
+    .where("disabledAt", "is", null)
+    .where("deletedAt", "is", null)
     .select(["id", "secret"])
     .executeTakeFirst();
 
   if (!user) return null;
 
-  // Use secret hash or numeric version
-  const currentVersion = 1; // Default epoch
-
-  // Cache in Redis
-  await redis.redis.setex(redisKey, DAY_SEC, String(currentVersion));
+  const currentVersion = 1;
+  try {
+    await redis.redis.setex(redisKey, DAY_SEC * 30, String(currentVersion));
+  } catch {}
 
   if (currentVersion !== payload.version) {
     return null;
@@ -59,11 +64,13 @@ export async function revokeUserCredentials(
   const userKey = userId.toString();
   const redisKey = `user:v:${userKey}`;
 
-  // Atomic Redis increment -> invalidates all existing tokens immediately
-  const newVersion = await redis.redis.incr(redisKey);
-  await redis.redis.expire(redisKey, DAY_SEC * 30);
-
-  return newVersion;
+  try {
+    const newVersion = await redis.redis.incr(redisKey);
+    await redis.redis.expire(redisKey, DAY_SEC * 30);
+    return newVersion;
+  } catch {
+    return 1;
+  }
 }
 
 export { mintToken };

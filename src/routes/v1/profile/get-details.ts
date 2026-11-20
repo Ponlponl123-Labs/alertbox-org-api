@@ -38,94 +38,94 @@ export const endpoint = new Elysia().get(
     if (cached) {
       try {
         return JSON.parse(cached);
-      } catch {}
+      } catch { }
     }
 
     const numId = Number(targetStreamerId);
-    const row = await db
-      .selectFrom("Streamer")
-      .innerJoin("Organization", "Organization.id", "Streamer.orgId")
-      .leftJoin("Integration", "Integration.streamerId", "Streamer.id")
-      .select([
-        "Streamer.name as name",
-        "Streamer.displayName as displayName",
-        "Streamer.avatar as avatar",
-        "Streamer.banner as banner",
-        "Streamer.bio as bio",
-        "Streamer.uri as uri",
-        "Streamer.accentColor as accentColor",
-        "Streamer.currency as currency",
-        "Streamer.minTipAmount as minTipAmount",
-        "Streamer.maxTipAmount as maxTipAmount",
-        "Streamer.defaultDonorName as defaultDonorName",
-        "Streamer.defaultDonorAmount as defaultDonorAmount",
-        "Streamer.defaultDonorAvatar as defaultDonorAvatar",
-        "Streamer.isDonorCanCustomAvatar as isDonorCanCustomAvatar",
-        "Streamer.options as options",
-        "Streamer.badges as badges",
-        "Streamer.twitch as twitch",
-        "Streamer.youtube as youtube",
-        "Streamer.twitter as twitter",
-        "Streamer.facebook as facebook",
-        "Streamer.reddit as reddit",
-        "Streamer.discord as discord",
-        "Streamer.publishedAt as publishedAt",
-        "Streamer.deletedAt as streamerDeletedAt",
-        "Streamer.createdAt as createdAt",
-        "Streamer.updatedAt as updatedAt",
-        "Organization.deletedAt as orgDeletedAt",
-        "Integration.stripeSecret as stripeSecret",
-        "Integration.xenditSecret as xenditSecret",
-        "Integration.bmacSecret as bmacSecret",
-        "Integration.bmacUsername as bmacUsername",
-        "Integration.kofiSecret as kofiSecret",
-        "Integration.kofiUsername as kofiUsername",
-        "Integration.ffpSecret as ffpSecret",
-      ])
-      .where("Streamer.id", "=", numId)
-      .executeTakeFirst();
+    const [streamerRow, integrations] = await Promise.all([
+      db
+        .selectFrom("Streamer")
+        .innerJoin("Organization", "Organization.id", "Streamer.orgId")
+        .select([
+          "Streamer.name as name",
+          "Streamer.displayName as displayName",
+          "Streamer.avatar as avatar",
+          "Streamer.banner as banner",
+          "Streamer.bio as bio",
+          "Streamer.uri as uri",
+          "Streamer.accentColor as accentColor",
+          "Streamer.currency as currency",
+          "Streamer.minTipAmount as minTipAmount",
+          "Streamer.maxTipAmount as maxTipAmount",
+          "Streamer.defaultDonorName as defaultDonorName",
+          "Streamer.defaultDonorAmount as defaultDonorAmount",
+          "Streamer.defaultDonorAvatar as defaultDonorAvatar",
+          "Streamer.isDonorCanCustomAvatar as isDonorCanCustomAvatar",
+          "Streamer.options as options",
+          "Streamer.badges as badges",
+          "Streamer.twitch as twitch",
+          "Streamer.youtube as youtube",
+          "Streamer.twitter as twitter",
+          "Streamer.facebook as facebook",
+          "Streamer.reddit as reddit",
+          "Streamer.discord as discord",
+          "Streamer.publishedAt as publishedAt",
+          "Streamer.deletedAt as streamerDeletedAt",
+          "Streamer.createdAt as createdAt",
+          "Streamer.updatedAt as updatedAt",
+          "Organization.deletedAt as orgDeletedAt",
+        ])
+        .where("Streamer.id", "=", numId)
+        .executeTakeFirst(),
+      db
+        .selectFrom("Integration")
+        .select(["type", "secret", "username", "disabledAt"])
+        .where("streamerId", "=", numId)
+        .where("deletedAt", "is", null)
+        .execute(),
+    ]);
 
-    if (!row || row.streamerDeletedAt || row.orgDeletedAt) {
+    if (!streamerRow || streamerRow.streamerDeletedAt || streamerRow.orgDeletedAt) {
       set.status = "Not Found";
       return "Not Found";
     }
 
-    if (!row.publishedAt) {
+    if (!streamerRow.publishedAt) {
       set.status = "Forbidden";
       return "Forbidden";
     }
 
+    const byType = new Map(integrations.map((i) => [i.type, i]));
+    const stripe = byType.get("STRIPE");
+    const xendit = byType.get("XENDIT");
+    const ffp = byType.get("FEELFREEPAY");
+    const kofi = byType.get("KOFI");
+    const bmac = byType.get("BUYMEACOFFEE");
+
     const {
       streamerDeletedAt,
       orgDeletedAt,
-      stripeSecret,
-      xenditSecret,
-      bmacSecret,
-      bmacUsername,
-      kofiSecret,
-      kofiUsername,
-      ffpSecret,
       ...publicProfile
-    } = row;
+    } = streamerRow;
 
-    const integrations = {
-      stripe: !!stripeSecret,
-      xendit: !!xenditSecret,
+    const integrationsMap = {
+      stripe: Boolean(stripe?.secret && !stripe.disabledAt),
+      xendit: Boolean(xendit?.secret && !xendit.disabledAt),
       omise: false,
       "2c2p": false,
-      feelfreepay: !!ffpSecret,
-      kofi: !!kofiSecret,
-      bmac: !!bmacSecret,
+      feelfreepay: Boolean(ffp?.secret && !ffp.disabledAt),
+      kofi: Boolean(kofi?.secret && !kofi.disabledAt),
+      bmac: Boolean(bmac?.secret && !bmac.disabledAt),
     };
 
     const result = {
       ...publicProfile,
-      kofiUsername: kofiUsername ?? null,
-      bmacUsername: bmacUsername ?? null,
-      integrations,
+      kofiUsername: kofi?.username ?? null,
+      bmacUsername: bmac?.username ?? null,
+      integrations: integrationsMap,
     };
 
-    void redis.redis.setex(cacheKey, 3600, JSON.stringify(result)).catch(() => {});
+    void redis.redis.setex(cacheKey, 3600, JSON.stringify(result)).catch(() => { });
     return result;
   },
   {

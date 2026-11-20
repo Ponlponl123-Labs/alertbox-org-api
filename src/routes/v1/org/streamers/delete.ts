@@ -5,6 +5,8 @@ import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import { KofiWebhook } from "@/classes/webhook/kofi";
+import { BmacWebhook } from "@/classes/webhook/bmac";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -22,7 +24,7 @@ export const endpoint = new Elysia()
         return "Invalid organization or streamer ID";
       }
 
-      const [streamer, members] = await Promise.all([
+      const [streamer, members, widgets] = await Promise.all([
         db.selectFrom("Streamer")
           .select(["id", "name", "uri"])
           .where("id", "=", Number(streamerId))
@@ -31,6 +33,11 @@ export const endpoint = new Elysia()
           .select(["userId"])
           .where("orgId", "=", Number(orgId))
           .where("isDeleted", "is", null)
+          .execute(),
+        db.selectFrom("Widget")
+          .select(["id", "token"])
+          .where("streamerId", "=", Number(streamerId))
+          .where("deletedAt", "is", null)
           .execute(),
       ]);
 
@@ -49,15 +56,41 @@ export const endpoint = new Elysia()
           .where("streamerId", "=", Number(streamerId))
           .where("deletedAt", "is", null)
           .execute();
+
+        await trx
+          .updateTable("Widget")
+          .set({ deletedAt: now, updatedAt: now })
+          .where("streamerId", "=", Number(streamerId))
+          .where("deletedAt", "is", null)
+          .execute();
+
+        await trx
+          .updateTable("Integration")
+          .set({ deletedAt: now, updatedAt: now })
+          .where("streamerId", "=", Number(streamerId))
+          .where("deletedAt", "is", null)
+          .execute();
       });
+
+      KofiWebhook.invalidateIntegrations();
+      BmacWebhook.invalidateIntegrations();
 
       const keysToDelete: string[] = [
         `streamer:${String(streamerId)}:info`,
         `streamer:${String(streamerId)}:profile`,
+        `streamer:${String(streamerId)}:tiny`,
         `org:${String(orgId)}:streamers`,
         `org:${String(orgId)}:primary_streamer`,
         `org:${String(orgId)}:members`,
       ];
+
+      for (const w of widgets) {
+        keysToDelete.push(`widget:${String(w.id)}:info`);
+        if (w.token) {
+          keysToDelete.push(`widget:token:${w.token}`);
+          keysToDelete.push(`widget:${w.token}:info`);
+        }
+      }
 
       if (streamer?.uri) {
         keysToDelete.push(`uri:${streamer.uri.toLowerCase()}:owner`);
@@ -117,6 +150,7 @@ export const endpoint = new Elysia()
       await Promise.all([
         redis.redis.del(`streamer:${String(streamerId)}:info`),
         redis.redis.del(`streamer:${String(streamerId)}:profile`),
+        redis.redis.del(`streamer:${String(streamerId)}:tiny`),
         redis.redis.del(`org:${String(orgId)}:streamers`),
         redis.redis.del(`org:${String(orgId)}:primary_streamer`),
       ]);

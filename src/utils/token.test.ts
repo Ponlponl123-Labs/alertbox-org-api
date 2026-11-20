@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { mintToken, parseToken } from "./token";
+import { verifyTokenAndRevocation } from "./token-auth";
 
 describe("High-Performance Revocable Token Engine", () => {
   it("should encrypt and decrypt BigInt userId correctly", () => {
@@ -79,5 +80,15 @@ describe("High-Performance Revocable Token Engine", () => {
 
     // Must be well below 20µs per decrypt in Bun
     expect(avgMicroseconds).toBeLessThan(50);
+  });
+
+  it("should reject invalid and expired tokens in verifyTokenAndRevocation", async () => {
+    expect(await verifyTokenAndRevocation("invalid-token")).toBeNull();
+    const expiredToken = mintToken({
+      userId: 999999n,
+      version: 1,
+      expiresAt: Math.floor(Date.now() / 1000) - 10,
+    });
+    expect(await verifyTokenAndRevocation(expiredToken)).toBeNull();
   });
 });

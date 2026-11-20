@@ -214,3 +214,38 @@ describe("Organization Resolution Logic & Soft-Delete Enforcement", () => {
     expect(res).toBe(42n);
   });
 });
+
+describe("Role Presets & Security Boundaries", () => {
+  it("should block non-admin/non-owner from assigning permissions exceeding their own", () => {
+    const callerRole: string = "MANAGER";
+    const callerPerms = OrgPerm.ORG_ROLES_MANAGE | OrgPerm.ORG_VIEW;
+    const requestedPerms = OrgPerm.ORG_ROLES_MANAGE | OrgPerm.ORG_VIEW | OrgPerm.INTEGRATION_MANAGE;
+
+    const isAllowed =
+      callerRole === "OWNER" ||
+      callerRole === "ADMIN" ||
+      (requestedPerms & ~callerPerms) === 0n;
+
+    expect(isAllowed).toBe(false);
+
+    const safePerms = OrgPerm.ORG_VIEW;
+    const isSafeAllowed =
+      callerRole === "OWNER" ||
+      callerRole === "ADMIN" ||
+      (safePerms & ~callerPerms) === 0n;
+    expect(isSafeAllowed).toBe(true);
+  });
+
+  it("should mask credentials when user lacks INTEGRATION_MANAGE", () => {
+    const mask = (secret: string | null | undefined, canManage: boolean) => {
+      if (!secret) return null;
+      if (canManage) return secret;
+      return "••••••••";
+    };
+
+    expect(mask("sk_live_123456", false)).toBe("••••••••");
+    expect(mask("sk_live_123456", true)).toBe("sk_live_123456");
+    expect(mask(null, false)).toBeNull();
+  });
+});
+

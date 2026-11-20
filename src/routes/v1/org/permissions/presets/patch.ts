@@ -22,6 +22,13 @@ export const endpoint = new Elysia()
           set.status = "Bad Request";
           return "Invalid permissions bitmask";
         }
+
+        if (authRes.role !== "OWNER" && authRes.role !== "ADMIN") {
+          if ((perms & ~authRes.permissions) !== 0n) {
+            set.status = "Forbidden";
+            return "Cannot grant permissions that exceed your own";
+          }
+        }
       }
 
       try {

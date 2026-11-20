@@ -234,6 +234,7 @@ export async function registerURI(
       redis.redis.setex(`streamer:${String(streamerId)}:uri`, week, parsedUri),
       redis.redis.setex(`streamer:${String(streamerId)}:uri_cooldown`, week, String(cooldownDate.getTime())),
       redis.redis.del(`streamer:${String(streamerId)}:info`),
+      redis.redis.del(`streamer:${String(streamerId)}:public_details`),
     ]);
 
     return true;

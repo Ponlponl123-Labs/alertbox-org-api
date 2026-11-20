@@ -191,7 +191,7 @@ export const endpoint = new Elysia()
         return "Streamer channel not found";
       }
 
-      const [widgets, integration] = await Promise.all([
+      const [widgets, integrations] = await Promise.all([
         db.selectFrom("Widget")
           .select(["id", "orgId", "streamerId", "type", "token", "createdAt", "updatedAt"])
           .where("streamerId", "=", Number(streamerId))
@@ -202,17 +202,14 @@ export const endpoint = new Elysia()
             "id",
             "orgId",
             "streamerId",
-            "stripeSecret",
-            "bmacSecret",
-            "kofiSecret",
-            "xenditSecret",
-            "ffpSecret",
-            "streamlabsSecret",
-            "kofiUsername",
-            "bmacUsername",
+            "type",
+            "secret",
+            "username",
+            "disabledAt",
           ])
           .where("streamerId", "=", Number(streamerId))
-          .executeTakeFirst(),
+          .where("deletedAt", "is", null)
+          .execute(),
       ]);
 
       const widgetIds = widgets.map((w) => w.id);
@@ -288,20 +285,23 @@ export const endpoint = new Elysia()
               : null,
           };
         }),
-        integration: integration
-          ? {
-              id: String(integration.id),
-              orgId: String(integration.orgId),
-              streamerId: String(integration.streamerId),
-              stripe: !!integration.stripeSecret,
-              bmac: !!integration.bmacSecret,
-              kofi: !!integration.kofiSecret,
-              xendit: !!integration.xenditSecret,
-              ffp: !!integration.ffpSecret,
-              streamlabs: !!integration.streamlabsSecret,
-              kofiUsername: integration.kofiUsername,
-              bmacUsername: integration.bmacUsername,
-            }
+        integration: integrations.length
+          ? (() => {
+              const byType = new Map(integrations.map((i) => [i.type, i]));
+              return {
+                id: String(integrations[0].id),
+                orgId: String(integrations[0].orgId),
+                streamerId: String(integrations[0].streamerId),
+                stripe: Boolean(byType.get("STRIPE")?.secret && !byType.get("STRIPE")?.disabledAt),
+                bmac: Boolean(byType.get("BUYMEACOFFEE")?.secret && !byType.get("BUYMEACOFFEE")?.disabledAt),
+                kofi: Boolean(byType.get("KOFI")?.secret && !byType.get("KOFI")?.disabledAt),
+                xendit: Boolean(byType.get("XENDIT")?.secret && !byType.get("XENDIT")?.disabledAt),
+                ffp: Boolean(byType.get("FEELFREEPAY")?.secret && !byType.get("FEELFREEPAY")?.disabledAt),
+                streamlabs: Boolean(byType.get("STREAMLABS")?.secret && !byType.get("STREAMLABS")?.disabledAt),
+                kofiUsername: byType.get("KOFI")?.username ?? null,
+                bmacUsername: byType.get("BUYMEACOFFEE")?.username ?? null,
+              };
+            })()
           : null,
       };
 

@@ -58,57 +58,66 @@ export class WebhookDispatcher {
    */
   public static async recordTransaction(
     payload: DonationEventPayload,
-  ): Promise<void> {
+  ): Promise<boolean> {
     let targetOrgId: bigint;
     let targetStreamerId: bigint;
     try {
       targetOrgId = BigInt(payload.orgId);
       targetStreamerId = BigInt(payload.streamerId);
     } catch {
-      return;
+      return false;
     }
 
     const amount = Math.round((Number.isFinite(payload.amount) && payload.amount >= 0 ? payload.amount : 0) * 100);
     const now = new Date();
 
-    const insertRes = await db
-      .insertInto("TransactionLog")
-      .values({
-        orgId: Number(targetOrgId),
-        streamerId: Number(targetStreamerId),
-        provider: payload.provider,
-        providerTxId: payload.providerTxId,
-        type: payload.type,
-        status: payload.status ?? TransactionStatus.COMPLETED,
-        isTest: payload.isTest ? 1 : 0,
-        amount,
-        currency: payload.currency,
-        senderName: payload.senderName,
-        senderEmail: payload.senderEmail ?? null,
-        message: payload.message ?? null,
-        rawPayload: payload.rawPayload,
-        updatedAt: now,
-      })
-      .executeTakeFirst();
+    try {
+      const insertRes = await db
+        .insertInto("TransactionLog")
+        .values({
+          orgId: Number(targetOrgId),
+          streamerId: Number(targetStreamerId),
+          provider: payload.provider,
+          providerTxId: payload.providerTxId,
+          type: payload.type,
+          status: payload.status ?? TransactionStatus.COMPLETED,
+          isTest: payload.isTest ? 1 : 0,
+          amount,
+          currency: payload.currency,
+          senderName: payload.senderName,
+          senderEmail: payload.senderEmail ?? null,
+          message: payload.message ?? null,
+          rawPayload: payload.rawPayload,
+          updatedAt: now,
+        })
+        .executeTakeFirst();
 
-    const txId = insertRes.insertId ? String(insertRes.insertId) : String(Date.now());
+      const txId = insertRes.insertId ? String(insertRes.insertId) : String(Date.now());
 
-    broadcastStreamerTransaction(targetOrgId, targetStreamerId, {
-      type: "transaction:new",
-      transaction: {
-        id: txId,
-        provider: payload.provider,
-        type: payload.type,
-        status: payload.status ?? TransactionStatus.COMPLETED,
-        isTest: payload.isTest,
-        amount,
-        currency: payload.currency,
-        senderName: payload.senderName,
-        message: payload.message ?? null,
-        createdAt: now.toISOString(),
-        isDeleted: false,
-      },
-    }).catch(() => {});
+      broadcastStreamerTransaction(targetOrgId, targetStreamerId, {
+        type: "transaction:new",
+        transaction: {
+          id: txId,
+          provider: payload.provider,
+          type: payload.type,
+          status: payload.status ?? TransactionStatus.COMPLETED,
+          isTest: payload.isTest,
+          amount,
+          currency: payload.currency,
+          senderName: payload.senderName,
+          message: payload.message ?? null,
+          createdAt: now.toISOString(),
+          isDeleted: false,
+        },
+      }).catch(() => {});
+
+      return true;
+    } catch (err: any) {
+      if (err?.code === "ER_DUP_ENTRY" || err?.errno === 1062) {
+        return false;
+      }
+      throw err;
+    }
   }
 
   /**
@@ -280,7 +289,19 @@ export class WebhookDispatcher {
       ),
     );
 
-    await this.recordTransaction(payload);
+    const recorded = await this.recordTransaction(payload);
+    if (!recorded) {
+      logDev(
+        tsflag(
+          "info",
+          true,
+          s(`Concurrent duplicate event caught for ${payload.provider} transaction ID: ${payload.providerTxId}`, {
+            color: "yellow",
+          }),
+        ),
+      );
+      return { duplicate: true };
+    }
     this.relayStreamlabs(payload);
     await this.dispatchAlerts(payload.streamerId, {
       type: payload.type,

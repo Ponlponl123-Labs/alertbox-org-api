@@ -169,6 +169,11 @@ export const endpoint = new Elysia()
       if (body.reddit !== undefined || body.socialReddit !== undefined) data.reddit = body.reddit ?? body.socialReddit;
       if (body.discord !== undefined || body.socialDiscord !== undefined) data.discord = body.discord ?? body.socialDiscord;
 
+      if (body.isPublished !== undefined || body.published !== undefined) {
+        const shouldPublish = body.isPublished ?? body.published;
+        data.publishedAt = shouldPublish ? new Date() : null;
+      }
+
       data.updatedAt = new Date();
       await db
         .updateTable("Streamer")
@@ -206,9 +211,15 @@ export const endpoint = new Elysia()
           reddit: updated.reddit,
           discord: updated.discord,
           uri: updated.uri,
+          publishedAt: updated.publishedAt,
         },
         members.map((m) => BigInt(m.userId)),
       );
+
+      await Promise.all([
+        redis.redis.del(`streamer:${String(streamerId)}:public_details`),
+        redis.redis.del(`streamer:${String(streamerId)}:info`),
+      ]);
 
       await logOrgAudit({
         orgId,
@@ -290,6 +301,8 @@ export const endpoint = new Elysia()
         facebook: t.Optional(t.Nullable(t.String())),
         reddit: t.Optional(t.Nullable(t.String())),
         discord: t.Optional(t.Nullable(t.String())),
+        isPublished: t.Optional(t.Nullable(t.Boolean())),
+        published: t.Optional(t.Nullable(t.Boolean())),
       }),
     },
   )

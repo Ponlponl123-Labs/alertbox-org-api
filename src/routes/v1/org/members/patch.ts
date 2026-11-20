@@ -112,10 +112,30 @@ export const endpoint = new Elysia()
         .where("id", "=", Number(targetMemberId))
         .executeTakeFirstOrThrow();
 
+      let validatedAssignments = body.streamerAssignments;
       if (body.streamerAssignments !== undefined) {
+        if (body.streamerAssignments.length > 0) {
+          const streamerIds = body.streamerAssignments.map((a) => Number(a.streamerId)).filter((n) => !isNaN(n));
+          const validStreamers = streamerIds.length > 0
+            ? await db
+                .selectFrom("Streamer")
+                .select("id")
+                .where("orgId", "=", Number(orgId))
+                .where("id", "in", streamerIds)
+                .where("deletedAt", "is", null)
+                .execute()
+            : [];
+          const validSet = new Set(validStreamers.map((s) => String(s.id)));
+          validatedAssignments = body.streamerAssignments
+            .filter((a) => validSet.has(String(a.streamerId)))
+            .map((a) => ({
+              streamerId: String(a.streamerId),
+              permissions: a.permissions,
+            }));
+        }
         await redis.redis.set(
           `org:${String(orgId)}:member:${String(targetMemberId)}:streamers`,
-          JSON.stringify(body.streamerAssignments),
+          JSON.stringify(validatedAssignments),
         );
       }
 
@@ -137,8 +157,8 @@ export const endpoint = new Elysia()
           role: updated.role,
           previousPermissions: targetMember.permissions ? String(targetMember.permissions) : "0",
           permissions: String(updated.permissions),
-          streamerAssignments: body.streamerAssignments ?? null,
-          streamerAssignmentsCount: body.streamerAssignments ? body.streamerAssignments.length : undefined,
+          streamerAssignments: validatedAssignments ?? null,
+          streamerAssignmentsCount: validatedAssignments ? validatedAssignments.length : undefined,
         },
       });
 
@@ -147,7 +167,7 @@ export const endpoint = new Elysia()
         userId: String(updated.userId),
         role: updated.role,
         permissions: String(updated.permissions),
-        streamerAssignments: body.streamerAssignments,
+        streamerAssignments: validatedAssignments,
       };
     },
     {
@@ -162,7 +182,7 @@ export const endpoint = new Elysia()
         streamerAssignments: t.Optional(
           t.Array(
             t.Object({
-              streamerId: t.String(),
+              streamerId: t.Union([t.String(), t.Number()]),
               permissions: t.Array(t.String()),
             }),
           ),

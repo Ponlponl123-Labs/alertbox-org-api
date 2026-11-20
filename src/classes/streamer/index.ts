@@ -3,6 +3,8 @@ import { redis } from "@/core/redis";
 import {
   setConnection,
   removeConnection,
+  setConnectionDisabled,
+  providerToIntegrationType,
 } from "./connections";
 import {
   updateProfile,
@@ -87,7 +89,8 @@ export class Streamer {
         .selectFrom("Integration")
         .selectAll()
         .where("streamerId", "=", numId)
-        .executeTakeFirst(),
+        .where("deletedAt", "is", null)
+        .execute(),
     ]);
 
     if (!streamer) return null;
@@ -96,6 +99,7 @@ export class Streamer {
       ...streamer,
       organization: org,
       widgets,
+      integrations: integration ?? [],
       integration: integration ?? null,
     };
 

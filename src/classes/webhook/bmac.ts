@@ -22,16 +22,25 @@ export class BmacWebhook {
     }
 
     const integrations = await db
-      .selectFrom("Integration")
-      .where("bmacSecret", "is not", null)
-      .where("deletedAt", "is", null)
+      .selectFrom("Integration as bmac")
+      .leftJoin("Integration as sl", (join) =>
+        join
+          .onRef("sl.streamerId", "=", "bmac.streamerId")
+          .on("sl.type", "=", "STREAMLABS")
+          .on("sl.disabledAt", "is", null)
+          .on("sl.deletedAt", "is", null),
+      )
+      .where("bmac.type", "=", "BUYMEACOFFEE")
+      .where("bmac.secret", "is not", null)
+      .where("bmac.disabledAt", "is", null)
+      .where("bmac.deletedAt", "is", null)
       .select([
-        "orgId",
-        "streamerId",
-        "bmacSecret",
-        "streamlabsSecret",
-        "streamlabsRefreshToken",
-        "streamlabsOptions",
+        "bmac.orgId",
+        "bmac.streamerId",
+        "bmac.secret as bmacSecret",
+        "sl.secret as streamlabsSecret",
+        "sl.refreshToken as streamlabsRefreshToken",
+        "sl.options as streamlabsOptions",
       ])
       .execute();
 
@@ -73,16 +82,25 @@ export class BmacWebhook {
           integrations.find((i) => timingSafeEqualString(i.bmacSecret, token)) ?? null;
         if (!matchedIntegration) {
           const dbMatched = await db
-            .selectFrom("Integration")
-            .where("bmacSecret", "=", token)
-            .where("deletedAt", "is", null)
+            .selectFrom("Integration as bmac")
+            .leftJoin("Integration as sl", (join) =>
+              join
+                .onRef("sl.streamerId", "=", "bmac.streamerId")
+                .on("sl.type", "=", "STREAMLABS")
+                .on("sl.disabledAt", "is", null)
+                .on("sl.deletedAt", "is", null),
+            )
+            .where("bmac.type", "=", "BUYMEACOFFEE")
+            .where("bmac.secret", "=", token)
+            .where("bmac.disabledAt", "is", null)
+            .where("bmac.deletedAt", "is", null)
             .select([
-              "orgId",
-              "streamerId",
-              "bmacSecret",
-              "streamlabsSecret",
-              "streamlabsRefreshToken",
-              "streamlabsOptions",
+              "bmac.orgId",
+              "bmac.streamerId",
+              "bmac.secret as bmacSecret",
+              "sl.secret as streamlabsSecret",
+              "sl.refreshToken as streamlabsRefreshToken",
+              "sl.options as streamlabsOptions",
             ])
             .executeTakeFirst();
           if (dbMatched) {

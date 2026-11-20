@@ -96,6 +96,7 @@ export async function updateStreamerCache(
     reddit?: string | null;
     discord?: string | null;
     uri?: string | null;
+    publishedAt?: Date | string | null;
   },
   memberUserIds: (bigint | string)[] = [],
 ): Promise<void> {
@@ -109,21 +110,40 @@ export async function updateStreamerCache(
     (async () => {
       const infoKey = `streamer:${streamerIdStr}:info`;
       const cached = await redis.redis.get(infoKey);
-      if (!cached) return;
-      try {
-        const info = JSON.parse(cached);
-        const merged = { ...info, ...streamer, id: streamerIdStr, orgId: orgIdStr };
-        await redis.redis.setex(infoKey, DEFAULT_CACHE_TTL, JSON.stringify(merged));
-      } catch {}
+      if (cached) {
+        try {
+          const info = JSON.parse(cached);
+          const merged = { ...info, ...streamer, id: streamerIdStr, orgId: orgIdStr };
+          await redis.redis.setex(infoKey, DEFAULT_CACHE_TTL, JSON.stringify(merged));
+        } catch {}
+      }
 
       const pubKey = `streamer:${streamerIdStr}:public_details`;
       const pubCached = await redis.redis.get(pubKey);
       if (pubCached) {
-        try {
-          const parsed = JSON.parse(pubCached);
-          const merged = { ...parsed, ...streamer };
-          await redis.redis.setex(pubKey, 3600, JSON.stringify(merged));
-        } catch {}
+        if (streamer.publishedAt === null) {
+          await redis.redis.del(pubKey);
+        } else {
+          try {
+            const parsed = JSON.parse(pubCached);
+            const merged = {
+              ...parsed,
+              ...streamer,
+              ...(streamer.publishedAt !== undefined
+                ? {
+                    publishedAt: streamer.publishedAt
+                      ? streamer.publishedAt instanceof Date
+                        ? streamer.publishedAt.toISOString()
+                        : String(streamer.publishedAt)
+                      : null,
+                  }
+                : {}),
+            };
+            await redis.redis.setex(pubKey, 3600, JSON.stringify(merged));
+          } catch {
+            await redis.redis.del(pubKey);
+          }
+        }
       }
     })(),
   );
@@ -142,6 +162,15 @@ export async function updateStreamerCache(
           ...(streamer.displayName !== undefined ? { displayName: streamer.displayName } : {}),
           ...(streamer.avatar !== undefined ? { avatar: streamer.avatar } : {}),
           ...(streamer.uri !== undefined ? { uri: streamer.uri } : {}),
+          ...(streamer.publishedAt !== undefined
+            ? {
+                publishedAt: streamer.publishedAt
+                  ? streamer.publishedAt instanceof Date
+                    ? streamer.publishedAt.toISOString()
+                    : String(streamer.publishedAt)
+                  : null,
+              }
+            : {}),
         };
         await redis.redis.hset(streamersKey, streamerIdStr, JSON.stringify(merged));
       } catch (err: any) {
@@ -170,6 +199,13 @@ export async function updateStreamerCache(
                   if (streamer.displayName !== undefined) s.displayName = streamer.displayName;
                   if (streamer.avatar !== undefined) s.avatar = streamer.avatar;
                   if (streamer.uri !== undefined) s.uri = streamer.uri;
+                  if (streamer.publishedAt !== undefined) {
+                    s.publishedAt = streamer.publishedAt
+                      ? streamer.publishedAt instanceof Date
+                        ? streamer.publishedAt.toISOString()
+                        : String(streamer.publishedAt)
+                      : null;
+                  }
                   changed = true;
                   break;
                 }

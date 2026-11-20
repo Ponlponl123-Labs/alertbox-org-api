@@ -7,6 +7,7 @@ import {
   resolveProvider,
   allowed_user_update_providers,
   setConnection,
+  providerToIntegrationType,
 } from "@/classes/streamer";
 import { logOrgAudit } from "@/core/audit";
 
@@ -43,29 +44,18 @@ export const endpoint = new Elysia()
         }
       }
 
-      const existing = await db
-        .selectFrom("Integration")
-        .select(["stripeSecret", "bmacSecret", "kofiSecret", "xenditSecret", "ffpSecret", "streamlabsSecret"])
-        .where("streamerId", "=", Number(streamerId))
-        .executeTakeFirst();
+      const intType = providerToIntegrationType[provider.toLowerCase()];
+      const existing = intType
+        ? await db
+            .selectFrom("Integration")
+            .select(["secret"])
+            .where("streamerId", "=", Number(streamerId))
+            .where("type", "=", intType)
+            .where("deletedAt", "is", null)
+            .executeTakeFirst()
+        : null;
 
-      const wasConfigured = existing
-        ? Boolean(
-            provider === "stripe"
-              ? existing.stripeSecret
-              : provider === "buymeacoffee"
-                ? existing.bmacSecret
-                : provider === "kofi"
-                  ? existing.kofiSecret
-                  : provider === "xendit"
-                    ? existing.xenditSecret
-                    : provider === "feelfreepay"
-                      ? existing.ffpSecret
-                      : provider === "streamlabs"
-                        ? existing.streamlabsSecret
-                        : false,
-          )
-        : false;
+      const wasConfigured = Boolean(existing?.secret);
 
       await setConnection(streamerId, orgId, provider, body as any);
 

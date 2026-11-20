@@ -41,13 +41,15 @@ export const endpoint = new Elysia()
 
       const integration = await db
         .selectFrom("Integration")
-        .select(["streamlabsSecret", "streamlabsOptions"])
+        .select(["secret", "options"])
         .where("streamerId", "=", Number(org.streamerId))
+        .where("type", "=", "STREAMLABS")
+        .where("deletedAt", "is", null)
         .executeTakeFirst();
 
       return {
-        isConnected: !!integration?.streamlabsSecret,
-        options: integration?.streamlabsOptions ?? null,
+        isConnected: !!integration?.secret,
+        options: integration?.options ?? null,
       };
     },
     getValidation,

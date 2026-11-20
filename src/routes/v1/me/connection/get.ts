@@ -20,42 +20,51 @@ export const endpoint = new Elysia()
         return "Insufficient permissions to view integrations";
       }
 
-      const integration = await db
+      const isOwnerOrAdmin = org.role === "OWNER" || org.role === "ADMIN";
+      const canManage = isOwnerOrAdmin || requireOrgPermission(org, OrgPerm.INTEGRATION_MANAGE);
+
+      const mask = (secret: string | null | undefined) => {
+        if (!secret) return null;
+        if (canManage) return secret;
+        return "••••••••";
+      };
+
+      const integrations = await db
         .selectFrom("Integration")
-        .select([
-          "stripeSecret",
-          "bmacSecret",
-          "bmacUsername",
-          "kofiSecret",
-          "kofiUsername",
-          "xenditSecret",
-          "ffpSecret",
-          "streamlabsSecret",
-        ])
+        .select(["type", "secret", "username", "disabledAt", "options"])
         .where("streamerId", "=", Number(org.streamerId))
-        .executeTakeFirst();
+        .where("deletedAt", "is", null)
+        .execute();
+
+      const byType = new Map(integrations.map((i) => [i.type, i]));
+      const stripe = byType.get("STRIPE");
+      const bmac = byType.get("BUYMEACOFFEE");
+      const kofi = byType.get("KOFI");
+      const xendit = byType.get("XENDIT");
+      const ffp = byType.get("FEELFREEPAY");
+      const streamlabs = byType.get("STREAMLABS");
 
       return {
-        stripe: integration?.stripeSecret ?? null,
-        bmac: integration?.bmacSecret
+        stripe: mask(stripe?.secret),
+        bmac: bmac?.secret
           ? {
-            username: integration.bmacUsername ?? "",
-            secret: integration.bmacSecret,
+            username: bmac.username ?? "",
+            secret: mask(bmac.secret)!,
           }
           : null,
-        kofi: integration?.kofiSecret
+        kofi: kofi?.secret
           ? {
-            username: integration.kofiUsername ?? "",
-            secret: integration.kofiSecret,
+            username: kofi.username ?? "",
+            secret: mask(kofi.secret)!,
           }
           : null,
-        xendit: integration?.xenditSecret ?? null,
-        ffp: integration?.ffpSecret ?? null,
+        xendit: mask(xendit?.secret),
+        ffp: mask(ffp?.secret),
         youtube: null,
         facebook: null,
         twitch: null,
         patreon: null,
-        streamlabs: integration?.streamlabsSecret ? true : false,
+        streamlabs: streamlabs?.secret ? true : false,
       } as any;
     },
     {
@@ -99,6 +108,7 @@ export const endpoint = new Elysia()
           },
           { description: "Current integration configurations." },
         ),
+        403: t.String({ description: "Forbidden" }),
       },
     },
   );

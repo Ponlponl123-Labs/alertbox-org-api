@@ -43,3 +43,15 @@ export const TransactionStatus = {
   REFUNDED: "REFUNDED",
 } as const;
 export type TransactionStatus = (typeof TransactionStatus)[keyof typeof TransactionStatus];
+
+export const IntegrationType = {
+  STRIPE: "STRIPE",
+  BUYMEACOFFEE: "BUYMEACOFFEE",
+  KOFI: "KOFI",
+  XENDIT: "XENDIT",
+  FEELFREEPAY: "FEELFREEPAY",
+  STREAMLABS: "STREAMLABS",
+  DISCORD: "DISCORD",
+} as const;
+export type IntegrationType = (typeof IntegrationType)[keyof typeof IntegrationType];
+

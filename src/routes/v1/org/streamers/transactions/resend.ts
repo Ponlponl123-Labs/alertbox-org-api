@@ -51,36 +51,8 @@ export const endpoint = new Elysia()
         return "Transaction not found";
       }
 
-      const unixTime = Math.floor(Date.now() / 1000);
-      const baseTxId = tx.providerTxId || String(tx.id);
-      const newProviderTxId = `${baseTxId}_r${unixTime}`;
-      const now = new Date();
-
-      const insertRes = await db
-        .insertInto("TransactionLog")
-        .values({
-          orgId: Number(orgId),
-          streamerId: Number(streamerId),
-          provider: tx.provider,
-          providerTxId: newProviderTxId,
-          type: tx.type,
-          status: tx.status,
-          isTest: tx.isTest,
-          amount: tx.amount,
-          currency: tx.currency,
-          senderName: tx.senderName,
-          senderEmail: tx.senderEmail,
-          message: tx.message,
-          rawPayload: tx.rawPayload,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .executeTakeFirstOrThrow();
-
-      const newTxId = String(insertRes.insertId);
-
       const formattedTx = {
-        id: newTxId,
+        id: String(tx.id),
         provider: tx.provider,
         type: tx.type,
         status: tx.status,
@@ -89,7 +61,7 @@ export const endpoint = new Elysia()
         currency: tx.currency,
         senderName: tx.senderName,
         message: tx.message,
-        createdAt: now.toISOString(),
+        createdAt: new Date(tx.createdAt).toISOString(),
         isDeleted: false,
       };
 
@@ -101,11 +73,10 @@ export const endpoint = new Elysia()
         WebhookDispatcher.dispatchAlerts(streamerId, {
           type: tx.type as any,
           name: tx.senderName,
-          amount: Number(tx.amount),
+          amount: Number(tx.amount) / 100,
           currency: tx.currency,
           message: tx.message,
         }),
-        recordActivityTransaction(orgId, Boolean(tx.isTest)),
         logOrgAudit({
           orgId,
           userId: user.data.id,
@@ -114,7 +85,6 @@ export const endpoint = new Elysia()
           targetId: BigInt(streamerId),
           payload: {
             transactionId: String(tx.id),
-            newTransactionId: newTxId,
             streamerId: String(streamerId),
             senderName: tx.senderName,
             amount: Number(tx.amount),

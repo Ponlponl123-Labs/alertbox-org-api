@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
+import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
+import { invalidateKofiIntegrations } from "@/routes/v1/webhook/kofi";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -46,7 +48,28 @@ export const endpoint = new Elysia()
           .execute();
 
         await trx
+          .updateTable("OrganizationMember")
+          .set({ isDeleted: now })
+          .where("orgId", "=", numOrgId)
+          .where("isDeleted", "is", null)
+          .execute();
+
+        await trx
           .updateTable("Streamer")
+          .set({ deletedAt: now })
+          .where("orgId", "=", numOrgId)
+          .where("deletedAt", "is", null)
+          .execute();
+
+        await trx
+          .updateTable("Integration")
+          .set({ deletedAt: now })
+          .where("orgId", "=", numOrgId)
+          .where("deletedAt", "is", null)
+          .execute();
+
+        await trx
+          .updateTable("Widget")
           .set({ deletedAt: now })
           .where("orgId", "=", numOrgId)
           .where("deletedAt", "is", null)
@@ -61,6 +84,9 @@ export const endpoint = new Elysia()
             .execute();
         }
       });
+
+      invalidateBmacIntegrations();
+      invalidateKofiIntegrations();
 
       const keysToDelete: string[] = [
         `org:${String(orgId)}:info`,

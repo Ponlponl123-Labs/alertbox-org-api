@@ -1,6 +1,7 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
+import { redis } from "@/core/redis";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
@@ -17,8 +18,8 @@ export const endpoint = new Elysia()
         params.streamerId,
         user.data.id,
         {
-          requiredOrgPerm: OrgPerm.TRANSACTION_VIEW,
-          requiredStreamerPerm: StreamerPerm.STREAMER_TRANSACTION_VIEW,
+          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
+          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
           actionDescription: "soft delete streamer transaction",
         },
         set,
@@ -73,6 +74,11 @@ export const endpoint = new Elysia()
           transactionId: String(tx.id),
           isDeleted: isDeletedBool,
         }),
+        redis.redis.del(`org:${String(orgId)}:transactions:activity`),
+        redis.redis.del(`org:${String(orgId)}:transactions:analytics:7d`),
+        redis.redis.del(`org:${String(orgId)}:transactions:analytics:30d`),
+        redis.redis.del(`org:${String(orgId)}:transactions:analytics:90d`),
+        redis.redis.del(`org:${String(orgId)}:transactions:analytics:1y`),
         logOrgAudit({
           orgId,
           userId: user.data.id,
@@ -100,7 +106,7 @@ export const endpoint = new Elysia()
       detail: {
         tags: ["Organizations"],
         summary: "Toggle soft-delete status for a transaction",
-        description: "Toggles whether a transaction is soft-deleted (dashed and faded on table).",
+        description: "Toggles whether a transaction is soft-deleted (dashed and faded on table). Requires STREAMER_MANAGE.",
       },
     },
   );

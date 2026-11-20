@@ -49,10 +49,11 @@ export const endpoint = new Elysia()
       await db
         .updateTable("Integration")
         .set({
-          streamlabsOptions: body.options,
+          options: body.options,
           updatedAt: new Date(),
         })
         .where("streamerId", "=", Number(org.streamerId))
+        .where("type", "=", "STREAMLABS")
         .execute();
 
       return "OK";

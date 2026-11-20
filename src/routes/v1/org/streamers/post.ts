@@ -20,26 +20,6 @@ export const endpoint = new Elysia()
       if (typeof authRes === "string") return authRes;
       const { orgId } = authRes;
 
-      // Limit community organizations to 1 channel on production; community self-hosted is unlocked
-      const orgRecord = await db
-        .selectFrom("Organization")
-        .select(["type"])
-        .where("id", "=", Number(orgId))
-        .executeTakeFirst();
-
-      if (!isSelfHosted() && (!orgRecord || orgRecord.type === "COMMUNITY")) {
-        const countRow = await db
-          .selectFrom("Streamer")
-          .select((eb) => eb.fn.count("id").as("count"))
-          .where("orgId", "=", Number(orgId))
-          .where("deletedAt", "is", null)
-          .executeTakeFirst();
-        if (Number(countRow?.count ?? 0) >= 1) {
-          set.status = "Forbidden";
-          return "Community organizations can only create one channel";
-        }
-      }
-
       const name = body.name.trim().toLowerCase();
       const availability = await ChannelNameRegistry.checkAvailability(name);
 
@@ -61,59 +41,93 @@ export const endpoint = new Elysia()
       const timestamp = Date.now();
       const widgetToken = `${nanoid(64)}.${timestamp}.${nanoid(64)}`;
 
-      const { streamerId, widgetId } = await db.transaction().execute(async (trx) => {
-        const streamerRes = await trx
-          .insertInto("Streamer")
-          .values({
-            orgId: Number(orgId),
-            name,
-            displayName,
-            updatedAt: new Date(),
-          })
-          .executeTakeFirstOrThrow();
-        const sId = Number(streamerRes.insertId);
+      let streamerId: number;
+      let widgetId: number;
 
-        const widgetRes = await trx
-          .insertInto("Widget")
-          .values({
-            orgId: Number(orgId),
-            streamerId: sId,
-            type: "ALERTBOX",
-            token: widgetToken,
-            updatedAt: new Date(),
-          })
-          .executeTakeFirstOrThrow();
-        const wId = Number(widgetRes.insertId);
+      try {
+        const res = await db.transaction().execute(async (trx) => {
+          // Lock organization record to prevent concurrent channel creation race condition
+          const orgRecord = await trx
+            .selectFrom("Organization")
+            .select(["type"])
+            .where("id", "=", Number(orgId))
+            .forUpdate()
+            .executeTakeFirst();
 
-        const settingRes = await trx
-          .insertInto("AlertboxSetting")
-          .values({
-            widgetId: wId,
-          })
-          .executeTakeFirstOrThrow();
-        const settingId = Number(settingRes.insertId);
+          // Limit community organizations to 1 channel on production; community self-hosted is unlocked
+          if (!isSelfHosted() && (!orgRecord || orgRecord.type === "COMMUNITY")) {
+            const countRow = await trx
+              .selectFrom("Streamer")
+              .select((eb) => eb.fn.count("id").as("count"))
+              .where("orgId", "=", Number(orgId))
+              .where("deletedAt", "is", null)
+              .executeTakeFirst();
+            if (Number(countRow?.count ?? 0) >= 1) {
+              throw new Error("LIMIT_EXCEEDED");
+            }
+          }
 
-        if (DEFAULT_ALERTBOX_EVENTS.length > 0) {
-          await trx
-            .insertInto("AlertboxEvent")
-            .values(
-              DEFAULT_ALERTBOX_EVENTS.map((ev) => ({
-                alertboxId: settingId,
-                eventType: ev.eventType as any,
-                prefix: ev.prefix,
-                subfix: ev.subfix,
-                messageLayout: ev.messageLayout,
-                animIn: ev.animIn ?? null,
-                animOut: ev.animOut ?? null,
-                ttsEnabled: ev.ttsEnabled ? 1 : 0,
-                updatedAt: new Date(),
-              })),
-            )
-            .execute();
+          const streamerRes = await trx
+            .insertInto("Streamer")
+            .values({
+              orgId: Number(orgId),
+              name,
+              displayName,
+              updatedAt: new Date(),
+            })
+            .executeTakeFirstOrThrow();
+          const sId = Number(streamerRes.insertId);
+
+          const widgetRes = await trx
+            .insertInto("Widget")
+            .values({
+              orgId: Number(orgId),
+              streamerId: sId,
+              type: "ALERTBOX",
+              token: widgetToken,
+              updatedAt: new Date(),
+            })
+            .executeTakeFirstOrThrow();
+          const wId = Number(widgetRes.insertId);
+
+          const settingRes = await trx
+            .insertInto("AlertboxSetting")
+            .values({
+              widgetId: wId,
+            })
+            .executeTakeFirstOrThrow();
+          const settingId = Number(settingRes.insertId);
+
+          if (DEFAULT_ALERTBOX_EVENTS.length > 0) {
+            await trx
+              .insertInto("AlertboxEvent")
+              .values(
+                DEFAULT_ALERTBOX_EVENTS.map((ev) => ({
+                  alertboxId: settingId,
+                  eventType: ev.eventType as any,
+                  prefix: ev.prefix,
+                  subfix: ev.subfix,
+                  messageLayout: ev.messageLayout,
+                  animIn: ev.animIn ?? null,
+                  animOut: ev.animOut ?? null,
+                  ttsEnabled: ev.ttsEnabled ? 1 : 0,
+                  updatedAt: new Date(),
+                })),
+              )
+              .execute();
+          }
+
+          return { streamerId: sId, widgetId: wId };
+        });
+        streamerId = res.streamerId;
+        widgetId = res.widgetId;
+      } catch (err: any) {
+        if (err?.message === "LIMIT_EXCEEDED") {
+          set.status = "Forbidden";
+          return "Community organizations can only create one channel";
         }
-
-        return { streamerId: sId, widgetId: wId };
-      });
+        throw err;
+      }
 
       const streamer = await db
         .selectFrom("Streamer")

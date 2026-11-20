@@ -28,6 +28,13 @@ export const endpoint = new Elysia()
         return "Invalid permissions bitmask";
       }
 
+      if (authRes.role !== "OWNER" && authRes.role !== "ADMIN") {
+        if ((perms & ~authRes.permissions) !== 0n) {
+          set.status = "Forbidden";
+          return "Cannot grant permissions that exceed your own";
+        }
+      }
+
       const newPreset = await createOrgRolePreset(orgId, {
         name: cleanName,
         description: body.description?.trim() || null,

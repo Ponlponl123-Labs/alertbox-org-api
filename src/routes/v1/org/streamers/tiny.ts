@@ -16,7 +16,7 @@ export async function getTinyStreamer(streamerIdStr: string, orgId: bigint): Pro
   const numericId = parseBigIntParam(streamerIdStr);
   if (!numericId) return null;
 
-  const cacheKey = `streamer:${numericId.toString()}:tiny`;
+  const cacheKey = `org:${orgId.toString()}:streamer:${numericId.toString()}:tiny`;
   const cached = await redis.redis.get(cacheKey);
   if (cached === "deleted") return null;
   if (cached) {
@@ -49,7 +49,7 @@ export async function getTinyStreamer(streamerIdStr: string, orgId: bigint): Pro
   if (fullCache) {
     try {
       const parsed = JSON.parse(fullCache);
-      if (parsed?.name) {
+      if (parsed?.name && String(parsed.orgId) === orgId.toString()) {
         const result: TinyStreamerResponse = {
           id: String(parsed.id),
           name: parsed.name,
@@ -119,8 +119,8 @@ export const endpoint = new Elysia()
     {
       detail: {
         tags: ["Organizations"],
-        summary: "Get tiny streamer profile",
-        description: "Fetch cached lightweight streamer profile (id, name, displayName, avatar) using Redis cache.",
+        summary: "Get tiny streamer channel profile",
+        description: "Fetch cached lightweight streamer profile (id, name, displayName, avatar) scoped strictly to the organization.",
       },
       params: t.Object({
         orgId: t.String(),

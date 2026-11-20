@@ -15,24 +15,6 @@ export const createOrgEndpoint = new Elysia()
       const user = await getAuthenticatedUser(pureUserSelect);
       const userType = user.data.type || "REGULAR";
 
-      // Limit regular and supporter users to 1 active owned organization on production; community self-hosted is unlocked
-      if (!isSelfHosted() && userType !== "OPERATOR") {
-        const activeOwnedCountRow = await db
-          .selectFrom("OrganizationMember")
-          .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
-          .select((eb) => eb.fn.count("OrganizationMember.id").as("count"))
-          .where("OrganizationMember.userId", "=", Number(user.data.id))
-          .where("OrganizationMember.role", "=", "OWNER")
-          .where("OrganizationMember.isDeleted", "is", null)
-          .where("Organization.deletedAt", "is", null)
-          .executeTakeFirst();
-        const activeOwnedCount = Number(activeOwnedCountRow?.count ?? 0);
-        if (activeOwnedCount >= 1) {
-          set.status = "Forbidden";
-          return "Regular and supporter accounts can only create one organization";
-        }
-      }
-
       const name = body.name.trim();
       const slug = (
         body.slug?.trim().toLowerCase() ||
@@ -53,34 +35,68 @@ export const createOrgEndpoint = new Elysia()
 
       const orgType = (userType === "OPERATOR" && body.type === "ENTERPRISE") ? "ENTERPRISE" : "COMMUNITY";
 
-      const createdOrg = await db.transaction().execute(async (trx) => {
-        const insertRes = await trx
-          .insertInto("Organization")
-          .values({
-            ownerId: Number(user.data.id),
-            createBy: Number(user.data.id),
-            type: orgType,
-            name,
-            slug,
-            updatedAt: new Date(),
-          })
-          .executeTakeFirstOrThrow();
+      let createdOrg: { id: number; type: string; name: string; slug: string };
+      try {
+        createdOrg = await db.transaction().execute(async (trx) => {
+          // Lock user record to prevent concurrent organization creation race condition
+          await trx
+            .selectFrom("User")
+            .select("id")
+            .where("id", "=", Number(user.data.id))
+            .forUpdate()
+            .executeTakeFirst();
 
-        const orgId = Number(insertRes.insertId);
+          // Limit regular and supporter users to 1 active owned organization on production; community self-hosted is unlocked
+          if (!isSelfHosted() && userType !== "OPERATOR") {
+            const activeOwnedCountRow = await trx
+              .selectFrom("OrganizationMember")
+              .innerJoin("Organization", "Organization.id", "OrganizationMember.orgId")
+              .select((eb) => eb.fn.count("OrganizationMember.id").as("count"))
+              .where("OrganizationMember.userId", "=", Number(user.data.id))
+              .where("OrganizationMember.role", "=", "OWNER")
+              .where("OrganizationMember.isDeleted", "is", null)
+              .where("Organization.deletedAt", "is", null)
+              .executeTakeFirst();
+            const activeOwnedCount = Number(activeOwnedCountRow?.count ?? 0);
+            if (activeOwnedCount >= 1) {
+              throw new Error("LIMIT_EXCEEDED");
+            }
+          }
 
-        await trx
-          .insertInto("OrganizationMember")
-          .values({
-            orgId,
-            userId: Number(user.data.id),
-            role: "OWNER",
-            permissions: OrgPerm.ALL,
-            updatedAt: new Date(),
-          })
-          .execute();
+          const insertRes = await trx
+            .insertInto("Organization")
+            .values({
+              ownerId: Number(user.data.id),
+              createBy: Number(user.data.id),
+              type: orgType,
+              name,
+              slug,
+              updatedAt: new Date(),
+            })
+            .executeTakeFirstOrThrow();
 
-        return { id: orgId, type: orgType, name, slug };
-      });
+          const orgId = Number(insertRes.insertId);
+
+          await trx
+            .insertInto("OrganizationMember")
+            .values({
+              orgId,
+              userId: Number(user.data.id),
+              role: "OWNER",
+              permissions: OrgPerm.ALL,
+              updatedAt: new Date(),
+            })
+            .execute();
+
+          return { id: orgId, type: orgType, name, slug };
+        });
+      } catch (err: any) {
+        if (err?.message === "LIMIT_EXCEEDED") {
+          set.status = "Forbidden";
+          return "Regular and supporter accounts can only create one organization";
+        }
+        throw err;
+      }
 
       // Invalidate user cache (info, orgs, org_list)
       await Promise.all([
@@ -99,16 +115,20 @@ export const createOrgEndpoint = new Elysia()
     {
       detail: {
         tags: ["Organizations"],
-        summary: "Create a new organization",
+        summary: "Create an organization",
         description:
-          "Creates an organization and assigns caller as OWNER with full permissions.",
+          "Creates a new organization owned by the caller. Automatically sets caller as OWNER and provisions the first channel and alertbox widget.",
       },
       body: t.Object({
-        name: t.String({ minLength: 2, maxLength: 100 }),
-        type: t.Optional(t.Enum(OrgType)),
+        name: t.String({ minLength: 1, maxLength: 100 }),
         slug: t.Optional(
-          t.String({ pattern: "^[a-z0-9_-]+$", minLength: 2, maxLength: 50 }),
+          t.String({
+            minLength: 2,
+            maxLength: 50,
+            pattern: "^[a-z0-9-]+$",
+          }),
         ),
+        type: t.Optional(t.Enum(OrgType)),
       }),
       response: {
         200: t.Object({
@@ -116,8 +136,9 @@ export const createOrgEndpoint = new Elysia()
           type: t.String(),
           name: t.String(),
           slug: t.String(),
-          streamerId: t.Optional(t.String()),
         }),
+        400: t.String(),
+        403: t.String(),
         409: t.String(),
       },
     },

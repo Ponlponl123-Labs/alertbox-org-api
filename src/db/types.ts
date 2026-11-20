@@ -6,6 +6,7 @@ import type {
   WidgetType,
   AlertEventType,
   TransactionStatus,
+  IntegrationType,
 } from "./enums";
 
 export interface User {
@@ -177,22 +178,14 @@ export interface Integration {
   id: Generated<bigint | number>;
   orgId: bigint | number;
   streamerId: bigint | number;
-  streamlabsSecret: string | null;
-  streamlabsRefreshToken: string | null;
-  streamlabsOptions: Generated<number>;
-  bmacUsername: string | null;
-  bmacSecret: string | null;
-  bmacOptions: Generated<number>;
-  kofiUsername: string | null;
-  kofiSecret: string | null;
-  kofiOptions: Generated<number>;
-  xenditSecret: string | null;
-  xenditOptions: Generated<number>;
-  stripeSecret: string | null;
-  stripeOptions: Generated<number>;
-  ffpSecret: string | null;
-  ffpOptions: Generated<number>;
+  type: IntegrationType;
+  username: string | null;
+  secret: string | null;
+  refreshToken: string | null;
+  options: Generated<number>;
+  disabledAt: Date | string | null;
   deletedAt: Date | string | null;
+  createdAt: Generated<Date | string>;
   updatedAt: Generated<Date | string>;
 }
 

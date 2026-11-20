@@ -11,6 +11,19 @@ import {
 } from "@/consts/providers";
 import { resolveProvider } from "@/utils/connections";
 import { ConnectionSecretPayload } from "@/types/streamer.types";
+import { IntegrationType } from "@/db/enums";
+
+export const providerToIntegrationType: Record<string, IntegrationType> = {
+  stripe: IntegrationType.STRIPE,
+  buymeacoffee: IntegrationType.BUYMEACOFFEE,
+  bmac: IntegrationType.BUYMEACOFFEE,
+  kofi: IntegrationType.KOFI,
+  xendit: IntegrationType.XENDIT,
+  feelfreepay: IntegrationType.FEELFREEPAY,
+  ffp: IntegrationType.FEELFREEPAY,
+  streamlabs: IntegrationType.STREAMLABS,
+  discord: IntegrationType.DISCORD,
+};
 
 export {
   supported_providers,
@@ -26,26 +39,12 @@ export async function setConnection(
   provider: SupportedProvider,
   payload: ConnectionSecretPayload,
 ) {
+  const intType = providerToIntegrationType[provider.toLowerCase()];
+  if (!intType) return null;
+
   const secret = typeof payload === "string" ? payload : payload.secret;
   const username = typeof payload === "string" ? null : (payload.username ?? null);
-  const refreshToken = typeof payload === "string" ? undefined : payload.refreshToken;
-
-  const data: any = {};
-  if (provider === "stripe") data.stripeSecret = secret;
-  if (provider === "buymeacoffee") {
-    data.bmacSecret = secret;
-    if (username) data.bmacUsername = username;
-  }
-  if (provider === "kofi") {
-    data.kofiSecret = secret;
-    if (username) data.kofiUsername = username;
-  }
-  if (provider === "xendit") data.xenditSecret = secret;
-  if (provider === "feelfreepay") data.ffpSecret = secret;
-  if (provider === "streamlabs") {
-    data.streamlabsSecret = secret;
-    if (refreshToken !== undefined) data.streamlabsRefreshToken = refreshToken;
-  }
+  const refreshToken = typeof payload === "string" ? null : (payload.refreshToken ?? null);
 
   let targetStreamerId: bigint;
   let targetOrgId: bigint;
@@ -61,11 +60,20 @@ export async function setConnection(
     .values({
       streamerId: Number(targetStreamerId),
       orgId: Number(targetOrgId),
-      ...data,
+      type: intType,
+      secret,
+      username,
+      refreshToken,
+      disabledAt: null,
+      deletedAt: null,
       updatedAt: new Date(),
     })
     .onDuplicateKeyUpdate({
-      ...data,
+      secret,
+      username,
+      ...(refreshToken ? { refreshToken } : {}),
+      disabledAt: null,
+      deletedAt: null,
       updatedAt: new Date(),
     })
     .execute();
@@ -74,6 +82,7 @@ export async function setConnection(
     .selectFrom("Integration")
     .selectAll()
     .where("streamerId", "=", Number(targetStreamerId))
+    .where("type", "=", intType)
     .executeTakeFirst();
 
   await Promise.all([
@@ -86,10 +95,10 @@ export async function setConnection(
     redis.redis.del(`streamer:${String(streamerId)}:public_details`),
   ]);
 
-  if (provider === "buymeacoffee") {
+  if (intType === IntegrationType.BUYMEACOFFEE) {
     invalidateBmacIntegrations();
   }
-  if (provider === "kofi") {
+  if (intType === IntegrationType.KOFI) {
     invalidateKofiIntegrations();
   }
 
@@ -107,37 +116,14 @@ export async function removeConnection(
     return null;
   }
 
-  const data: any = {};
-  if (provider === "stripe") data.stripeSecret = null;
-  if (provider === "buymeacoffee") {
-    data.bmacSecret = null;
-    data.bmacUsername = null;
-  }
-  if (provider === "kofi") {
-    data.kofiSecret = null;
-    data.kofiUsername = null;
-  }
-  if (provider === "xendit") data.xenditSecret = null;
-  if (provider === "feelfreepay") data.ffpSecret = null;
-  if (provider === "streamlabs") {
-    data.streamlabsSecret = null;
-    data.streamlabsRefreshToken = null;
-  }
+  const intType = providerToIntegrationType[provider.toLowerCase()];
+  if (!intType) return null;
 
   await db
-    .updateTable("Integration")
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
+    .deleteFrom("Integration")
     .where("streamerId", "=", Number(targetStreamerId))
+    .where("type", "=", intType)
     .execute();
-
-  const updated = await db
-    .selectFrom("Integration")
-    .selectAll()
-    .where("streamerId", "=", Number(targetStreamerId))
-    .executeTakeFirst();
 
   await Promise.all([
     redis.redis.del(`streamer:${String(streamerId)}:connections:${provider}`),
@@ -145,12 +131,47 @@ export async function removeConnection(
     redis.redis.del(`streamer:${String(streamerId)}:public_details`),
   ]);
 
-  if (provider === "buymeacoffee") {
+  if (intType === IntegrationType.BUYMEACOFFEE) {
     invalidateBmacIntegrations();
   }
-  if (provider === "kofi") {
+  if (intType === IntegrationType.KOFI) {
     invalidateKofiIntegrations();
   }
 
-  return updated;
+  return true;
+}
+
+export async function setConnectionDisabled(
+  streamerId: string | bigint,
+  provider: SupportedProvider,
+  disabled: boolean,
+) {
+  let targetStreamerId: bigint;
+  try {
+    targetStreamerId = BigInt(streamerId);
+  } catch {
+    return null;
+  }
+
+  const intType = providerToIntegrationType[provider.toLowerCase()];
+  if (!intType) return null;
+
+  await db
+    .updateTable("Integration")
+    .set({
+      disabledAt: disabled ? new Date() : null,
+      updatedAt: new Date(),
+    })
+    .where("streamerId", "=", Number(targetStreamerId))
+    .where("type", "=", intType)
+    .execute();
+
+  if (intType === IntegrationType.BUYMEACOFFEE) {
+    invalidateBmacIntegrations();
+  }
+  if (intType === IntegrationType.KOFI) {
+    invalidateKofiIntegrations();
+  }
+
+  return true;
 }

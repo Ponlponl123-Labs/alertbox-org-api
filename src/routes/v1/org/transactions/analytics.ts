@@ -98,11 +98,12 @@ export const endpoint = new Elysia()
       const [currencyRes, gatewayRes, streamerRes, timelineRes, activeStreamersRow] = await Promise.all([
         sql<{ currency: string; amount: number | string; count: number | string }>`
           SELECT currency,
-                 CAST(SUM(amount) AS UNSIGNED) as amount,
+                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
           WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
+            AND isDeleted IS NULL
             AND createdAt >= ${startDate}
           GROUP BY currency
           ORDER BY amount DESC
@@ -110,22 +111,24 @@ export const endpoint = new Elysia()
         sql<{ provider: string; currency: string; amount: number | string; count: number | string }>`
           SELECT provider,
                  currency,
-                 CAST(SUM(amount) AS UNSIGNED) as amount,
+                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
           WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
+            AND isDeleted IS NULL
             AND createdAt >= ${startDate}
           GROUP BY provider, currency
           ORDER BY count DESC
         `.execute(db),
         sql<{ streamerId: number | string; amount: number | string; count: number | string }>`
           SELECT streamerId,
-                 CAST(SUM(amount) AS UNSIGNED) as amount,
+                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
                  COUNT(*) as count
           FROM TransactionLog
           WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
+            AND isDeleted IS NULL
             AND createdAt >= ${startDate}
           GROUP BY streamerId
           ORDER BY amount DESC
@@ -133,13 +136,14 @@ export const endpoint = new Elysia()
         `.execute(db),
         sql<{ date: string; amount: number | string; count: number | string; realCount: number | string; testCount: number | string }>`
           SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as date,
-                 CAST(SUM(amount) AS UNSIGNED) as amount,
+                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
                  COUNT(*) as count,
                  CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
                  CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
           FROM TransactionLog
           WHERE orgId = ${Number(orgId)}
             AND status != 'FAILED'
+            AND isDeleted IS NULL
             AND createdAt >= ${startDate}
           GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
           ORDER BY date ASC
@@ -263,7 +267,7 @@ export const endpoint = new Elysia()
       detail: {
         tags: ["Organizations"],
         summary: "Get organization analytics and breakdown",
-        description: "Returns revenue, currency distribution, payment gateway breakdown, and timeline.",
+        description: "Returns revenue, currency distribution, payment gateway breakdown, and timeline. Excludes deleted transactions and separates test transactions from revenue.",
       },
       query: t.Object({
         timeframe: t.Optional(t.Union([t.Literal("7d"), t.Literal("30d"), t.Literal("90d"), t.Literal("1y")])),

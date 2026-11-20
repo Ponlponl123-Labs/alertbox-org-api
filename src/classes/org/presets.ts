@@ -55,7 +55,7 @@ export async function createOrgRolePreset(
         orgId: targetOrgId,
         name: data.name.trim(),
         description: data.description?.trim() || null,
-        permissions: Number(data.permissions),
+        permissions: data.permissions as any,
         color: data.color?.trim() || null,
         updatedAt: new Date(),
       })
@@ -100,18 +100,20 @@ export async function updateOrgRolePreset(
     color?: string | null;
   },
 ): Promise<RolePresetData> {
+  const targetOrgId = Number(orgId);
   try {
     const numId = Number(presetId);
     const updatePayload: any = { updatedAt: new Date() };
     if (patch.name) updatePayload.name = patch.name.trim();
     if (patch.description !== undefined) updatePayload.description = patch.description?.trim() || null;
-    if (patch.permissions !== undefined) updatePayload.permissions = Number(patch.permissions);
+    if (patch.permissions !== undefined) updatePayload.permissions = patch.permissions as any;
     if (patch.color !== undefined) updatePayload.color = patch.color?.trim() || null;
 
     await db
       .updateTable("OrganizationRolePreset")
       .set(updatePayload)
       .where("id", "=", numId)
+      .where("orgId", "=", targetOrgId)
       .execute();
   } catch {}
 
@@ -133,11 +135,13 @@ export async function updateOrgRolePreset(
 }
 
 export async function deleteOrgRolePreset(orgId: bigint | string, presetId: string): Promise<boolean> {
+  const targetOrgId = Number(orgId);
   try {
     const numId = Number(presetId);
     await db
       .deleteFrom("OrganizationRolePreset")
       .where("id", "=", numId)
+      .where("orgId", "=", targetOrgId)
       .execute();
   } catch {}
 
