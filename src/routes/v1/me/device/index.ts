@@ -1,12 +1,9 @@
 import Elysia from "elysia";
-import { endpoint as GetEndpoint } from "./get";
-import { endpoint as DeleteEndpoint } from "./delete";
+import { endpoint as ListEndpoint } from "./list";
+import { endpoint as RevokeEndpoint } from "./revoke";
 
-/**
- * Orchestrator router for version 1 device endpoints under /me/device.
- */
 export const endpoint = new Elysia({ prefix: "/device" })
-  .use(GetEndpoint)
-  .use(DeleteEndpoint);
+  .use(ListEndpoint)
+  .use(RevokeEndpoint);
 
 export default endpoint;

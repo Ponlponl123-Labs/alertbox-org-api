@@ -1,14 +1,11 @@
 import Elysia from "elysia";
-import { endpoint as PostEndpoint } from "./post";
-import { endpoint as PatchEndpoint } from "./patch";
-import { endpoint as DeleteEndpoint } from "./delete";
+import { endpoint as CreateEndpoint } from "./create";
+import { endpoint as UpdateEndpoint } from "./update";
+import { endpoint as RemoveEndpoint } from "./remove";
 
-/**
- * Orchestrator router for version 1 profile endpoints under /me/profile.
- */
 export const endpoint = new Elysia({ prefix: "profile" })
-  .use(PostEndpoint)
-  .use(PatchEndpoint)
-  .use(DeleteEndpoint);
+  .use(CreateEndpoint)
+  .use(UpdateEndpoint)
+  .use(RemoveEndpoint);
 
 export default endpoint;

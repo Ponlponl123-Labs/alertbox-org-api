@@ -1,20 +1,15 @@
 import Elysia from "elysia";
-import { endpoint as ConnectionEndpoint } from "./connection/index";
 import { endpoint as DeviceEndpoint } from "./device/index";
 import { endpoint as ProfileEndpoint } from "./profile/index";
-import { endpoint as GetEndpoint } from "./get";
-import { endpoint as PatchEndpoint } from "./patch";
-import { endpoint as DeleteEndpoint } from "./delete";
+import { endpoint as FetchEndpoint } from "./fetch";
+import { endpoint as UpdateEndpoint } from "./update";
+import { endpoint as DeleteAccountEndpoint } from "./delete-account";
 
-/**
- * Main orchestrator router for version 1 /me endpoints.
- */
 export const router = new Elysia({ prefix: "me" })
-  .use(ConnectionEndpoint)
   .use(DeviceEndpoint)
   .use(ProfileEndpoint)
-  .use(GetEndpoint)
-  .use(PatchEndpoint)
-  .use(DeleteEndpoint);
+  .use(FetchEndpoint)
+  .use(UpdateEndpoint)
+  .use(DeleteAccountEndpoint);
 
 export default router;

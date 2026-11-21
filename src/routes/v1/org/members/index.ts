@@ -1,11 +1,11 @@
 import Elysia from "elysia";
-import { endpoint as GetEndpoint } from "./get";
-import { endpoint as PatchEndpoint } from "./patch";
-import { endpoint as DeleteEndpoint } from "./delete";
+import { endpoint as ListEndpoint } from "./list";
+import { endpoint as UpdateEndpoint } from "./update";
+import { endpoint as RemoveEndpoint } from "./remove";
 
 export const endpoint = new Elysia()
-  .use(GetEndpoint)
-  .use(PatchEndpoint)
-  .use(DeleteEndpoint);
+  .use(ListEndpoint)
+  .use(UpdateEndpoint)
+  .use(RemoveEndpoint);
 
 export default endpoint;

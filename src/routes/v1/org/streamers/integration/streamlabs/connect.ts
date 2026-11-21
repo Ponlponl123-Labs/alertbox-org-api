@@ -1,0 +1,79 @@
+import Elysia, { t } from "elysia";
+import { auth } from "@/core/auth";
+import { setConnection } from "@/classes/streamer";
+import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
+import { authorizeIntegrationManage, getExistingIntegrationSecret, logConnectionAudit, integrationParamsSchema } from "../common";
+
+export const connectEndpoint = new Elysia()
+  .use(auth)
+  .post(
+    "/streamlabs",
+    async ({ getAuthenticatedUser, params, body, set }) => {
+      const { error, ctx, user } = await authorizeIntegrationManage(
+        getAuthenticatedUser,
+        params.orgId,
+        params.streamerId,
+        set,
+      );
+      if (error) return error;
+      const { orgId, streamerId } = ctx!;
+
+      const code = typeof body === "string" ? body : (body as any)?.code;
+      if (!code) {
+        set.status = "Bad Request";
+        return "Authorization code is required for Streamlabs";
+      }
+
+      const existing = await getExistingIntegrationSecret(streamerId, "streamlabs");
+      const wasConfigured = Boolean(existing?.secret);
+
+      const r = await fetch("https://streamlabs.com/api/v2.0/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({
+          grant_type: "authorization_code",
+          client_id: process.env.STREAMLABS_CLIENT_ID!,
+          client_secret: process.env.STREAMLABS_CLIENT_SECRET!,
+          redirect_uri: integrationRedirectUri[ConnectionProvider.STREAMLABS],
+          code,
+        }),
+      });
+
+      const data = await r.json();
+
+      if (!r.ok || !data.access_token) {
+        set.status = "Bad Request";
+        return "Failed to exchange Streamlabs authorization code";
+      }
+
+      await setConnection(streamerId, orgId, "streamlabs", {
+        secret: data.access_token,
+        refreshToken: data.refresh_token || null,
+      });
+
+      await logConnectionAudit(orgId, user!.data.id, streamerId, "streamlabs", wasConfigured);
+
+      return "OK";
+    },
+    {
+      params: integrationParamsSchema,
+      detail: {
+        tags: ["Organizations"],
+        summary: "Connect Streamlabs channel integration",
+        description: "Exchanges authorization code and links Streamlabs credentials.",
+      },
+      body: t.Union([
+        t.Object({
+          code: t.Optional(t.String()),
+          username: t.Optional(t.Nullable(t.String())),
+          secret: t.Optional(t.String()),
+        }),
+        t.String(),
+      ]),
+    },
+  );
+
+export default connectEndpoint;

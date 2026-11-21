@@ -5,8 +5,9 @@ import {
   providerAliases,
   resolveProvider,
 } from "../src/classes/streamer";
+import { endpoint as integrationEndpoint } from "../src/routes/v1/org/streamers/integration";
 
-describe("Connections & Integrations Logic", () => {
+describe("Integrations Logic", () => {
   it("should list all supported payment & trigger providers", () => {
     expect(supported_providers).toContain("stripe");
     expect(supported_providers).toContain("buymeacoffee");
@@ -40,5 +41,32 @@ describe("Connections & Integrations Logic", () => {
     expect(allowed_user_update_providers).toContain("kofi");
     // Streamlabs uses OAuth callback and should not be direct user update
     expect(allowed_user_update_providers.includes("streamlabs" as any)).toBe(false);
+  });
+
+  it("should enforce authentication guards on all endpoints across integration paths", async () => {
+    const testCases = [
+      { method: "GET", path: "/1/streamers/2/integration" },
+      { method: "GET", path: "/1/streamers/2/integration/streamlabs" },
+      { method: "GET", path: "/1/streamers/2/integration/streamlabs/logs" },
+      { method: "GET", path: "/1/streamers/2/integration/streamlabs/oauth2" },
+      { method: "GET", path: "/1/streamers/2/integration/stripe/oauth2" },
+      { method: "POST", path: "/1/streamers/2/integration/streamlabs", body: JSON.stringify({ code: "mock" }) },
+      { method: "PATCH", path: "/1/streamers/2/integration/streamlabs", body: JSON.stringify({ options: 1 }) },
+      { method: "DELETE", path: "/1/streamers/2/integration/streamlabs" },
+      { method: "POST", path: "/1/streamers/2/integration/stripe", body: JSON.stringify({ secret: "mock" }) },
+      { method: "POST", path: "/1/streamers/2/integration/kofi", body: JSON.stringify({ username: "u", secret: "s" }) },
+      { method: "POST", path: "/1/streamers/2/integration/buymeacoffee", body: JSON.stringify({ username: "u", secret: "s" }) },
+      { method: "POST", path: "/1/streamers/2/integration/bmac", body: JSON.stringify({ username: "u", secret: "s" }) },
+      { method: "POST", path: "/1/streamers/2/integration/feelfreepay", body: JSON.stringify({ secret: "mock" }) },
+      { method: "POST", path: "/1/streamers/2/integration/ffp", body: JSON.stringify({ secret: "mock" }) },
+      { method: "PATCH", path: "/1/streamers/2/integration/stripe", body: JSON.stringify({ disabled: true }) },
+      { method: "DELETE", path: "/1/streamers/2/integration/stripe" },
+    ];
+
+    for (const { method, path, body } of testCases) {
+      const headers: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
+      const res = await integrationEndpoint.handle(new Request(`http://localhost${path}`, { method, headers, body }));
+      expect([400, 401, 403, 500]).toContain(res.status);
+    }
   });
 });

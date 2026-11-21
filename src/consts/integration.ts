@@ -6,6 +6,7 @@ export enum ConnectionProvider {
   TWITCH = 2,
   YOUTUBE = 3,
   GOOGLE = 4,
+  STRIPE = 5
 }
 
 export const integrationRedirectUri: Record<ConnectionProvider, string> = {
@@ -24,6 +25,9 @@ export const integrationRedirectUri: Record<ConnectionProvider, string> = {
   [ConnectionProvider.GOOGLE]: !isDev
     ? "https://alertbox.org/app/connections/google"
     : "http://localhost:3000/app/connections/google",
+  [ConnectionProvider.STRIPE]: !isDev
+    ? "https://alertbox.org/app/connections/stripe"
+    : "http://localhost:3000/app/connections/stripe",
 };
 
 /**

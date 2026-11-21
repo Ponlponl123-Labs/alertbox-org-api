@@ -1,7 +1,7 @@
 import Elysia from "elysia";
-import { endpoint as PostEndpoint } from "./post";
+import { endpoint as AcceptEndpoint } from "./accept";
 
 export const endpoint = new Elysia({ prefix: "/accept" })
-  .use(PostEndpoint);
+  .use(AcceptEndpoint);
 
 export default endpoint;
