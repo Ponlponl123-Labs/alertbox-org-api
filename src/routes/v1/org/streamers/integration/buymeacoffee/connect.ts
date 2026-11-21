@@ -7,6 +7,7 @@ import {
   logConnectionAudit,
   integrationParamsSchema,
   bmacConnectSchema,
+  resolvePreservedSecret,
 } from "../common";
 import { okResponseSchema, standardErrors } from "../../schemas";
 
@@ -22,8 +23,12 @@ async function handleBmacConnect({ getAuthenticatedUser, params, body, set }: an
 
   const existing = await getExistingIntegrationSecret(streamerId, "buymeacoffee");
   const wasConfigured = Boolean(existing?.secret);
+  const resolvedSecret = resolvePreservedSecret(body?.secret, existing?.secret);
 
-  await setConnection(streamerId, orgId, "buymeacoffee", body as any);
+  await setConnection(streamerId, orgId, "buymeacoffee", {
+    ...(body as any),
+    ...(resolvedSecret !== undefined ? { secret: resolvedSecret } : {}),
+  });
 
   await logConnectionAudit(orgId, user!.data.id, streamerId, "buymeacoffee", wasConfigured, {
     username: body.username,

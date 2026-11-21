@@ -41,6 +41,11 @@ export const streamlabsConnectSchema = t.Union([
     code: t.String({
       description: "OAuth2 authorization code from Streamlabs callback",
     }),
+    state: t.Optional(
+      t.String({
+        description: "Signed single-use OAuth state parameter",
+      }),
+    ),
   }),
   t.String({
     description: "OAuth2 authorization code as plain text string",
@@ -52,6 +57,11 @@ export const stripeConnectSchema = t.Union([
     code: t.String({
       description: "Stripe Connect OAuth2 authorization code (ac_...)",
     }),
+    state: t.Optional(
+      t.String({
+        description: "Signed single-use OAuth state parameter",
+      }),
+    ),
   }),
   t.String({
     description: "Stripe Connect OAuth2 authorization code as plain text string",
@@ -171,6 +181,16 @@ export async function getExistingIntegrationSecret(
     .where("type", "=", intType)
     .where("deletedAt", "is", null)
     .executeTakeFirst();
+}
+
+export function resolvePreservedSecret(
+  submitted: string | null | undefined,
+  existingSecret: string | null | undefined,
+): string | undefined {
+  if (typeof submitted === "string" && submitted.startsWith("••••") && existingSecret) {
+    return existingSecret;
+  }
+  return submitted ?? undefined;
 }
 
 export async function logConnectionAudit(

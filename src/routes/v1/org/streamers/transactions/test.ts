@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
+import { checkRateLimit } from "@/utils/rate-limit";
 import { WebhookDispatcher } from "@/classes/webhook/dispatcher";
 import { recordActivityTransaction } from "@/routes/v1/org/transactions/activity";
 import {
@@ -18,6 +19,12 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId/transactions/test",
     async ({ body, getAuthenticatedUser, params, set }) => {
       const user = await getAuthenticatedUser();
+      const rl = await checkRateLimit(`tx:test:${String(user.data.id)}`, 15, 60);
+      if (!rl.allowed) {
+        set.status = 429;
+        set.headers["Retry-After"] = String(rl.retryAfterSec);
+        return "Too many test alerts. Please wait before trying again.";
+      }
       const authRes = await authorizeStreamer(
         params.orgId,
         params.streamerId,

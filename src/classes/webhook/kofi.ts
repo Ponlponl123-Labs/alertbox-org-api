@@ -21,6 +21,7 @@ export interface KofiIntegrationRecord {
 }
 
 let cachedIntegrations: KofiIntegrationRecord[] | null = null;
+let cachedBySecret: Map<string, KofiIntegrationRecord> | null = null;
 let lastCacheSync = 0;
 const CACHE_TTL_MS = 60_000;
 
@@ -55,12 +56,18 @@ export class KofiWebhook {
       .execute();
 
     cachedIntegrations = integrations as any;
+    const nextMap = new Map<string, KofiIntegrationRecord>();
+    for (const rec of cachedIntegrations!) {
+      if (rec.kofiSecret) nextMap.set(rec.kofiSecret, rec);
+    }
+    cachedBySecret = nextMap;
     lastCacheSync = now;
-    return integrations as any;
+    return cachedIntegrations!;
   }
 
   public static invalidateIntegrations(): void {
     cachedIntegrations = null;
+    cachedBySecret = null;
     lastCacheSync = 0;
   }
 
@@ -84,9 +91,12 @@ export class KofiWebhook {
       }
 
       const verificationToken = payload.verification_token;
-      const integrations = await this.getIntegrations();
+      await this.getIntegrations();
+      const mapCandidate = cachedBySecret?.get(verificationToken) ?? null;
       let matchedIntegration: KofiIntegrationRecord | null =
-        integrations.find((i) => timingSafeEqualString(i.kofiSecret, verificationToken)) ?? null;
+        mapCandidate && timingSafeEqualString(mapCandidate.kofiSecret, verificationToken)
+          ? mapCandidate
+          : null;
 
       if (!matchedIntegration) {
         const dbMatched = await db

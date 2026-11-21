@@ -32,7 +32,9 @@ export const fetchEndpoint = new Elysia()
 
       const mask = (secret: string | null | undefined) => {
         if (!secret) return null;
-        if (canManage) return secret;
+        if (canManage && secret.length > 4) {
+          return `••••${secret.slice(-4)}`;
+        }
         return "••••••••";
       };
 

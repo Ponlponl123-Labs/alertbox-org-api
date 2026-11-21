@@ -109,6 +109,7 @@ export const streamerTransactionsResponseSchema = t.Object({
   total: t.Number({ description: "Total matching transactions count", examples: [42] }),
   limit: t.Number({ description: "Page limit", examples: [25] }),
   offset: t.Number({ description: "Page offset", examples: [0] }),
+  nextCursor: t.Optional(t.Nullable(t.String({ description: "Keyset pagination cursor" }))),
   transactions: t.Array(
     t.Object({
       id: t.String({ description: "Transaction ID", examples: ["101"] }),
@@ -159,6 +160,7 @@ export const streamerAuditResponseSchema = t.Object({
   total: t.Number({ description: "Total audit events count" }),
   limit: t.Number({ description: "Page limit" }),
   offset: t.Number({ description: "Page offset" }),
+  nextCursor: t.Optional(t.Nullable(t.String({ description: "Keyset pagination cursor" }))),
   logs: t.Array(
     t.Object({
       id: t.String(),

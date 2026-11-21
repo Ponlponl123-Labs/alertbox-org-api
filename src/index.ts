@@ -90,9 +90,13 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
   logger.process(tsflag("info", true, `Received ${signal}, shutting down...`));
 
   try {
-    if (redis && redis.redis) {
-      await redis.redis.quit();
-      logger.process(tsflag("info", true, "Redis connection closed."));
+    if (server) {
+      server.isShuttingDown = true;
+    }
+
+    if (server && server.app) {
+      await server.app.stop();
+      logger.process(tsflag("info", true, "Server stopped."));
     }
 
     try {
@@ -105,14 +109,14 @@ const handleExit = async (signal: NodeJS.Signals): Promise<void> => {
       // ignore
     }
 
+    if (redis && redis.redis) {
+      await redis.redis.quit();
+      logger.process(tsflag("info", true, "Redis connection closed."));
+    }
+
     if (db) {
       await db.destroy();
       logger.process(tsflag("info", true, "Database connection pool destroyed."));
-    }
-
-    if (server && server.app) {
-      await server.app.stop();
-      logger.process(tsflag("info", true, "Server stopped."));
     }
   } catch (error) {
     logger.error(tsflag("error", true, "Error occurred during graceful shutdown:", error));

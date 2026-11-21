@@ -2,6 +2,7 @@ import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { setConnection } from "@/classes/streamer";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
+import { verifyOAuthState } from "@/utils/oauth-state";
 import {
   authorizeIntegrationManage,
   getExistingIntegrationSecret,
@@ -26,9 +27,17 @@ export const connectEndpoint = new Elysia()
       const { orgId, streamerId } = ctx!;
 
       const code = typeof body === "string" ? body : (body as any)?.code;
+      const stateParam = typeof body === "object" && body ? (body as any)?.state : undefined;
       if (!code) {
         set.status = "Bad Request";
         return "Authorization code is required for Streamlabs";
+      }
+      if (stateParam) {
+        const validState = await verifyOAuthState(stateParam, streamerId, orgId, user!.data.id, "streamlabs");
+        if (!validState) {
+          set.status = "Bad Request";
+          return "Invalid or expired OAuth state";
+        }
       }
 
       const existing = await getExistingIntegrationSecret(streamerId, "streamlabs");
@@ -47,6 +56,7 @@ export const connectEndpoint = new Elysia()
           redirect_uri: integrationRedirectUri[ConnectionProvider.STREAMLABS],
           code,
         }),
+        signal: AbortSignal.timeout(8000),
       });
 
       const data = await r.json();

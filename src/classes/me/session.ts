@@ -1,19 +1,38 @@
+import crypto from "node:crypto";
 import { db } from "@/db";
 import { sql } from "kysely";
+import { redis } from "@/core/redis";
 import { nanoid } from "nanoid";
 import { UAParser } from "ua-parser-js";
 import { get_IPGeolocation } from "@/utils/ip";
 import betterConsole, { tsflag } from "ts-better-console";
 import { SessionMetadata } from "@/types/me.types";
 
+export function hashSessionToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
 /**
- * Track a session usage event in the database.
+ * Track a session usage event in the database (throttled via Redis to once per 5 min per IP).
  */
 export async function trackSessionUsage(
   uid: string | bigint | number,
   sessionId: string | bigint | number,
   ip: string,
 ) {
+  if (redis.redis.status === "ready") {
+    try {
+      const acquired = await redis.redis.set(
+        `sess:usage:${String(sessionId)}:${ip}`,
+        "1",
+        "EX",
+        300,
+        "NX",
+      );
+      if (!acquired) return;
+    } catch {}
+  }
+
   return db
     .insertInto("SessionUsage")
     .values({
@@ -143,6 +162,9 @@ export async function createSession(
  * Invalidate a session by setting its disabled timestamp.
  */
 export async function destroySession(token: string): Promise<boolean> {
+  if (redis.redis.status === "ready") {
+    await redis.redis.del(`sess:${hashSessionToken(token)}`).catch(() => {});
+  }
   try {
     const result = await db
       .updateTable("Session")

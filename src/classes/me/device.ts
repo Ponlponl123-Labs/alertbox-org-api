@@ -1,4 +1,6 @@
 import { db } from "@/db";
+import { redis } from "@/core/redis";
+import { hashSessionToken } from "./session";
 
 /**
  * List all active sessions/devices for a user.
@@ -73,6 +75,13 @@ export async function destroyUserDevice(uid: string | bigint, deviceId: string |
     return false;
   }
 
+  const existing = await db
+    .selectFrom("Session")
+    .select(["token"])
+    .where("id", "=", Number(targetDeviceId))
+    .where("userId", "=", Number(targetUid))
+    .executeTakeFirst();
+
   const result = await db
     .updateTable("Session")
     .set({
@@ -82,5 +91,10 @@ export async function destroyUserDevice(uid: string | bigint, deviceId: string |
     .where("userId", "=", Number(targetUid))
     .executeTakeFirst();
 
-  return Number(result.numUpdatedRows ?? 0) > 0;
+  const updated = Number(result.numUpdatedRows ?? 0) > 0;
+  if (updated && existing?.token && redis.redis.status === "ready") {
+    await redis.redis.del(`sess:${hashSessionToken(existing.token)}`).catch(() => {});
+  }
+
+  return updated;
 }

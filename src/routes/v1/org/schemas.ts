@@ -208,6 +208,7 @@ export const orgAuditListResponseSchema = t.Object({
   total: t.Number({ description: "Total matching audit log events count", examples: [42] }),
   limit: t.Number({ description: "Query page limit", examples: [10] }),
   offset: t.Number({ description: "Query page offset", examples: [0] }),
+  nextCursor: t.Optional(t.Nullable(t.String({ description: "Keyset pagination cursor" }))),
   logs: t.Array(orgAuditEntrySchema),
 }, { description: "Paginated organization audit logs" });
 

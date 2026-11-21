@@ -2,6 +2,7 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { authorizeIntegrationManage, integrationParamsSchema } from "../common";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
+import { createOAuthState } from "@/utils/oauth-state";
 import { standardErrors } from "../../schemas";
 
 export const getOauthEndpoint = new Elysia()
@@ -9,7 +10,7 @@ export const getOauthEndpoint = new Elysia()
   .get(
     "/streamlabs/oauth2",
     async ({ getAuthenticatedUser, params, set }) => {
-      const { error, ctx } = await authorizeIntegrationManage(
+      const { error, ctx, user } = await authorizeIntegrationManage(
         getAuthenticatedUser,
         params.orgId,
         params.streamerId,
@@ -19,7 +20,7 @@ export const getOauthEndpoint = new Elysia()
       if (error) return error;
       const { orgId, streamerId } = ctx!;
 
-      const state = `${streamerId}.${orgId}`;
+      const state = await createOAuthState(streamerId, orgId, user!.data.id, "streamlabs");
       return `https://streamlabs.com/api/v2.0/authorize?client_id=${process.env.STREAMLABS_CLIENT_ID}&redirect_uri=${integrationRedirectUri[ConnectionProvider.STREAMLABS]}&scope=donations.create&response_type=code&state=${state}`;
     },
     {

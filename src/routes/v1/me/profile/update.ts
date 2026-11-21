@@ -3,6 +3,7 @@ import { isValidUri } from "@/utils/regex";
 import { orgContext, requireOrgPermission } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
 import { registerURI } from "@/classes/streamer";
+import { extractRequestToken } from "@/utils/bearer-token";
 import { db } from "@/db";
 
 /**
@@ -13,7 +14,7 @@ export const endpoint = new Elysia()
   .use(orgContext)
   .patch(
     "/",
-    async ({ org, headers, body, set }) => {
+    async ({ org, headers, cookie, body, set }) => {
       if (!org) {
         set.status = "Unauthorized";
         return "Unauthorized";
@@ -45,7 +46,7 @@ export const endpoint = new Elysia()
         return "Please retry again after " + cooldown.getTime();
       }
 
-      const token = headers.authorization ? headers.authorization.replace(/^Bearer\s+/i, "") : "";
+      const token = extractRequestToken(headers as any, cookie) || "";
       const success = await registerURI(org.streamerId, parsedUri, token);
 
       if (!success) {

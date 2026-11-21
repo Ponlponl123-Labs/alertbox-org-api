@@ -1,6 +1,7 @@
 import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { setConnection } from "@/classes/streamer";
+import { verifyOAuthState } from "@/utils/oauth-state";
 import {
   authorizeIntegrationManage,
   getExistingIntegrationSecret,
@@ -28,7 +29,15 @@ export const connectEndpoint = new Elysia()
       const wasConfigured = Boolean(existing?.secret);
 
       const code = typeof body === "string" ? body : (body as any)?.code;
+      const stateParam = typeof body === "object" && body ? (body as any)?.state : undefined;
       if (code) {
+        if (stateParam) {
+          const validState = await verifyOAuthState(stateParam, streamerId, orgId, user!.data.id, "stripe");
+          if (!validState) {
+            set.status = "Bad Request";
+            return "Invalid or expired OAuth state";
+          }
+        }
         const apiKey = process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || "";
         const exchange = await fetch("https://api.stripe.com/v1/oauth/token", {
           method: "POST",
@@ -40,6 +49,7 @@ export const connectEndpoint = new Elysia()
             grant_type: "authorization_code",
             code,
           }),
+          signal: AbortSignal.timeout(8000),
         });
 
         const data = await exchange.json();

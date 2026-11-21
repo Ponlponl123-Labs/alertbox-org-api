@@ -6,6 +6,7 @@ import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { AUDIT_CACHE_TTL, AUDIT_CATEGORY_ACTIONS } from "@/consts/audit";
 import { resolveOrgId } from "@/core/org";
+import { formatKeysetCursor, parseKeysetCursor } from "@/utils/pagination";
 import { orgParamsSchema, orgAuditListResponseSchema, standardOrgErrors } from "../schemas";
 
 function safeJsonParse(val: string | null): unknown {
@@ -44,9 +45,11 @@ export const endpoint = new Elysia()
 
       const limit = Math.min(Math.max(Number(query.limit || 10), 1), 100);
       const offset = Math.max(Number(query.offset || 0), 0);
+      const parsedCursor = parseKeysetCursor(query.cursor);
       const orgIdStr = String(orgId);
 
       const isUnfiltered =
+        !parsedCursor &&
         !query.action &&
         !query.targetType &&
         (!query.category || query.category === "ALL") &&
@@ -55,7 +58,7 @@ export const endpoint = new Elysia()
       const timelineKey = `org:${orgIdStr}:audit:timeline`;
       const metaKey = `org:${orgIdStr}:audit:meta`;
 
-      if (isUnfiltered) {
+      if (isUnfiltered && redis.redis.status === "ready") {
         const hasTimeline = await redis.redis.exists(timelineKey);
         if (hasTimeline) {
           const [totalRaw, ids] = await Promise.all([
@@ -140,12 +143,27 @@ export const endpoint = new Elysia()
         logsQuery = logsQuery.where(searchFilter);
       }
 
+      if (parsedCursor) {
+        logsQuery = logsQuery.where((eb) =>
+          eb.or([
+            eb("OrganizationAuditLog.createdAt", "<", parsedCursor.createdAt),
+            eb.and([
+              eb("OrganizationAuditLog.createdAt", "=", parsedCursor.createdAt),
+              eb("OrganizationAuditLog.id", "<", parsedCursor.id),
+            ]),
+          ]),
+        );
+      }
+
       const [countRow, logs] = await Promise.all([
-        countQuery.executeTakeFirst(),
-        logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").limit(limit).offset(offset).execute(),
+        parsedCursor ? Promise.resolve(null) : countQuery.executeTakeFirst(),
+        (parsedCursor
+          ? logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").orderBy("OrganizationAuditLog.id", "desc").limit(limit)
+          : logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").orderBy("OrganizationAuditLog.id", "desc").limit(limit).offset(offset)
+        ).execute(),
       ]);
 
-      const total = Number(countRow?.count ?? 0);
+      const total = countRow ? Number(countRow.count ?? 0) : logs.length;
       const formattedLogs = logs.map((l) => ({
         id: String(l.id),
         orgId: String(l.orgId),
@@ -164,7 +182,7 @@ export const endpoint = new Elysia()
       }));
 
       // Warm Redis cache on miss if unfiltered
-      if (isUnfiltered && formattedLogs.length > 0) {
+      if (isUnfiltered && formattedLogs.length > 0 && redis.redis.status === "ready") {
         const pipe = redis.redis.pipeline();
         for (const item of formattedLogs) {
           pipe.hset(entriesKey, item.id, JSON.stringify(item));
@@ -177,10 +195,14 @@ export const endpoint = new Elysia()
         pipe.exec().catch(() => {});
       }
 
+      const lastLog = logs.length === limit ? logs[logs.length - 1] : null;
+      const nextCursor = lastLog ? formatKeysetCursor(lastLog.createdAt, lastLog.id) : null;
+
       return {
         total,
         limit,
         offset,
+        nextCursor,
         logs: formattedLogs,
       };
     },
@@ -198,6 +220,7 @@ export const endpoint = new Elysia()
         targetType: t.Optional(t.Union([t.Literal("MEMBER"), t.Literal("STREAMER"), t.Literal("ORGANIZATION")], { description: "Filter by entity target type" })),
         limit: t.Optional(t.String({ description: "Page limit (default: 10, max: 100)" })),
         offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
+        cursor: t.Optional(t.String({ description: "Keyset pagination cursor (createdAt_id)" })),
       }),
       response: {
         200: orgAuditListResponseSchema,

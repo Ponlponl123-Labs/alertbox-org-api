@@ -7,6 +7,7 @@ import {
   logConnectionAudit,
   integrationParamsSchema,
   kofiConnectSchema,
+  resolvePreservedSecret,
 } from "../common";
 import { okResponseSchema, standardErrors } from "../../schemas";
 
@@ -26,8 +27,12 @@ export const connectEndpoint = new Elysia()
 
       const existing = await getExistingIntegrationSecret(streamerId, "kofi");
       const wasConfigured = Boolean(existing?.secret);
+      const resolvedSecret = resolvePreservedSecret(body?.secret, existing?.secret);
 
-      await setConnection(streamerId, orgId, "kofi", body as any);
+      await setConnection(streamerId, orgId, "kofi", {
+        ...(body as any),
+        ...(resolvedSecret !== undefined ? { secret: resolvedSecret } : {}),
+      });
 
       await logConnectionAudit(orgId, user!.data.id, streamerId, "kofi", wasConfigured, {
         username: body.username,

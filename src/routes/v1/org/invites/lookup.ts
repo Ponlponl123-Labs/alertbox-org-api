@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
+import { checkRateLimit } from "@/utils/rate-limit";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -11,6 +12,12 @@ export const endpoint = new Elysia()
     "/:orgId/invites/lookup",
     async ({ getAuthenticatedUser, params, body, set }) => {
       const user = await getAuthenticatedUser();
+      const rl = await checkRateLimit(`invites:lookup:${String(user.data.id)}`, 20, 60);
+      if (!rl.allowed) {
+        set.status = 429;
+        set.headers["Retry-After"] = String(rl.retryAfterSec);
+        return "Too many lookup requests. Please slow down.";
+      }
       const orgId = await resolveOrgId(params.orgId);
       if (!orgId) {
         set.status = "Bad Request";

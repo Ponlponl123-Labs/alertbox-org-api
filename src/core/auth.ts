@@ -1,8 +1,11 @@
 import Elysia from "elysia";
 import { Me } from "@/classes/me";
-import { isBearerToken } from "@/utils/bearer-token";
+import { extractRequestTokenWithSource } from "@/utils/bearer-token";
+import { isAllowedOrigin } from "@/utils/security";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
+
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
  * Error thrown when a request lacks valid authentication credentials.
@@ -30,25 +33,30 @@ export class BadRequestError extends Error {
  */
 export const auth = new Elysia({ name: "auth" })
   .use(ip({ headersFirst: true }))
-  .derive({ as: "global" }, ({ headers, ip }) => {
+  .derive({ as: "global" }, ({ headers, cookie, request, ip }) => {
     return {
       /**
-       * Validates the Authorization header and retrieves the authenticated Me instance.
+       * Validates Bearer header or HttpOnly USRSS cookie and retrieves the authenticated Me instance.
        * 
        * @param select - Optional selection fields for the user query.
-       * @throws {BadRequestError} If the Authorization header is missing or invalid.
-       * @throws {UnauthorizedError} If the session token is invalid or expired.
+       * @throws {BadRequestError} If authentication credentials are missing or invalid.
+       * @throws {UnauthorizedError} If the session token is invalid, expired, or fails CSRF origin check.
        */
       async getAuthenticatedUser(
         select?: any,
       ): Promise<Me & { data: any }> {
-        const authHeader = headers.authorization;
-        if (!authHeader) {
-          throw new BadRequestError("Bad Request");
-        }
-        const token = isBearerToken(authHeader);
+        const { token, source } = extractRequestTokenWithSource(headers as any, cookie);
         if (!token) {
           throw new BadRequestError("Bad Request");
+        }
+        if (source === "cookie" && MUTATION_METHODS.has(request.method)) {
+          const sourceOrigin = headers.origin || headers.referer;
+          if (
+            headers["sec-fetch-site"] === "cross-site" ||
+            (sourceOrigin && !isAllowedOrigin(sourceOrigin))
+          ) {
+            throw new UnauthorizedError("Invalid origin");
+          }
         }
         const user = await new Me().use(token, ip, select ?? basicUserSelect);
         if (!user || !user.data) {

@@ -1,11 +1,12 @@
 import Elysia, { t } from "elysia";
-import { isBearerToken } from "@/utils/bearer-token";
+import { extractRequestToken } from "@/utils/bearer-token";
 import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { isAllowedOrigin } from "@/utils/security";
 import { authorizeStreamer } from "@/core/org";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { integrationParamsSchema } from "../common";
+import { consumeWsTicket } from "@/routes/v1/auth/ws-ticket";
 
 export const wsEndpoint = new Elysia()
   .use(ip({ headersFirst: true }))
@@ -17,49 +18,59 @@ export const wsEndpoint = new Elysia()
       description: "Subscribes to live Streamlabs relay events for the streamer channel.",
     },
     query: t.Object({
+      ticket: t.Optional(t.String({ description: "Single-use 15s WebSocket ticket" })),
       token: t.Optional(t.String({ description: "Session bearer token" })),
     }),
     maxPayloadLength: 16 * 1024,
     idleTimeout: 60,
     async open(ws) {
       try {
-        const origin = (ws.data.headers as Record<string, string | undefined>)["origin"];
+        const hdrs = ws.data.headers as Record<string, string | undefined>;
+        const origin = hdrs["origin"];
         if (origin && !isAllowedOrigin(origin)) {
           ws.send(JSON.stringify({ type: "error", code: "FORBIDDEN_ORIGIN", message: "Forbidden origin" }));
-          ws.close(1008, "Forbidden origin");
+          ws.close(4003, "Forbidden origin");
           return;
         }
 
-        const authHeader = (ws.data.headers as Record<string, string | undefined>)["authorization"];
-        const rawToken = ws.data.query.token || (authHeader ? isBearerToken(authHeader) : null);
-        if (!rawToken) {
-          ws.send(JSON.stringify({ type: "error", code: "UNAUTHORIZED", message: "Token is required" }));
-          ws.close(1008, "Token required");
-          return;
-        }
+        let userId: bigint | null = null;
+        const ticketParam = ws.data.query.ticket;
+        if (ticketParam) {
+          const ticketAuth = await consumeWsTicket(ticketParam);
+          if (!ticketAuth) {
+            ws.send(JSON.stringify({ type: "error", code: "UNAUTHORIZED", message: "Invalid or expired ticket" }));
+            ws.close(4001, "Invalid or expired ticket");
+            return;
+          }
+          userId = ticketAuth.userId;
+        } else {
+          const headerToken = extractRequestToken(hdrs);
+          const token = headerToken || ws.data.query.token || null;
+          if (!token) {
+            ws.send(JSON.stringify({ type: "error", code: "UNAUTHORIZED", message: "Token is required" }));
+            ws.close(4001, "Token required");
+            return;
+          }
+          if (typeof token !== "string" || !/^[a-zA-Z0-9_.-]+$/.test(token)) {
+            ws.send(JSON.stringify({ type: "error", code: "INVALID_TOKEN", message: "Invalid token format" }));
+            ws.close(4001, "Invalid token format");
+            return;
+          }
 
-        const token =
-          typeof rawToken === "string" && rawToken.startsWith("Bearer ")
-            ? isBearerToken(rawToken)
-            : rawToken;
-        if (!token || typeof token !== "string" || !/^[a-zA-Z0-9_.-]+$/.test(token)) {
-          ws.send(JSON.stringify({ type: "error", code: "INVALID_TOKEN", message: "Invalid token format" }));
-          ws.close(1008, "Invalid token format");
-          return;
-        }
-
-        const user = await new Me({ cache: true }).use(token, ws.data.ip, { id: true });
-        if (!user || !user.data) {
-          ws.send(JSON.stringify({ type: "error", code: "UNAUTHORIZED", message: "Unauthorized token" }));
-          ws.close(1008, "Unauthorized");
-          return;
+          const user = await new Me({ cache: true }).use(token, ws.data.ip, { id: true });
+          if (!user || !user.data) {
+            ws.send(JSON.stringify({ type: "error", code: "UNAUTHORIZED", message: "Unauthorized token" }));
+            ws.close(4001, "Unauthorized");
+            return;
+          }
+          userId = BigInt(user.data.id);
         }
 
         const dummySet = { status: 200 } as any;
         const authRes = await authorizeStreamer(
           ws.data.params.orgId,
           ws.data.params.streamerId,
-          user.data.id,
+          userId,
           {
             requiredOrgPerm: OrgPerm.INTEGRATION_VIEW,
             requiredStreamerPerm: StreamerPerm.STREAMER_VIEW,
@@ -70,7 +81,7 @@ export const wsEndpoint = new Elysia()
 
         if (typeof authRes === "string") {
           ws.send(JSON.stringify({ type: "error", code: "FORBIDDEN", message: authRes }));
-          ws.close(1008, authRes);
+          ws.close(4003, authRes);
           return;
         }
 

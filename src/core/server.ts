@@ -22,6 +22,7 @@ if (!("toJSON" in BigInt.prototype)) {
 class Server {
   public app: Elysia;
   public port: number;
+  public isShuttingDown = false;
 
   constructor(port: number = 3000) {
     this.app = new Elysia({ serve: { reusePort: false } });
@@ -124,7 +125,8 @@ class Server {
     if (!isProduction && fs.existsSync("./public")) {
       this.app.use(staticPlugin());
     }
-    this.app.use(openapi({
+    if (process.env.DISABLE_OPENAPI !== "true") {
+      this.app.use(openapi({
       provider: null,
       exclude: {
         paths: [/^\/public/, /^\/api/],
@@ -161,6 +163,7 @@ class Server {
         ],
       },
     }));
+    }
     this.port = port;
     this.setupEvents();
     this.routes();
@@ -208,6 +211,32 @@ class Server {
           200: t.Object({
             status: t.String({ description: "Liveness status", examples: ["ok"] }),
           }, { description: "Service health status" }),
+        },
+      },
+    );
+
+    this.app.get(
+      "/ready",
+      ({ set }) => {
+        if (this.isShuttingDown) {
+          set.status = 503;
+          return { status: "shutting_down" };
+        }
+        return { status: "ready" };
+      },
+      {
+        detail: {
+          tags: ["System"],
+          summary: "System readiness probe",
+          description: "Returns 200 OK when ready to serve traffic, or 503 during graceful SIGTERM drain.",
+        },
+        response: {
+          200: t.Object({
+            status: t.String({ examples: ["ready"] }),
+          }),
+          503: t.Object({
+            status: t.String({ examples: ["shutting_down"] }),
+          }),
         },
       },
     );

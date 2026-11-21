@@ -11,6 +11,7 @@ import type { BmacWebhookParams, WebhookResponse } from "@/types/webhook.types";
 import { WebhookDispatcher } from "./dispatcher";
 
 let cachedIntegrations: BmacIntegrationRecord[] | null = null;
+let cachedBySecret: Map<string, BmacIntegrationRecord> | null = null;
 let lastCacheSync = 0;
 const CACHE_TTL_MS = 60_000;
 
@@ -45,12 +46,18 @@ export class BmacWebhook {
       .execute();
 
     cachedIntegrations = integrations as any;
+    const nextMap = new Map<string, BmacIntegrationRecord>();
+    for (const rec of cachedIntegrations!) {
+      if (rec.bmacSecret) nextMap.set(rec.bmacSecret, rec);
+    }
+    cachedBySecret = nextMap;
     lastCacheSync = now;
-    return integrations as any;
+    return cachedIntegrations!;
   }
 
   public static invalidateIntegrations(): void {
     cachedIntegrations = null;
+    cachedBySecret = null;
     lastCacheSync = 0;
   }
 
@@ -78,8 +85,11 @@ export class BmacWebhook {
           ? authHeader.slice(7)
           : authHeader;
 
+        const mapCandidate = cachedBySecret?.get(token) ?? null;
         matchedIntegration =
-          integrations.find((i) => timingSafeEqualString(i.bmacSecret, token)) ?? null;
+          mapCandidate && timingSafeEqualString(mapCandidate.bmacSecret, token)
+            ? mapCandidate
+            : null;
         if (!matchedIntegration) {
           const dbMatched = await db
             .selectFrom("Integration as bmac")

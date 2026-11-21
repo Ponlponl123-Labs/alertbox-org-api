@@ -1,9 +1,9 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
-import { hasPermission } from "@/utils/rbac";
-import { OrgPerm } from "@/consts/permission";
-import { resolveOrgId, resolveStreamerId } from "@/core/org";
+import { OrgPerm, StreamerPerm } from "@/consts/permission";
+import { authorizeStreamer } from "@/core/org";
+import { formatKeysetCursor, parseKeysetCursor } from "@/utils/pagination";
 import {
   streamerParamsSchema,
   streamerAuditResponseSchema,
@@ -25,28 +25,21 @@ export const endpoint = new Elysia()
     "/:orgId/streamers/:streamerId/audit",
     async ({ getAuthenticatedUser, params, query, set }) => {
       const user = await getAuthenticatedUser();
-      const orgId = await resolveOrgId(params.orgId);
-      if (!orgId) {
-        set.status = "Bad Request";
-        return "Invalid organization ID";
+      const authRes = await authorizeStreamer(
+        params.orgId,
+        params.streamerId,
+        user.data.id,
+        {
+          requiredOrgPerm: OrgPerm.STREAMER_VIEW,
+          requiredStreamerPerm: StreamerPerm.STREAMER_VIEW,
+          actionDescription: "view streamer audit logs",
+        },
+        set,
+      );
+      if (typeof authRes === "string") {
+        return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
       }
-      const streamerId = await resolveStreamerId(orgId, params.streamerId);
-      if (!streamerId) {
-        set.status = "Bad Request";
-        return "Invalid streamer ID";
-      }
-
-      const callerMember = await db
-        .selectFrom("OrganizationMember")
-        .select(["permissions"])
-        .where("orgId", "=", Number(orgId))
-        .where("userId", "=", Number(user.data.id))
-        .executeTakeFirst();
-
-      if (!callerMember || !hasPermission(BigInt(callerMember.permissions), OrgPerm.STREAMER_VIEW)) {
-        set.status = "Forbidden";
-        return "Insufficient permissions to view streamer audit logs";
-      }
+      const { orgId, streamerId } = authRes;
 
       const limit = Math.min(Math.max(Number(query.limit || 10), 1), 100);
       const offset = Math.max(Number(query.offset || 0), 0);
@@ -84,17 +77,37 @@ export const endpoint = new Elysia()
         logsQuery = logsQuery.where("OrganizationAuditLog.action", "=", query.action);
       }
 
+      const parsedCursor = parseKeysetCursor(query.cursor);
+
+      if (parsedCursor) {
+        logsQuery = logsQuery.where((eb) =>
+          eb.or([
+            eb("OrganizationAuditLog.createdAt", "<", parsedCursor.createdAt),
+            eb.and([
+              eb("OrganizationAuditLog.createdAt", "=", parsedCursor.createdAt),
+              eb("OrganizationAuditLog.id", "<", parsedCursor.id),
+            ]),
+          ]),
+        );
+      }
+
       const [countRow, logs] = await Promise.all([
-        countQuery.executeTakeFirst(),
-        logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").limit(limit).offset(offset).execute(),
+        parsedCursor ? Promise.resolve(null) : countQuery.executeTakeFirst(),
+        (parsedCursor
+          ? logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").orderBy("OrganizationAuditLog.id", "desc").limit(limit)
+          : logsQuery.orderBy("OrganizationAuditLog.createdAt", "desc").orderBy("OrganizationAuditLog.id", "desc").limit(limit).offset(offset)
+        ).execute(),
       ]);
 
-      const total = Number(countRow?.count ?? 0);
+      const total = countRow ? Number(countRow.count ?? 0) : logs.length;
+      const lastLog = logs.length === limit ? logs[logs.length - 1] : null;
+      const nextCursor = lastLog ? formatKeysetCursor(lastLog.createdAt, lastLog.id) : null;
 
       return {
         total,
         limit,
         offset,
+        nextCursor,
         logs: logs.map((l) => ({
           id: String(l.id),
           orgId: String(l.orgId),
@@ -124,6 +137,7 @@ export const endpoint = new Elysia()
         action: t.Optional(t.String({ description: "Filter by specific audit action key (e.g. STREAMER_UPDATED)" })),
         limit: t.Optional(t.String({ description: "Number of records per page (default: 10, max: 100)" })),
         offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
+        cursor: t.Optional(t.String({ description: "Keyset pagination cursor (createdAt_id)" })),
       }),
       response: {
         200: streamerAuditResponseSchema,

@@ -259,7 +259,33 @@ export class WebhookDispatcher {
   public static async processDonation(
     payload: DonationEventPayload,
   ): Promise<{ duplicate: boolean }> {
+    let redisIdempClaimed = false;
     if (!payload.isTest) {
+      if (redis.redis.status === "ready") {
+        try {
+          const nx = await redis.redis.set(
+            `webhook:idemp:${payload.provider}:${payload.providerTxId}`,
+            "1",
+            "EX",
+            86400,
+            "NX",
+          );
+          if (!nx) {
+            logDev(
+              tsflag(
+                "info",
+                true,
+                s(`Duplicate event ignored (Redis NX) for ${payload.provider} transaction ID: ${payload.providerTxId}`, {
+                  color: "yellow",
+                }),
+              ),
+            );
+            return { duplicate: true };
+          }
+          redisIdempClaimed = true;
+        } catch {}
+      }
+
       const isDuplicate = await this.isDuplicateTx(
         payload.provider,
         payload.providerTxId,
@@ -289,6 +315,26 @@ export class WebhookDispatcher {
       ),
     );
 
+    const alertPayload = {
+      type: payload.type,
+      name: payload.senderName,
+      amount: payload.amount,
+      currency: payload.currency,
+      message: payload.message ?? null,
+    };
+
+    if (payload.isTest || redisIdempClaimed) {
+      this.relayStreamlabs(payload);
+      const [recorded] = await Promise.all([
+        this.recordTransaction(payload),
+        this.dispatchAlerts(payload.streamerId, alertPayload),
+      ]);
+      if (!recorded && !payload.isTest) {
+        return { duplicate: true };
+      }
+      return { duplicate: false };
+    }
+
     const recorded = await this.recordTransaction(payload);
     if (!recorded) {
       logDev(
@@ -303,13 +349,7 @@ export class WebhookDispatcher {
       return { duplicate: true };
     }
     this.relayStreamlabs(payload);
-    await this.dispatchAlerts(payload.streamerId, {
-      type: payload.type,
-      name: payload.senderName,
-      amount: payload.amount,
-      currency: payload.currency,
-      message: payload.message ?? null,
-    });
+    await this.dispatchAlerts(payload.streamerId, alertPayload);
 
     return { duplicate: false };
   }

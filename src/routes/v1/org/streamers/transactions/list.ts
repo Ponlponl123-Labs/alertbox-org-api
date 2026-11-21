@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
+import { formatKeysetCursor, parseKeysetCursor } from "@/utils/pagination";
 import {
   streamerParamsSchema,
   streamerTransactionsResponseSchema,
@@ -83,18 +84,48 @@ export const endpoint = new Elysia()
 
       const orderByField = query.sortBy === "amount" ? "amount" : "createdAt";
       const orderDirection = query.sortOrder === "asc" ? "asc" : "desc";
+      const parsedCursor = orderByField === "createdAt" ? parseKeysetCursor(query.cursor) : null;
+
+      if (parsedCursor) {
+        itemsQuery = itemsQuery.where((eb) =>
+          orderDirection === "desc"
+            ? eb.or([
+                eb("createdAt", "<", parsedCursor.createdAt),
+                eb.and([
+                  eb("createdAt", "=", parsedCursor.createdAt),
+                  eb("id", "<", parsedCursor.id),
+                ]),
+              ])
+            : eb.or([
+                eb("createdAt", ">", parsedCursor.createdAt),
+                eb.and([
+                  eb("createdAt", "=", parsedCursor.createdAt),
+                  eb("id", ">", parsedCursor.id),
+                ]),
+              ]),
+        );
+      }
 
       const [countRow, items] = await Promise.all([
-        countQuery.executeTakeFirst(),
-        itemsQuery.orderBy(orderByField, orderDirection).limit(limit).offset(offset).execute(),
+        parsedCursor ? Promise.resolve(null) : countQuery.executeTakeFirst(),
+        (parsedCursor
+          ? itemsQuery.orderBy(orderByField, orderDirection).orderBy("id", orderDirection).limit(limit)
+          : itemsQuery.orderBy(orderByField, orderDirection).orderBy("id", orderDirection).limit(limit).offset(offset)
+        ).execute(),
       ]);
 
-      const total = Number(countRow?.count ?? 0);
+      const total = countRow ? Number(countRow.count ?? 0) : items.length;
+      const lastItem = items.length === limit ? items[items.length - 1] : null;
+      const nextCursor =
+        lastItem && orderByField === "createdAt"
+          ? formatKeysetCursor(lastItem.createdAt, lastItem.id)
+          : null;
 
       return {
         total,
         limit,
         offset,
+        nextCursor,
         transactions: items.map((tx) => ({
           id: String(tx.id),
           provider: tx.provider,
@@ -126,6 +157,7 @@ export const endpoint = new Elysia()
         sortOrder: t.Optional(t.String({ description: "Sort direction: 'asc' or 'desc'", examples: ["desc"] })),
         limit: t.Optional(t.String({ description: "Page limit (default: 25, max: 100)" })),
         offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
+        cursor: t.Optional(t.String({ description: "Keyset pagination cursor (createdAt_id)" })),
       }),
       response: {
         200: streamerTransactionsResponseSchema,

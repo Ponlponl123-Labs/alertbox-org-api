@@ -23,9 +23,12 @@ const createIntegrationRoutes = () =>
     .use(toggleEndpoint)
     .use(disconnectEndpoint);
 
-export const endpoint = new Elysia().group(
-  "/:orgId/streamers/:streamerId/integration",
-  (app) => app.use(createIntegrationRoutes()),
-);
+export const endpoint = new Elysia()
+  .group("/:orgId/streamers/:streamerId/integration", (app) =>
+    app.use(createIntegrationRoutes()),
+  )
+  .group("/:orgId/streamers/:streamerId/connections", (app) =>
+    app.use(stripeEndpoint),
+  );
 
 export default endpoint;

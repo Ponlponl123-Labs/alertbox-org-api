@@ -4,10 +4,18 @@ import { Me } from "@/classes/me";
 import { ip } from "elysia-ip";
 import { exchange_code, get_me, revoke_access_token } from "@/utils/discord";
 import { isAllowedOrigin } from "@/utils/security";
+import { buildSessionCookieHeader } from "@/utils/bearer-token";
+import { checkRateLimit } from "@/utils/rate-limit";
 
 const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
   "/discord",
   async ({ body, set, server, request, ip }) => {
+    const rl = await checkRateLimit(`auth:discord:${ip || "unknown"}`, 20, 60);
+    if (!rl.allowed) {
+      set.status = 429;
+      set.headers["Retry-After"] = String(rl.retryAfterSec);
+      return "Too many login attempts. Please wait and try again.";
+    }
     const redirectUrl = (() => {
       try {
         return new URL(body.redirect_uri);
@@ -64,6 +72,8 @@ const endpoint = new Elysia().use(ip({ headersFirst: true })).post(
       return "User have corrupted data";
     }
 
+    set.headers["Set-Cookie"] = buildSessionCookieHeader(session);
+    set.headers["Cache-Control"] = "no-store";
     void revoke_access_token(access_token.token);
     return session;
   },

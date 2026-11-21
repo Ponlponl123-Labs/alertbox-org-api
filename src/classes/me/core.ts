@@ -4,7 +4,7 @@ import { redis } from "@/core/redis";
 import { basicUserSelect, pureUserSelect } from "@/consts/session";
 import { day } from "@/consts/time";
 import { MeOptions, SessionMetadata } from "@/types/me.types";
-import { createSession, destroySession, trackSessionUsage } from "./session";
+import { createSession, destroySession, hashSessionToken, trackSessionUsage } from "./session";
 import { createAccount, isExist, deleteAccount, ensureUserWidgets } from "./account";
 import { getCachedUser, setCachedUser, filterUserSelection } from "./cache";
 import { listUserDevices, destroyUserDevice } from "./device";
@@ -104,7 +104,11 @@ export class Me<T = any> {
     for (const w of widgets) {
       const key = String(w.streamerId);
       const list = widgetMap.get(key) || [];
-      list.push(w);
+      list.push({
+        ...w,
+        id: String(w.id),
+        streamerId: key,
+      });
       widgetMap.set(key, list);
     }
 
@@ -211,8 +215,18 @@ export class Me<T = any> {
         const ffp = byType.get("FEELFREEPAY");
         const streamlabs = byType.get("STREAMLABS");
 
+        const canViewWidgetToken =
+          isOwnerOrAdmin ||
+          hasOrgManageWidgets ||
+          (perms & StreamerPerm.STREAMER_WIDGET_MANAGE) !== 0;
+
         return {
           ...streamerRest,
+          id: sId,
+          orgId: String(streamerRest.orgId ?? m.orgId),
+          widgets: canViewWidgetToken
+            ? (streamerRest.widgets || [])
+            : (streamerRest.widgets || []).map((w: any) => ({ ...w, token: "" })),
           permissions: perms,
           isAssigned: isOwnerOrAdmin || assignmentsMap.has(sId),
           integration: intList.length > 0
@@ -319,10 +333,46 @@ export class Me<T = any> {
       return this.load(tokenAuth.userId, select);
     }
 
+    const strictIp = process.env.STRICT_SESSION_IP === "true";
+    const isLoopback = (addr: string) =>
+      addr === "127.0.0.1" ||
+      addr === "::1" ||
+      addr === "::ffff:127.0.0.1" ||
+      addr === "localhost";
+
+    const sessCacheKey = `sess:${hashSessionToken(session)}`;
+    if (this.options.cache && redis.redis.status === "ready") {
+      try {
+        const cachedRaw = await redis.redis.get(sessCacheKey);
+        if (cachedRaw) {
+          const cachedSess = JSON.parse(cachedRaw) as {
+            sessionId: string;
+            userId: string;
+            ipAddress: string;
+            expiresAt: number;
+          };
+          if (cachedSess.expiresAt > Date.now()) {
+            const isIpMatch =
+              cachedSess.ipAddress === ip ||
+              (isLoopback(cachedSess.ipAddress) && isLoopback(ip));
+            if (strictIp && !isIpMatch) {
+              void destroySession(session);
+              return false;
+            }
+            void trackSessionUsage(cachedSess.userId, cachedSess.sessionId, ip);
+            return this.load(cachedSess.userId, select);
+          }
+          await redis.redis.del(sessCacheKey).catch(() => {});
+        }
+      } catch {}
+    }
+
     const session_info = await db
       .selectFrom("Session")
       .innerJoin("User", "User.id", "Session.userId")
       .where("Session.token", "=", session)
+      .where("User.disabledAt", "is", null)
+      .where("User.deletedAt", "is", null)
       .select([
         "Session.id as sessionId",
         "Session.userId",
@@ -344,22 +394,33 @@ export class Me<T = any> {
       return false;
     }
 
-    // Track session usage in background
-    void trackSessionUsage(session_info.userId, session_info.sessionId, ip);
-
-    const isLoopback = (addr: string) =>
-      addr === "127.0.0.1" ||
-      addr === "::1" ||
-      addr === "::ffff:127.0.0.1" ||
-      addr === "localhost";
-
     const isIpMatch =
       session_info.ipAddress === ip ||
       (isLoopback(session_info.ipAddress) && isLoopback(ip));
 
-    if (!isIpMatch) {
+    if (strictIp && !isIpMatch) {
       void destroySession(session);
       return false;
+    }
+
+    // Track session usage in background
+    void trackSessionUsage(session_info.userId, session_info.sessionId, ip);
+
+    if (this.options.cache && redis.redis.status === "ready") {
+      const expMs = new Date(session_info.expiresAt).getTime();
+      const ttlSec = Math.min(300, Math.max(1, Math.floor((expMs - Date.now()) / 1000)));
+      redis.redis
+        .setex(
+          sessCacheKey,
+          ttlSec,
+          JSON.stringify({
+            sessionId: String(session_info.sessionId),
+            userId: String(session_info.userId),
+            ipAddress: session_info.ipAddress,
+            expiresAt: expMs,
+          }),
+        )
+        .catch(() => {});
     }
 
     return this.load(session_info.userId, select);

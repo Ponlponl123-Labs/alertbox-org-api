@@ -82,72 +82,38 @@ export const endpoint = new Elysia()
 
       const timeframe = (query.timeframe as "7d" | "30d" | "90d" | "1y") || "30d";
       const cacheKey = `org:${String(orgId)}:transactions:analytics:${timeframe}`;
-      const cached = await redis.redis.get(cacheKey);
-      if (cached) {
-        try {
-          return JSON.parse(cached) as OrgAnalyticsResponse;
-        } catch {
-          await redis.redis.del(cacheKey);
+      if (redis.redis.status === "ready") {
+        const cached = await redis.redis.get(cacheKey).catch(() => null);
+        if (cached) {
+          try {
+            return JSON.parse(cached) as OrgAnalyticsResponse;
+          } catch {
+            await redis.redis.del(cacheKey).catch(() => {});
+          }
         }
       }
 
       const now = new Date();
       const daysCount = timeframe === "7d" ? 7 : timeframe === "90d" ? 90 : timeframe === "1y" ? 365 : 30;
       const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      const startDate = new Date(todayUtc.getTime() - (daysCount - 1) * 86400000);
+      const startMs = todayUtc.getTime() - (daysCount - 1) * 86400000;
+      const startDate = new Date(startMs);
 
-      const [currencyRes, gatewayRes, streamerRes, timelineRes, activeStreamersRow] = await Promise.all([
-        sql<{ currency: string; amount: number | string; count: number | string }>`
-          SELECT currency,
-                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
-                 COUNT(*) as count
+      const [txRes, activeStreamersRow] = await Promise.all([
+        sql<{
+          createdAt: Date | string;
+          isTest: number;
+          streamerId: number | string;
+          provider: string;
+          currency: string;
+          amount: number | string | bigint;
+        }>`
+          SELECT createdAt, isTest, streamerId, provider, currency, amount
           FROM TransactionLog
           WHERE orgId = ${Number(orgId)}
+            AND createdAt >= ${startDate}
             AND status != 'FAILED'
             AND isDeleted IS NULL
-            AND createdAt >= ${startDate}
-          GROUP BY currency
-          ORDER BY amount DESC
-        `.execute(db),
-        sql<{ provider: string; currency: string; amount: number | string; count: number | string }>`
-          SELECT provider,
-                 currency,
-                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
-                 COUNT(*) as count
-          FROM TransactionLog
-          WHERE orgId = ${Number(orgId)}
-            AND status != 'FAILED'
-            AND isDeleted IS NULL
-            AND createdAt >= ${startDate}
-          GROUP BY provider, currency
-          ORDER BY count DESC
-        `.execute(db),
-        sql<{ streamerId: number | string; amount: number | string; count: number | string }>`
-          SELECT streamerId,
-                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
-                 COUNT(*) as count
-          FROM TransactionLog
-          WHERE orgId = ${Number(orgId)}
-            AND status != 'FAILED'
-            AND isDeleted IS NULL
-            AND createdAt >= ${startDate}
-          GROUP BY streamerId
-          ORDER BY amount DESC
-          LIMIT 10
-        `.execute(db),
-        sql<{ date: string; amount: number | string; count: number | string; realCount: number | string; testCount: number | string }>`
-          SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') as date,
-                 CAST(SUM(CASE WHEN isTest = 0 THEN amount ELSE 0 END) AS UNSIGNED) as amount,
-                 COUNT(*) as count,
-                 CAST(SUM(CASE WHEN isTest = 1 THEN 1 ELSE 0 END) AS UNSIGNED) as testCount,
-                 CAST(SUM(CASE WHEN isTest = 0 THEN 1 ELSE 0 END) AS UNSIGNED) as realCount
-          FROM TransactionLog
-          WHERE orgId = ${Number(orgId)}
-            AND status != 'FAILED'
-            AND isDeleted IS NULL
-            AND createdAt >= ${startDate}
-          GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
-          ORDER BY date ASC
         `.execute(db),
         db.selectFrom("Streamer")
           .select((eb) => eb.fn.count("id").as("count"))
@@ -156,91 +122,138 @@ export const endpoint = new Elysia()
           .executeTakeFirst(),
       ]);
 
-      const currencyRows = currencyRes.rows;
-      const gatewayRows = gatewayRes.rows;
-      const streamerRows = streamerRes.rows;
-      const timelineRows = timelineRes.rows;
       const activeStreamersCount = Number(activeStreamersRow?.count ?? 0);
 
-      const totalTransactions = currencyRows.reduce((acc, r) => acc + Number(r.count), 0);
-      const totalAmountCents = currencyRows.reduce((acc, r) => acc + Number(r.amount), 0);
-      const totalAmount = totalAmountCents / 100;
-      const primaryCurrency = currencyRows[0]?.currency || "THB";
+      const currencyMap = new Map<string, { amountMinor: bigint; count: number }>();
+      const gatewayMap = new Map<string, { provider: string; currency: string; amountMinor: bigint; count: number }>();
+      const streamerAggMap = new Map<string, { amountMinor: bigint; count: number }>();
 
-      const currencies = currencyRows.map((r) => ({
-        currency: r.currency,
-        amount: Number(r.amount) / 100,
-        count: Number(r.count),
-        percentage: totalAmountCents > 0 ? Math.round((Number(r.amount) / totalAmountCents) * 100) : 0,
-      }));
+      const bucketAmountMinor = new BigInt64Array(daysCount);
+      const bucketCount = new Int32Array(daysCount);
+      const bucketReal = new Int32Array(daysCount);
+      const bucketTest = new Int32Array(daysCount);
 
-      const totalGatewayVolume = gatewayRows.reduce((acc, r) => acc + Number(r.count), 0);
-      const gateways = gatewayRows.map((r) => ({
-        provider: r.provider,
-        currency: r.currency,
-        amount: Number(r.amount) / 100,
-        count: Number(r.count),
-        percentage: totalGatewayVolume > 0 ? Math.round((Number(r.count) / totalGatewayVolume) * 100) : 0,
-      }));
+      let totalTransactions = 0;
+      let totalAmountMinor = 0n;
+      let realTxTotal = 0;
+      let testTxTotal = 0;
 
-      const streamerIds = streamerRows.map((r) => r.streamerId);
+      for (const row of txRes.rows) {
+        totalTransactions++;
+        const isTest = Number(row.isTest) === 1;
+        const rawAmt = typeof row.amount === "bigint" ? row.amount : BigInt(Math.round(Number(row.amount) || 0));
+        const realAmt = isTest ? 0n : rawAmt;
+
+        if (isTest) testTxTotal++;
+        else {
+          realTxTotal++;
+          totalAmountMinor += realAmt;
+        }
+
+        const cur = row.currency || "THB";
+        const cEntry = currencyMap.get(cur);
+        if (cEntry) {
+          cEntry.amountMinor += realAmt;
+          cEntry.count += 1;
+        } else {
+          currencyMap.set(cur, { amountMinor: realAmt, count: 1 });
+        }
+
+        const gwKey = `${row.provider}\0${cur}`;
+        const gEntry = gatewayMap.get(gwKey);
+        if (gEntry) {
+          gEntry.amountMinor += realAmt;
+          gEntry.count += 1;
+        } else {
+          gatewayMap.set(gwKey, { provider: row.provider, currency: cur, amountMinor: realAmt, count: 1 });
+        }
+
+        const sKey = String(row.streamerId);
+        const sEntry = streamerAggMap.get(sKey);
+        if (sEntry) {
+          sEntry.amountMinor += realAmt;
+          sEntry.count += 1;
+        } else {
+          streamerAggMap.set(sKey, { amountMinor: realAmt, count: 1 });
+        }
+
+        const rowMs = row.createdAt instanceof Date ? row.createdAt.getTime() : new Date(row.createdAt).getTime();
+        const dayIdx = Math.floor((rowMs - startMs) / 86400000);
+        if (dayIdx >= 0 && dayIdx < daysCount) {
+          bucketCount[dayIdx] += 1;
+          if (isTest) {
+            bucketTest[dayIdx] += 1;
+          } else {
+            bucketReal[dayIdx] += 1;
+            bucketAmountMinor[dayIdx] += realAmt;
+          }
+        }
+      }
+
+      const totalAmountMinorNum = Number(totalAmountMinor);
+      const totalAmount = totalAmountMinorNum / 100;
+
+      const currencies = Array.from(currencyMap.entries())
+        .sort((a, b) => (b[1].amountMinor > a[1].amountMinor ? 1 : b[1].amountMinor < a[1].amountMinor ? -1 : 0))
+        .map(([currency, v]) => {
+          const amtMinorNum = Number(v.amountMinor);
+          return {
+            currency,
+            amount: amtMinorNum / 100,
+            count: v.count,
+            percentage: totalAmountMinorNum > 0 ? Math.round((amtMinorNum / totalAmountMinorNum) * 100) : 0,
+          };
+        });
+
+      const primaryCurrency = currencies[0]?.currency || "THB";
+
+      const gateways = Array.from(gatewayMap.values())
+        .sort((a, b) => b.count - a.count)
+        .map((g) => ({
+          provider: g.provider,
+          currency: g.currency,
+          amount: Number(g.amountMinor) / 100,
+          count: g.count,
+          percentage: totalTransactions > 0 ? Math.round((g.count / totalTransactions) * 100) : 0,
+        }));
+
+      const topStreamers = Array.from(streamerAggMap.entries())
+        .sort((a, b) => (b[1].amountMinor > a[1].amountMinor ? 1 : b[1].amountMinor < a[1].amountMinor ? -1 : 0))
+        .slice(0, 10);
+
+      const streamerIds = topStreamers.map(([id]) => Number(id));
       const streamerDetails = streamerIds.length
         ? await db
             .selectFrom("Streamer")
             .select(["id", "name", "displayName", "avatar"])
-            .where("id", "in", streamerIds.map(Number))
+            .where("id", "in", streamerIds)
             .execute()
         : [];
       const streamerMap = new Map(streamerDetails.map((s) => [String(s.id), s]));
 
-      const streamers = streamerRows.map((r) => {
-        const detail = streamerMap.get(String(r.streamerId));
+      const streamers = topStreamers.map(([id, agg]) => {
+        const detail = streamerMap.get(id);
+        const amtMinorNum = Number(agg.amountMinor);
         return {
-          id: String(r.streamerId),
-          name: detail?.name || `streamer_${r.streamerId}`,
+          id,
+          name: detail?.name || `streamer_${id}`,
           displayName: detail?.displayName || null,
           avatar: detail?.avatar || null,
-          amount: Number(r.amount) / 100,
-          count: Number(r.count),
-          percentage: totalAmountCents > 0 ? Math.round((Number(r.amount) / totalAmountCents) * 100) : 0,
+          amount: amtMinorNum / 100,
+          count: agg.count,
+          percentage: totalAmountMinorNum > 0 ? Math.round((amtMinorNum / totalAmountMinorNum) * 100) : 0,
         };
       });
 
-      const timelineMap = new Map(
-        timelineRows.map((r) => [
-          r.date,
-          {
-            amount: Number(r.amount) / 100,
-            count: Number(r.count),
-            realCount: Number(r.realCount || 0),
-            testCount: Number(r.testCount || 0),
-          },
-        ]),
-      );
-
-      const timeline: OrgAnalyticsResponse["timeline"] = [];
-      let cur = new Date(startDate);
-      let realTxTotal = 0;
-      let testTxTotal = 0;
-
-      while (cur <= todayUtc) {
-        const dateStr = cur.toISOString().slice(0, 10);
-        const entry = timelineMap.get(dateStr);
-        const count = entry?.count || 0;
-        const real = entry?.realCount || 0;
-        const test = entry?.testCount || 0;
-        realTxTotal += real;
-        testTxTotal += test;
-
-        timeline.push({
-          date: dateStr,
-          amount: entry?.amount || 0,
-          count,
-          realCount: real,
-          testCount: test,
-        });
-
-        cur = new Date(cur.getTime() + 86400000);
+      const timeline: OrgAnalyticsResponse["timeline"] = new Array(daysCount);
+      for (let i = 0; i < daysCount; i++) {
+        timeline[i] = {
+          date: new Date(startMs + i * 86400000).toISOString().slice(0, 10),
+          amount: Number(bucketAmountMinor[i]) / 100,
+          count: bucketCount[i],
+          realCount: bucketReal[i],
+          testCount: bucketTest[i],
+        };
       }
 
       const response: OrgAnalyticsResponse = {
@@ -260,7 +273,9 @@ export const endpoint = new Elysia()
         timeline,
       };
 
-      await redis.redis.setex(cacheKey, 60, JSON.stringify(response));
+      if (redis.redis.status === "ready") {
+        await redis.redis.setex(cacheKey, 60, JSON.stringify(response)).catch(() => {});
+      }
 
       return response;
     },
