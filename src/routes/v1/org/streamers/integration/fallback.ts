@@ -1,6 +1,6 @@
-import Elysia, { t } from "elysia";
+import Elysia from "elysia";
 import { auth } from "@/core/auth";
-import { authorizeIntegrationManage, integrationProviderParamsSchema } from "./common";
+import { authorizeIntegrationManage, integrationProviderParamsSchema, integrationSchema } from "./common";
 
 export const fallbackEndpoint = new Elysia()
   .use(auth)
@@ -49,14 +49,7 @@ export const fallbackEndpoint = new Elysia()
         summary: "Fallback connect endpoint",
         description: "Returns 400 Bad Request for unsupported providers.",
       },
-      body: t.Union([
-        t.Object({
-          username: t.Optional(t.Nullable(t.String())),
-          secret: t.Optional(t.String()),
-          code: t.Optional(t.String()),
-        }),
-        t.String(),
-      ]),
+      body: integrationSchema,
     },
   );
 

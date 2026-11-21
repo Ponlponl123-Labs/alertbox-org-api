@@ -1,8 +1,14 @@
-import Elysia, { t } from "elysia";
+import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { setConnection } from "@/classes/streamer";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
-import { authorizeIntegrationManage, getExistingIntegrationSecret, logConnectionAudit, integrationParamsSchema } from "../common";
+import {
+  authorizeIntegrationManage,
+  getExistingIntegrationSecret,
+  logConnectionAudit,
+  integrationParamsSchema,
+  integrationSchema,
+} from "../common";
 
 export const connectEndpoint = new Elysia()
   .use(auth)
@@ -65,14 +71,7 @@ export const connectEndpoint = new Elysia()
         summary: "Connect Streamlabs channel integration",
         description: "Exchanges authorization code and links Streamlabs credentials.",
       },
-      body: t.Union([
-        t.Object({
-          code: t.Optional(t.String()),
-          username: t.Optional(t.Nullable(t.String())),
-          secret: t.Optional(t.String()),
-        }),
-        t.String(),
-      ]),
+      body: integrationSchema,
     },
   );
 

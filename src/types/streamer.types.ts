@@ -19,4 +19,15 @@ export interface StreamerProfilePayload {
 
 export type ConnectionSecretPayload =
   | string
-  | { username?: string | null; secret: string; refreshToken?: string | null };
+  | {
+      username?: string | null;
+      secret?: string | null;
+      secretType?: string | null;
+      token?: string | null;
+      state?: string | null;
+      code?: string | null;
+      refreshToken?: string | null;
+      options?: number | null;
+      payload?: any;
+      [key: string]: any;
+    };

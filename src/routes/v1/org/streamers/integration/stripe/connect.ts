@@ -1,7 +1,13 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { setConnection } from "@/classes/streamer";
-import { authorizeIntegrationManage, getExistingIntegrationSecret, logConnectionAudit, integrationParamsSchema } from "../common";
+import {
+  authorizeIntegrationManage,
+  getExistingIntegrationSecret,
+  logConnectionAudit,
+  integrationParamsSchema,
+  integrationSchema,
+} from "../common";
 
 export const connectEndpoint = new Elysia()
   .use(auth)
@@ -35,14 +41,7 @@ export const connectEndpoint = new Elysia()
         summary: "Set Stripe connection",
         description: "Links or updates Stripe payment provider credentials.",
       },
-      body: t.Union([
-        t.Object({
-          username: t.Optional(t.Nullable(t.String())),
-          secret: t.Optional(t.String()),
-          code: t.Optional(t.String()),
-        }),
-        t.String(),
-      ]),
+      body: integrationSchema,
     },
   );
 

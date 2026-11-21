@@ -181,6 +181,10 @@ export interface Integration {
   type: IntegrationType;
   username: string | null;
   secret: string | null;
+  secretType: string | null;
+  token: string | null;
+  state: string | null;
+  payload: any | null;
   refreshToken: string | null;
   options: Generated<number>;
   disabledAt: Date | string | null;

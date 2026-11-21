@@ -54,6 +54,17 @@ describe("Integrations Logic", () => {
       { method: "PATCH", path: "/1/streamers/2/integration/streamlabs", body: JSON.stringify({ options: 1 }) },
       { method: "DELETE", path: "/1/streamers/2/integration/streamlabs" },
       { method: "POST", path: "/1/streamers/2/integration/stripe", body: JSON.stringify({ secret: "mock" }) },
+      {
+        method: "POST",
+        path: "/1/streamers/2/integration/stripe",
+        body: JSON.stringify({
+          token: "tok_123",
+          secretType: "oauth",
+          state: "state_abc",
+          payload: { full: true, metadata: { extra: 1 } },
+          custom_extra_key: "preserved",
+        }),
+      },
       { method: "POST", path: "/1/streamers/2/integration/kofi", body: JSON.stringify({ username: "u", secret: "s" }) },
       { method: "POST", path: "/1/streamers/2/integration/buymeacoffee", body: JSON.stringify({ username: "u", secret: "s" }) },
       { method: "POST", path: "/1/streamers/2/integration/bmac", body: JSON.stringify({ username: "u", secret: "s" }) },

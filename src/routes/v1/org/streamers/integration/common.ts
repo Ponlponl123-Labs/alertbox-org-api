@@ -16,6 +16,26 @@ export const integrationProviderParamsSchema = t.Object({
   provider: t.String({ description: "Integration provider name or alias" }),
 });
 
+export const integrationSchema = t.Union([
+  t.Object(
+    {
+      username: t.Optional(t.Nullable(t.String())),
+      secret: t.Optional(t.Nullable(t.String())),
+      secretType: t.Optional(t.Nullable(t.String())),
+      token: t.Optional(t.Nullable(t.String())),
+      state: t.Optional(t.Nullable(t.String())),
+      code: t.Optional(t.Nullable(t.String())),
+      refreshToken: t.Optional(t.Nullable(t.String())),
+      options: t.Optional(t.Nullable(t.Numeric())),
+      payload: t.Optional(t.Nullable(t.Any())),
+    },
+    { additionalProperties: true },
+  ),
+  t.String(),
+]);
+
+export const integrationBodySchema = integrationSchema;
+
 export async function authorizeIntegrationManage(
   getAuthenticatedUser: () => Promise<any>,
   orgParam: string | null | undefined,

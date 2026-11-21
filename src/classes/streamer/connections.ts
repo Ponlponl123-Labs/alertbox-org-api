@@ -42,9 +42,13 @@ export async function setConnection(
   const intType = providerToIntegrationType[provider.toLowerCase()];
   if (!intType) return null;
 
-  const secret = typeof payload === "string" ? payload : payload.secret;
+  const secret = typeof payload === "string" ? payload : (payload.secret ?? payload.token ?? null);
   const username = typeof payload === "string" ? null : (payload.username ?? null);
   const refreshToken = typeof payload === "string" ? null : (payload.refreshToken ?? null);
+  const secretType = typeof payload === "string" ? null : (payload.secretType ?? null);
+  const token = typeof payload === "string" ? null : (payload.token ?? null);
+  const state = typeof payload === "string" ? null : (payload.state ?? null);
+  const payloadData = typeof payload === "string" ? null : (payload.payload ?? null);
 
   let targetStreamerId: bigint;
   let targetOrgId: bigint;
@@ -62,6 +66,10 @@ export async function setConnection(
       orgId: Number(targetOrgId),
       type: intType,
       secret,
+      secretType,
+      token,
+      state,
+      payload: payloadData ? JSON.stringify(payloadData) : null,
       username,
       refreshToken,
       disabledAt: null,
@@ -70,6 +78,10 @@ export async function setConnection(
     })
     .onDuplicateKeyUpdate({
       secret,
+      secretType,
+      token,
+      state,
+      payload: payloadData ? JSON.stringify(payloadData) : null,
       username,
       ...(refreshToken ? { refreshToken } : {}),
       disabledAt: null,
@@ -86,11 +98,13 @@ export async function setConnection(
     .executeTakeFirst();
 
   await Promise.all([
-    redis.redis.setex(
-      `streamer:${String(streamerId)}:connections:${provider}`,
-      day,
-      secret,
-    ),
+    secret
+      ? redis.redis.setex(
+          `streamer:${String(streamerId)}:connections:${provider}`,
+          day,
+          secret,
+        )
+      : redis.redis.del(`streamer:${String(streamerId)}:connections:${provider}`),
     redis.redis.del(`streamer:${String(streamerId)}:info`),
     redis.redis.del(`streamer:${String(streamerId)}:public_details`),
   ]);
