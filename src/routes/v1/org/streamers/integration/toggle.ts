@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { resolveProvider, setConnectionDisabled } from "@/classes/streamer";
 import { logOrgAudit } from "@/core/audit";
 import { authorizeIntegrationManage, integrationProviderParamsSchema } from "./common";
+import { okResponseSchema, standardErrors } from "../schemas";
 
 export const toggleEndpoint = new Elysia()
   .use(auth)
@@ -45,13 +46,17 @@ export const toggleEndpoint = new Elysia()
     {
       params: integrationProviderParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Toggle streamer channel connection status",
         description: "Enables or disables an integration without deleting its credentials using disabledAt.",
       },
       body: t.Object({
-        disabled: t.Boolean(),
+        disabled: t.Boolean({ description: "True to disable the integration, false to re-enable it", examples: [true] }),
       }),
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

@@ -5,6 +5,11 @@ import { redis } from "@/core/redis";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg, parseBigIntParam, resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import {
+  orgMemberParamsSchema,
+  okResponseSchema,
+  standardOrgErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -77,10 +82,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: orgMemberParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Members"],
         summary: "Remove member from organization",
         description: "Removes a member from the organization. Requires MANAGE_MEMBERS permission.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

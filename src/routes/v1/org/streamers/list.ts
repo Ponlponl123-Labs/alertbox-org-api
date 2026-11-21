@@ -1,10 +1,16 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer, resolveOrgId } from "@/core/org";
+import {
+  orgStreamersParamsSchema,
+  streamerParamsSchema,
+  streamerChannelSummarySchema,
+  standardErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -128,10 +134,15 @@ export const endpoint = new Elysia()
         : streamersData.filter((s) => assignedStreamerIds.includes(String(s.id)));
     },
     {
+      params: orgStreamersParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "List streamers in organization",
         description: "Returns all active streamer channels within the organization.",
+      },
+      response: {
+        200: t.Array(streamerChannelSummarySchema, { description: "List of active streamer channels in the organization" }),
+        ...standardErrors,
       },
     },
   )
@@ -311,10 +322,15 @@ export const endpoint = new Elysia()
     },
 
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Get streamer channel details",
         description: "Returns full metadata, widgets, and integrations for a specific streamer channel.",
+      },
+      response: {
+        200: t.Any({ description: "Full streamer channel profile, widgets, and permissions" }),
+        ...standardErrors,
       },
     },
   );

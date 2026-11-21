@@ -6,8 +6,9 @@ import {
   getExistingIntegrationSecret,
   logConnectionAudit,
   integrationParamsSchema,
-  integrationSchema,
+  bmacConnectSchema,
 } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 async function handleBmacConnect({ getAuthenticatedUser, params, body, set }: any) {
   const { error, ctx, user } = await authorizeIntegrationManage(
@@ -18,11 +19,6 @@ async function handleBmacConnect({ getAuthenticatedUser, params, body, set }: an
   );
   if (error) return error;
   const { orgId, streamerId } = ctx!;
-
-  if (typeof body === "string" || !body?.username || !body?.secret) {
-    set.status = "Bad Request";
-    return "Username and secret are required for this provider";
-  }
 
   const existing = await getExistingIntegrationSecret(streamerId, "buymeacoffee");
   const wasConfigured = Boolean(existing?.secret);
@@ -39,11 +35,15 @@ async function handleBmacConnect({ getAuthenticatedUser, params, body, set }: an
 const validation = {
   params: integrationParamsSchema,
   detail: {
-    tags: ["Organizations"],
+    tags: ["Streamer Integrations"],
     summary: "Set Buy Me a Coffee connection",
     description: "Links or updates Buy Me a Coffee username and webhook secret.",
   },
-  body: integrationSchema,
+  body: bmacConnectSchema,
+  response: {
+    200: okResponseSchema,
+    ...standardErrors,
+  },
 };
 
 export const connectEndpoint = new Elysia()

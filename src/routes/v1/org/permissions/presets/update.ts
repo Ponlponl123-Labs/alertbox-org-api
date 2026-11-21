@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { updateOrgRolePreset } from "@/classes/org/presets";
+import { orgPresetParamsSchema, standardOrgErrors } from "../../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -45,17 +46,28 @@ export const endpoint = new Elysia()
       }
     },
     {
+      params: orgPresetParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Permissions"],
         summary: "Update custom permission preset",
         description: "Updates an existing custom preset. Requires MANAGE_ROLES.",
       },
       body: t.Object({
-        name: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
-        description: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
-        color: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
-        permissions: t.Optional(t.String()),
+        name: t.Optional(t.String({ minLength: 1, maxLength: 64, description: "Preset name" })),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 255, description: "Preset description" }))),
+        color: t.Optional(t.Nullable(t.String({ maxLength: 255, description: "UI badge color class" }))),
+        permissions: t.Optional(t.String({ description: "Permission bitmask as numeric string" })),
       }),
+      response: {
+        200: t.Object({
+          id: t.String({ description: "Preset UUID" }),
+          name: t.String(),
+          description: t.Nullable(t.String()),
+          color: t.Nullable(t.String()),
+          permissions: t.String(),
+        }, { description: "Updated custom permission preset" }),
+        ...standardOrgErrors,
+      },
     },
   );
 

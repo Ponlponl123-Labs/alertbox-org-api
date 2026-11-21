@@ -57,8 +57,8 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Creator Profile"],
-        summary: "Claim or change custom URI handle",
+        tags: ["Streamers"],
+        summary: "Claim or change custom URI handle (active streamer)",
         description:
           "Registers a custom public tipping handle (e.g. `tip-to.me/@yourname`). Must be 1–50 alphanumeric characters or underscores. Once updated, a 30-day cooldown is enforced before the handle can be changed again.",
       },

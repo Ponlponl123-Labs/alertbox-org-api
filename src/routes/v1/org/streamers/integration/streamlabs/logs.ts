@@ -1,10 +1,11 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { authorizeStreamer } from "@/core/org";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { integrationParamsSchema } from "../common";
+import { standardErrors } from "../../schemas";
 
 export const logsEndpoint = new Elysia()
   .use(auth)
@@ -57,6 +58,17 @@ export const logsEndpoint = new Elysia()
         tags: ["Streamlabs Relay"],
         summary: "Get Streamlabs relay audit logs",
         description: "Fetches recent donation relay events for the streamer channel cached in Redis for 60 seconds.",
+      },
+      response: {
+        200: t.Array(
+          t.Object({
+            id: t.String({ description: "Log record ID" }),
+            orgId: t.String({ description: "Organization ID" }),
+            streamerId: t.String({ description: "Streamer ID" }),
+          }, { additionalProperties: true }),
+          { description: "Array of recent relay event logs" },
+        ),
+        ...standardErrors,
       },
     },
   );

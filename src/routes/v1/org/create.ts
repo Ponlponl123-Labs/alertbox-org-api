@@ -132,14 +132,14 @@ export const createOrgEndpoint = new Elysia()
       }),
       response: {
         200: t.Object({
-          id: t.String(),
-          type: t.String(),
-          name: t.String(),
-          slug: t.String(),
-        }),
-        400: t.String(),
-        403: t.String(),
-        409: t.String(),
+          id: t.String({ description: "Organization ID", examples: ["1"] }),
+          type: t.String({ description: "Organization tier", examples: ["COMMUNITY"] }),
+          name: t.String({ description: "Organization name", examples: ["My Org"] }),
+          slug: t.String({ description: "Organization URL slug", examples: ["my-org"] }),
+        }, { description: "Newly created organization metadata" }),
+        400: t.String({ description: "Bad Request: Invalid organization name or slug format" }),
+        403: t.String({ description: "Forbidden: Organization limit reached for community account" }),
+        409: t.String({ description: "Conflict: Organization slug is already taken" }),
       },
     },
   );

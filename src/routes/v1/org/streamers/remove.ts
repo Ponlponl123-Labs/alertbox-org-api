@@ -2,11 +2,16 @@ import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { OrgPerm, StreamerPerm } from "@/consts/permission";
-import { authorizeOrg, authorizeStreamer, resolveStreamerId } from "@/core/org";
+import { OrgPerm } from "@/consts/permission";
+import { authorizeOrg, resolveStreamerId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { KofiWebhook } from "@/classes/webhook/kofi";
 import { BmacWebhook } from "@/classes/webhook/bmac";
+import {
+  streamerParamsSchema,
+  okResponseSchema,
+  standardErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -116,52 +121,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Delete streamer channel",
         description: "Soft deletes a streamer channel. Requires DELETE_STREAMER permission.",
       },
-    },
-  )
-  .delete(
-    "/:orgId/streamers/:streamerId/publish",
-    async ({ getAuthenticatedUser, params, set }) => {
-      const user = await getAuthenticatedUser();
-      const authRes = await authorizeStreamer(
-        params.orgId,
-        params.streamerId,
-        user.data.id,
-        {
-          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
-          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
-          actionDescription: "unpublish streamer channel",
-        },
-        set,
-      );
-      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
-      const { orgId, streamerId } = authRes;
-
-      await db
-        .updateTable("Streamer")
-        .set({ publishedAt: null, updatedAt: new Date() })
-        .where("id", "=", Number(streamerId))
-        .execute();
-
-      await Promise.all([
-        redis.redis.del(`streamer:${String(streamerId)}:info`),
-        redis.redis.del(`streamer:${String(streamerId)}:profile`),
-        redis.redis.del(`streamer:${String(streamerId)}:tiny`),
-        redis.redis.del(`org:${String(orgId)}:streamers`),
-        redis.redis.del(`org:${String(orgId)}:primary_streamer`),
-      ]);
-
-      return { publishedAt: null };
-    },
-    {
-      detail: {
-        tags: ["Organizations"],
-        summary: "Unpublish streamer channel",
-        description: "Unpublishes streamer channel public page.",
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
       },
     },
   );

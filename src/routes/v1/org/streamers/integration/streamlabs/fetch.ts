@@ -1,9 +1,10 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { authorizeStreamer } from "@/core/org";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { integrationParamsSchema } from "../common";
+import { standardErrors } from "../../schemas";
 
 export const fetchEndpoint = new Elysia()
   .use(auth)
@@ -44,6 +45,13 @@ export const fetchEndpoint = new Elysia()
         tags: ["Streamlabs Relay"],
         summary: "Get Streamlabs connection status & options",
         description: "Returns whether Streamlabs is connected for the channel and configured relay options.",
+      },
+      response: {
+        200: t.Object({
+          isConnected: t.Boolean({ description: "Whether Streamlabs credentials exist and are active", examples: [true] }),
+          options: t.Nullable(t.Any({ description: "Streamlabs relay bitmask options" })),
+        }, { description: "Streamlabs integration connection status and relay options" }),
+        ...standardErrors,
       },
     },
   );

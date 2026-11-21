@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId, resolveStreamerId } from "@/core/org";
+import {
+  streamerParamsSchema,
+  streamerAuditResponseSchema,
+  standardErrors,
+} from "../schemas";
 
 function safeJsonParse(val: string | null): unknown {
   if (!val) return null;
@@ -109,16 +114,21 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Audit"],
         summary: "Get streamer channel audit logs",
         description: "Returns audit events scoped to a specific streamer channel. Requires VIEW_STREAMERS.",
       },
       query: t.Object({
-        action: t.Optional(t.String()),
-        limit: t.Optional(t.String()),
-        offset: t.Optional(t.String()),
+        action: t.Optional(t.String({ description: "Filter by specific audit action key (e.g. STREAMER_UPDATED)" })),
+        limit: t.Optional(t.String({ description: "Number of records per page (default: 10, max: 100)" })),
+        offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
       }),
+      response: {
+        200: streamerAuditResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

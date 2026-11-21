@@ -2,13 +2,18 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
-import { OrgPerm, StreamerPerm } from "@/consts/permission";
+import { OrgPerm } from "@/consts/permission";
 import { DEFAULT_ALERTBOX_EVENTS } from "@/consts/widget";
 import { nanoid } from "nanoid";
-import { authorizeOrg, authorizeStreamer } from "@/core/org";
+import { authorizeOrg } from "@/core/org";
 import { isSelfHosted } from "@/utils/instance";
 import { logOrgAudit } from "@/core/audit";
 import { ChannelNameRegistry } from "@/classes/streamer/channel-name";
+import {
+  orgStreamersParamsSchema,
+  streamerCreateResponseSchema,
+  standardErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -179,56 +184,32 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgStreamersParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Create streamer channel in organization",
         description: "Provisions a new streamer channel with dedicated AlertBox widget.",
       },
       body: t.Object({
-        name: t.String({ pattern: "^[a-z0-9_\\-]+$", minLength: 1, maxLength: 64 }),
-        displayName: t.Optional(t.String({ maxLength: 64 })),
+        name: t.String({
+          pattern: "^[a-z0-9_\\-]+$",
+          minLength: 1,
+          maxLength: 64,
+          description: "Unique channel handle (lowercase alphanumeric, hyphens, underscores)",
+          examples: ["creator_one"],
+        }),
+        displayName: t.Optional(
+          t.String({
+            maxLength: 64,
+            description: "Public display name",
+            examples: ["Creator One"],
+          }),
+        ),
       }),
-    },
-  )
-  .post(
-    "/:orgId/streamers/:streamerId/publish",
-    async ({ getAuthenticatedUser, params, set }) => {
-      const user = await getAuthenticatedUser();
-      const authRes = await authorizeStreamer(
-        params.orgId,
-        params.streamerId,
-        user.data.id,
-        {
-          requiredOrgPerm: OrgPerm.STREAMER_MANAGE,
-          requiredStreamerPerm: StreamerPerm.STREAMER_MANAGE,
-          actionDescription: "publish streamer channel",
-        },
-        set,
-      );
-      if (typeof authRes === "string") return set.status === "Bad Request" ? "Invalid organization or streamer ID" : authRes;
-      const { orgId, streamerId } = authRes;
-
-      const publishedAt = new Date();
-      await db
-        .updateTable("Streamer")
-        .set({ publishedAt, updatedAt: new Date() })
-        .where("id", "=", Number(streamerId))
-        .execute();
-
-      await Promise.all([
-        redis.redis.del(`streamer:${String(streamerId)}:info`),
-        redis.redis.del(`streamer:${String(streamerId)}:profile`),
-        redis.redis.del(`org:${String(orgId)}:streamers`),
-        redis.redis.del(`org:${String(orgId)}:primary_streamer`),
-      ]);
-
-      return { publishedAt };
-    },
-    {
-      detail: {
-        tags: ["Organizations"],
-        summary: "Publish streamer channel",
-        description: "Makes streamer channel public.",
+      response: {
+        200: streamerCreateResponseSchema,
+        ...standardErrors,
+        409: t.String({ description: "Conflict: Channel name already taken" }),
       },
     },
   );

@@ -5,8 +5,12 @@ import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
 import { WebhookDispatcher } from "@/classes/webhook/dispatcher";
-import { recordActivityTransaction } from "@/routes/v1/org/transactions/activity";
 import { logOrgAudit } from "@/core/audit";
+import {
+  streamerTxParamsSchema,
+  streamerResendTxResponseSchema,
+  standardErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -101,10 +105,15 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerTxParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Transactions"],
         summary: "Resend streamer transaction alert",
         description: "Re-triggers the alertbox overlay widget for an existing donation transaction, similar to Streamlabs replay.",
+      },
+      response: {
+        200: streamerResendTxResponseSchema,
+        ...standardErrors,
       },
     },
   );

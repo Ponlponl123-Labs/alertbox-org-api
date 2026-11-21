@@ -6,8 +6,9 @@ import {
   getExistingIntegrationSecret,
   logConnectionAudit,
   integrationParamsSchema,
-  integrationSchema,
+  kofiConnectSchema,
 } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 export const connectEndpoint = new Elysia()
   .use(auth)
@@ -23,11 +24,6 @@ export const connectEndpoint = new Elysia()
       if (error) return error;
       const { orgId, streamerId } = ctx!;
 
-      if (typeof body === "string" || !body?.username || !body?.secret) {
-        set.status = "Bad Request";
-        return "Username and secret are required for this provider";
-      }
-
       const existing = await getExistingIntegrationSecret(streamerId, "kofi");
       const wasConfigured = Boolean(existing?.secret);
 
@@ -42,11 +38,15 @@ export const connectEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Set Ko-fi connection",
         description: "Links or updates Ko-fi username and verification token.",
       },
-      body: integrationSchema,
+      body: kofiConnectSchema,
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

@@ -10,6 +10,11 @@ import { saveProfileImage, deleteProfileImage } from "@/utils/storage";
 import { updateOrgCache } from "@/utils/cache-sync";
 import { Moderation } from "@/classes/moderation";
 import { nanoid } from "nanoid";
+import {
+  orgParamsSchema,
+  orgUpdateResponseSchema,
+  standardOrgErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -157,20 +162,22 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Update organization settings",
         description: "Updates organization name, avatar, or banner. Requires MANAGE_SETTINGS permission.",
       },
       body: t.Object({
-        name: t.Optional(t.String({ minLength: 2, maxLength: 100 })),
+        name: t.Optional(t.String({ minLength: 2, maxLength: 100, description: "Organization display name", examples: ["Updated Org Name"] })),
         avatar: t.Optional(
           t.Union([
             t.File({
               maxSize: "5m",
               type: ["image/png", "image/jpeg", "image/webp"],
+              description: "Avatar image upload file (max 5MB)",
             }),
-            t.Nullable(t.String()),
+            t.Nullable(t.String({ description: "Avatar image URL or path" })),
           ]),
         ),
         banner: t.Optional(
@@ -178,11 +185,17 @@ export const endpoint = new Elysia()
             t.File({
               maxSize: "10m",
               type: ["image/png", "image/jpeg", "image/webp"],
+              description: "Banner image upload file (max 10MB)",
             }),
-            t.Nullable(t.String()),
+            t.Nullable(t.String({ description: "Banner image URL or path" })),
           ]),
         ),
       }),
+      response: {
+        200: orgUpdateResponseSchema,
+        ...standardOrgErrors,
+        451: t.String({ description: "Unavailable For Legal Reasons: Avatar or banner contains prohibited NSFW content" }),
+      },
     },
   );
 

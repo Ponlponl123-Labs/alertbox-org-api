@@ -40,8 +40,8 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Creator Profile"],
-        summary: "Unpublish creator profile",
+        tags: ["Streamers"],
+        summary: "Unpublish creator profile (active streamer)",
         description:
           "Hides the creator's public profile and tipping page (`publishedAt: null`). Visitors attempting to view the page will receive a 404.",
       },

@@ -1,6 +1,7 @@
 import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
+import { orgInviteVerifyResponseSchema } from "../../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -84,13 +85,19 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Verify invitation code",
         description: "Validates 8-digit code and returns organization info for confirmation.",
       },
       body: t.Object({
-        code: t.String(),
+        code: t.String({ description: "8-digit OTP invitation code", examples: ["12345678"] }),
       }),
+      response: {
+        200: orgInviteVerifyResponseSchema,
+        400: t.String({ description: "Bad Request: Invalid, expired, or superseded invitation code" }),
+        401: t.String({ description: "Unauthorized: Missing authentication token" }),
+        403: t.String({ description: "Forbidden: Code was issued to a different email address" }),
+      },
     },
   );
 

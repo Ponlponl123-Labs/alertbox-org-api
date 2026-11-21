@@ -6,6 +6,11 @@ import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { invalidateBmacIntegrations } from "@/routes/v1/webhook/bmac";
 import { invalidateKofiIntegrations } from "@/routes/v1/webhook/kofi";
+import {
+  orgParamsSchema,
+  okResponseSchema,
+  standardOrgErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -119,10 +124,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: orgParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Delete organization",
         description: "Soft deletes an organization. Requires DELETE_ORG permission (OWNER only).",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

@@ -80,4 +80,26 @@ describe("Integrations Logic", () => {
       expect([400, 401, 403, 500]).toContain(res.status);
     }
   });
+
+  it("should enforce provider-specific body schemas", async () => {
+    const invalidCases = [
+      { path: "/1/streamers/2/integration/buymeacoffee", body: JSON.stringify({}) },
+      { path: "/1/streamers/2/integration/buymeacoffee", body: JSON.stringify({ username: "u" }) },
+      { path: "/1/streamers/2/integration/kofi", body: JSON.stringify({}) },
+      { path: "/1/streamers/2/integration/kofi", body: JSON.stringify({ secret: "s" }) },
+      { path: "/1/streamers/2/integration/streamlabs", body: JSON.stringify({}) },
+      { path: "/1/streamers/2/integration/feelfreepay", body: JSON.stringify({}) },
+    ];
+
+    for (const { path, body } of invalidCases) {
+      const res = await integrationEndpoint.handle(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        }),
+      );
+      expect(res.status).toBe(422);
+    }
+  });
 });

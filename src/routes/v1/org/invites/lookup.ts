@@ -67,7 +67,7 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Lookup registered user by email before inviting",
         description: "Checks whether a registered, active user exists for the specified email and is not already a member.",
       },
@@ -76,15 +76,15 @@ export const endpoint = new Elysia()
       }),
       response: {
         200: t.Object({
-          id: t.String(),
-          email: t.String(),
-          name: t.Nullable(t.String()),
-          avatar: t.Nullable(t.String()),
-        }),
-        400: t.String(),
-        403: t.String(),
-        404: t.String(),
-        409: t.String(),
+          id: t.String({ description: "User numeric ID", examples: ["10"] }),
+          email: t.String({ description: "User registered email", examples: ["user@example.com"] }),
+          name: t.Nullable(t.String({ description: "User display name" })),
+          avatar: t.Nullable(t.String({ description: "User avatar URL" })),
+        }, { description: "Matched registered user profile" }),
+        400: t.String({ description: "Bad Request: Invalid organization ID or email" }),
+        403: t.String({ description: "Forbidden: Insufficient permissions to invite members" }),
+        404: t.String({ description: "Not Found: No active registered user found for email" }),
+        409: t.String({ description: "Conflict: User is already a member of this organization" }),
       },
     },
   );

@@ -6,6 +6,11 @@ import { OrgPerm, RolePresets } from "@/consts/permission";
 import { customAlphabet } from "nanoid";
 import { resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import {
+  orgParamsSchema,
+  orgInviteCreatedResponseSchema,
+  standardOrgErrors,
+} from "../schemas";
 
 const generate8DigitCode = customAlphabet("0123456789", 8);
 
@@ -126,16 +131,22 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Invite a new member",
         description: "Creates an 8-digit single-use invitation code valid for 5 minutes.",
       },
       body: t.Object({
-        email: t.String({ format: "email" }),
-        role: t.Optional(t.Enum(OrgRole)),
-        permissions: t.Optional(t.String()),
+        email: t.String({ format: "email", description: "Target invitee registered email address", examples: ["user@example.com"] }),
+        role: t.Optional(t.Enum(OrgRole, { description: "Assigned organization role", examples: ["MEMBER", "MANAGER"] })),
+        permissions: t.Optional(t.String({ description: "Custom bitmask permissions as numeric string" })),
       }),
+      response: {
+        200: orgInviteCreatedResponseSchema,
+        ...standardOrgErrors,
+        409: t.String({ description: "Conflict: User is already an active member of this organization" }),
+      },
     },
   );
 

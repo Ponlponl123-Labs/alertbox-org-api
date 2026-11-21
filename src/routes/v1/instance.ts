@@ -1,4 +1,4 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { isAlertboxProduction } from "@/utils/instance";
 
 export const instanceEndpoint = new Elysia({ prefix: "/instance" })
@@ -17,6 +17,10 @@ export const instanceEndpoint = new Elysia({ prefix: "/instance" })
         tags: ["System"],
         summary: "Check if running AlertBox.org production instance",
         description: "Returns 200 OK if official AlertBox.org instance, 404 if self-hosted.",
+      },
+      response: {
+        200: t.String({ description: "Official production deployment instance indicator", examples: ["OK"] }),
+        404: t.String({ description: "Self-hosted deployment instance indicator", examples: ["Not Found"] }),
       },
     },
   );

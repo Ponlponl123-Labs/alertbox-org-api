@@ -1,4 +1,4 @@
-import Elysia, { file } from "elysia";
+import Elysia, { file, t } from "elysia";
 import { cors } from "@elysiajs/cors";
 import betterConsole, { cs, link, s, tsflag } from "ts-better-console";
 import { logger } from "@/utils/log";
@@ -127,7 +127,7 @@ class Server {
     this.app.use(openapi({
       provider: null,
       exclude: {
-        paths: [/^\/public/],
+        paths: [/^\/public/, /^\/api/],
         staticFile: true,
       },
       documentation: {
@@ -181,21 +181,59 @@ class Server {
       smallerBannerAsciiArt,
     ].join("\n");
 
-    this.app.get("/", () => welcomeMessage);
-
-    this.app.get("/health", ({ set }) => {
-      set.headers["cache-control"] = "public, max-age=5, s-maxage=10, stale-while-revalidate=5";
-      return { status: "ok" };
+    this.app.get("/", () => welcomeMessage, {
+      detail: {
+        tags: ["System"],
+        summary: "API Welcome & Status banner",
+        description: "Returns greeting message, version details, and documentation links.",
+      },
+      response: {
+        200: t.String({ description: "ASCII welcome banner and documentation metadata" }),
+      },
     });
 
-    this.app.get("/instance", ({ set }) => {
-      if (isAlertboxProduction()) {
-        set.status = 200;
-        return "OK";
-      }
-      set.status = 404;
-      return "Not Found";
-    });
+    this.app.get(
+      "/health",
+      ({ set }) => {
+        set.headers["cache-control"] = "public, max-age=5, s-maxage=10, stale-while-revalidate=5";
+        return { status: "ok" };
+      },
+      {
+        detail: {
+          tags: ["System"],
+          summary: "System health check",
+          description: "Returns 200 OK status for load balancers and orchestrator liveness probes.",
+        },
+        response: {
+          200: t.Object({
+            status: t.String({ description: "Liveness status", examples: ["ok"] }),
+          }, { description: "Service health status" }),
+        },
+      },
+    );
+
+    this.app.get(
+      "/instance",
+      ({ set }) => {
+        if (isAlertboxProduction()) {
+          set.status = 200;
+          return "OK";
+        }
+        set.status = 404;
+        return "Not Found";
+      },
+      {
+        detail: {
+          tags: ["System"],
+          summary: "Check if running AlertBox.org production instance",
+          description: "Returns 200 OK if official AlertBox.org instance, 404 if self-hosted.",
+        },
+        response: {
+          200: t.String({ description: "Official production deployment instance indicator", examples: ["OK"] }),
+          404: t.String({ description: "Self-hosted deployment instance indicator", examples: ["Not Found"] }),
+        },
+      },
+    );
 
     this.app.ws("/health/ws", {
       open(ws) {

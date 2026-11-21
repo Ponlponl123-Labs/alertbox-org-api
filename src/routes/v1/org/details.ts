@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { day } from "@/consts/time";
+import {
+  orgParamsSchema,
+  orgDetailsResponseSchema,
+  standardOrgErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -149,10 +154,15 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Get organization details",
         description: "Retrieves details of an organization if the user is a member.",
+      },
+      response: {
+        200: orgDetailsResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

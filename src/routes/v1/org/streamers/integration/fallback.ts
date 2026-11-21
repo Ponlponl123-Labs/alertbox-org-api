@@ -1,6 +1,7 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
-import { authorizeIntegrationManage, integrationProviderParamsSchema, integrationSchema } from "./common";
+import { authorizeIntegrationManage, integrationProviderParamsSchema, fallbackConnectSchema } from "./common";
+import { standardErrors } from "../schemas";
 
 export const fallbackEndpoint = new Elysia()
   .use(auth)
@@ -22,9 +23,12 @@ export const fallbackEndpoint = new Elysia()
     {
       params: integrationProviderParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Fallback OAuth2 endpoint",
         description: "Returns 400 Bad Request for providers not supporting OAuth2.",
+      },
+      response: {
+        ...standardErrors,
       },
     },
   )
@@ -45,11 +49,14 @@ export const fallbackEndpoint = new Elysia()
     {
       params: integrationProviderParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Fallback connect endpoint",
         description: "Returns 400 Bad Request for unsupported providers.",
       },
-      body: integrationSchema,
+      body: fallbackConnectSchema,
+      response: {
+        ...standardErrors,
+      },
     },
   );
 

@@ -18,4 +18,18 @@ describe("Server Port Rotation", () => {
       server2.app.stop();
     }
   });
+
+  test("should not produce duplicate /api routes in OpenAPI documentation", async () => {
+    const server = new Server(7005);
+    try {
+      const res = await server.app.handle(new Request("http://localhost/openapi/json"));
+      const doc = await res.json();
+      const paths = Object.keys(doc.paths || {});
+      const apiPrefixed = paths.filter((p) => p.startsWith("/api/"));
+      expect(apiPrefixed.length).toBe(0);
+      expect(paths.length).toBeGreaterThan(0);
+    } finally {
+      server.app.stop();
+    }
+  });
 });

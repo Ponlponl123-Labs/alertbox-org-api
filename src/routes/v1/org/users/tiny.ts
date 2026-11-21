@@ -5,6 +5,11 @@ import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
 import { getCachedUser, setCachedUser } from "@/classes/me/cache";
 import { redis } from "@/core/redis";
+import {
+  orgUserParamsSchema,
+  tinyUserResponseSchema,
+  standardOrgErrors,
+} from "../schemas";
 
 export interface TinyUserResponse {
   id: string;
@@ -97,15 +102,16 @@ export const endpoint = new Elysia()
       return tiny;
     },
     {
+      params: orgUserParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Get tiny user profile",
         description: "Fetch cached lightweight user profile (id, name, email, avatar) scoped strictly to members of this organization.",
       },
-      params: t.Object({
-        orgId: t.String(),
-        userId: t.String(),
-      }),
+      response: {
+        200: tinyUserResponseSchema,
+        ...standardOrgErrors,
+      },
     },
   );
 

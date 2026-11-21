@@ -15,6 +15,12 @@ import { inflateSync } from "node:zlib";
 import { logOrgAudit } from "@/core/audit";
 import { updateStreamerCache } from "@/utils/cache-sync";
 import { ChannelNameRegistry } from "@/classes/streamer/channel-name";
+import {
+  streamerParamsSchema,
+  streamerUpdateResponseSchema,
+  okResponseSchema,
+  standardErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -261,23 +267,25 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Update streamer channel",
         description: "Updates streamer channel metadata and images. Requires EDIT_STREAMER_PROFILE.",
       },
       body: t.Object({
-        name: t.Optional(t.String({ pattern: "^[a-z0-9_\\-]+$", minLength: 1, maxLength: 64 })),
-        displayName: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
-        bio: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
-        accentColor: t.Optional(t.Nullable(t.Union([t.String(), t.Number()]))),
+        name: t.Optional(t.String({ pattern: "^[a-z0-9_\\-]+$", minLength: 1, maxLength: 64, description: "Channel handle slug", examples: ["creator_one"] })),
+        displayName: t.Optional(t.String({ minLength: 1, maxLength: 64, description: "Public display name", examples: ["Creator One"] })),
+        bio: t.Optional(t.Nullable(t.String({ maxLength: 1000, description: "Creator bio text" }))),
+        accentColor: t.Optional(t.Nullable(t.Union([t.String({ description: "Hex color e.g. #7c3aed" }), t.Number({ description: "Color integer value" })]))),
         avatar: t.Optional(
           t.Union([
             t.File({
               maxSize: "5m",
               type: ["image/png", "image/jpeg", "image/webp"],
+              description: "New avatar image file (max 5MB)",
             }),
-            t.Nullable(t.String()),
+            t.Nullable(t.String({ description: "Avatar image URL or path" })),
           ]),
         ),
         banner: t.Optional(
@@ -285,25 +293,31 @@ export const endpoint = new Elysia()
             t.File({
               maxSize: "10m",
               type: ["image/png", "image/jpeg", "image/webp"],
+              description: "New banner image file (max 10MB)",
             }),
-            t.Nullable(t.String()),
+            t.Nullable(t.String({ description: "Banner image URL or path" })),
           ]),
         ),
-        socialTwitch: t.Optional(t.Nullable(t.String())),
-        socialYoutube: t.Optional(t.Nullable(t.String())),
-        socialTwitter: t.Optional(t.Nullable(t.String())),
-        socialFacebook: t.Optional(t.Nullable(t.String())),
-        socialReddit: t.Optional(t.Nullable(t.String())),
-        socialDiscord: t.Optional(t.Nullable(t.String())),
+        socialTwitch: t.Optional(t.Nullable(t.String({ description: "Twitch username" }))),
+        socialYoutube: t.Optional(t.Nullable(t.String({ description: "YouTube channel handle" }))),
+        socialTwitter: t.Optional(t.Nullable(t.String({ description: "Twitter/X handle" }))),
+        socialFacebook: t.Optional(t.Nullable(t.String({ description: "Facebook page handle" }))),
+        socialReddit: t.Optional(t.Nullable(t.String({ description: "Reddit username" }))),
+        socialDiscord: t.Optional(t.Nullable(t.String({ description: "Discord server invite" }))),
         twitch: t.Optional(t.Nullable(t.String())),
         youtube: t.Optional(t.Nullable(t.String())),
         twitter: t.Optional(t.Nullable(t.String())),
         facebook: t.Optional(t.Nullable(t.String())),
         reddit: t.Optional(t.Nullable(t.String())),
         discord: t.Optional(t.Nullable(t.String())),
-        isPublished: t.Optional(t.Nullable(t.Boolean())),
+        isPublished: t.Optional(t.Nullable(t.Boolean({ description: "Whether channel tipping page is public" }))),
         published: t.Optional(t.Nullable(t.Boolean())),
       }),
+      response: {
+        200: streamerUpdateResponseSchema,
+        ...standardErrors,
+        451: t.String({ description: "Unavailable For Legal Reasons: Avatar or banner contains flagged NSFW content" }),
+      },
     },
   )
   .patch(
@@ -353,12 +367,21 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Register streamer channel URI",
         description: "Registers or updates custom URI handle for a streamer channel.",
       },
-      body: t.String(),
+      body: t.String({
+        description: "Desired custom URI handle slug",
+        examples: ["mychannel"],
+      }),
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
+        429: t.String({ description: "Too Many Requests: Cooldown period active on URI changes" }),
+      },
     },
   );
 

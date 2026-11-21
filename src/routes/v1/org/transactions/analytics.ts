@@ -6,6 +6,7 @@ import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { hasAnyPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
+import { orgParamsSchema, orgAnalyticsResponseSchema, standardOrgErrors } from "../schemas";
 
 export type OrgAnalyticsResponse = {
   timeframe: string;
@@ -264,14 +265,19 @@ export const endpoint = new Elysia()
       return response;
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Transactions"],
         summary: "Get organization analytics and breakdown",
         description: "Returns revenue, currency distribution, payment gateway breakdown, and timeline. Excludes deleted transactions and separates test transactions from revenue.",
       },
       query: t.Object({
-        timeframe: t.Optional(t.Union([t.Literal("7d"), t.Literal("30d"), t.Literal("90d"), t.Literal("1y")])),
+        timeframe: t.Optional(t.Union([t.Literal("7d"), t.Literal("30d"), t.Literal("90d"), t.Literal("1y")], { description: "Timeframe window (default: 30d)", examples: ["30d"] })),
       }),
+      response: {
+        200: orgAnalyticsResponseSchema,
+        ...standardOrgErrors,
+      },
     },
   );
 

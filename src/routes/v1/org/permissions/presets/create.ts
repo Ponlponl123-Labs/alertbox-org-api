@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { createOrgRolePreset } from "@/classes/org/presets";
+import { orgParamsSchema, standardOrgErrors } from "../../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -45,17 +46,28 @@ export const endpoint = new Elysia()
       return newPreset;
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Permissions"],
         summary: "Create custom permission preset",
         description: "Creates an organization-specific permission preset. Requires MANAGE_ROLES.",
       },
       body: t.Object({
-        name: t.String({ minLength: 1, maxLength: 64 }),
-        description: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
-        color: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
-        permissions: t.String(),
+        name: t.String({ minLength: 1, maxLength: 64, description: "Preset name", examples: ["Content Editor"] }),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 255, description: "Description of assigned capabilities" }))),
+        color: t.Optional(t.Nullable(t.String({ maxLength: 255, description: "UI color tag class", examples: ["text-primary"] }))),
+        permissions: t.String({ description: "Permission bitmask as numeric string", examples: ["65535"] }),
       }),
+      response: {
+        200: t.Object({
+          id: t.String({ description: "Generated preset UUID" }),
+          name: t.String(),
+          description: t.Nullable(t.String()),
+          color: t.Nullable(t.String()),
+          permissions: t.String(),
+        }, { description: "Created custom permission preset" }),
+        ...standardOrgErrors,
+      },
     },
   );
 

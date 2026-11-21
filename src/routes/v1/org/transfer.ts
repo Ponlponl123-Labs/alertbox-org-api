@@ -6,6 +6,11 @@ import { RolePresets } from "@/consts/permission";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { isSelfHosted } from "@/utils/instance";
+import {
+  orgParamsSchema,
+  orgTransferResponseSchema,
+  standardOrgErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -144,14 +149,19 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Transfer organization ownership",
         description: "Transfers primary organization ownership to another member. Caller must be OWNER. Demotes previous owner to ADMIN.",
       },
       body: t.Object({
-        targetMemberId: t.String(),
+        targetMemberId: t.String({ description: "Target member numeric ID to receive organization ownership", examples: ["5"] }),
       }),
+      response: {
+        200: orgTransferResponseSchema,
+        ...standardOrgErrors,
+      },
     },
   );
 

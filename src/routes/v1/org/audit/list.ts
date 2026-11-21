@@ -6,6 +6,7 @@ import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { AUDIT_CACHE_TTL, AUDIT_CATEGORY_ACTIONS } from "@/consts/audit";
 import { resolveOrgId } from "@/core/org";
+import { orgParamsSchema, orgAuditListResponseSchema, standardOrgErrors } from "../schemas";
 
 function safeJsonParse(val: string | null): unknown {
   if (!val) return null;
@@ -184,19 +185,24 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Audit"],
         summary: "Get organization audit logs",
         description: "Returns paginated audit log events for the organization. Requires VIEW_ORG permission.",
       },
       query: t.Object({
-        action: t.Optional(t.String()),
-        category: t.Optional(t.String()),
-        search: t.Optional(t.String()),
-        targetType: t.Optional(t.Union([t.Literal("MEMBER"), t.Literal("STREAMER"), t.Literal("ORGANIZATION")])),
-        limit: t.Optional(t.String()),
-        offset: t.Optional(t.String()),
+        action: t.Optional(t.String({ description: "Filter by action type (e.g. MEMBER_INVITED)" })),
+        category: t.Optional(t.String({ description: "Filter by action category (e.g. ALL, MEMBER, STREAMER)" })),
+        search: t.Optional(t.String({ description: "Search query across action, IP, user name or email" })),
+        targetType: t.Optional(t.Union([t.Literal("MEMBER"), t.Literal("STREAMER"), t.Literal("ORGANIZATION")], { description: "Filter by entity target type" })),
+        limit: t.Optional(t.String({ description: "Page limit (default: 10, max: 100)" })),
+        offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
       }),
+      response: {
+        200: orgAuditListResponseSchema,
+        ...standardOrgErrors,
+      },
     },
   );
 

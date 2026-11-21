@@ -1,7 +1,8 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { authorizeIntegrationManage, integrationParamsSchema } from "../common";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
+import { standardErrors } from "../../schemas";
 
 export const getOauthEndpoint = new Elysia()
   .use(auth)
@@ -24,9 +25,13 @@ export const getOauthEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamlabs Relay"],
         summary: "Generate Streamlabs OAuth2 authorization URL",
         description: "Builds a pre-authenticated OAuth2 authorization URL for Streamlabs integration.",
+      },
+      response: {
+        200: t.String({ description: "Pre-authenticated Streamlabs OAuth2 URL string", examples: ["https://streamlabs.com/api/v2.0/authorize?..."] }),
+        ...standardErrors,
       },
     },
   );

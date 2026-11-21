@@ -5,6 +5,7 @@ import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { hasPermission, hasStreamerPermission } from "@/utils/rbac";
 import { integrationParamsSchema } from "./common";
+import { streamerIntegrationsResponseSchema, standardErrors } from "../schemas";
 
 export const fetchEndpoint = new Elysia()
   .use(auth)
@@ -86,9 +87,13 @@ export const fetchEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations", "Streamers", "Integration"],
+        tags: ["Streamer Integrations"],
         summary: "Get streamer channel connections",
         description: "Returns connected payment providers and triggers for a specific streamer channel. Masks secrets for view-only callers.",
+      },
+      response: {
+        200: streamerIntegrationsResponseSchema,
+        ...standardErrors,
       },
     },
   );

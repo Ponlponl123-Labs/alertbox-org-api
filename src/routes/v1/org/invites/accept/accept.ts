@@ -2,6 +2,7 @@ import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
+import { orgInviteAcceptResponseSchema } from "../../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -101,13 +102,19 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Accept organization invite via code",
         description: "Confirms 8-digit OTP code and joins the organization.",
       },
       body: t.Object({
-        code: t.String(),
+        code: t.String({ description: "8-digit OTP invitation code", examples: ["12345678"] }),
       }),
+      response: {
+        200: orgInviteAcceptResponseSchema,
+        400: t.String({ description: "Bad Request: Invalid, expired, or superseded invitation code" }),
+        401: t.String({ description: "Unauthorized: Missing authentication token" }),
+        403: t.String({ description: "Forbidden: Code was issued to a different email address" }),
+      },
     },
   )
   .post(
@@ -185,9 +192,18 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Accept organization invite via link token",
         description: "Accepts an invitation to join an organization via token.",
+      },
+      params: t.Object({
+        token: t.String({ description: "Invitation code or link token", examples: ["12345678"] }),
+      }),
+      response: {
+        200: orgInviteAcceptResponseSchema,
+        400: t.String({ description: "Bad Request: Invalid or expired invitation token" }),
+        401: t.String({ description: "Unauthorized: Missing authentication token" }),
+        403: t.String({ description: "Forbidden: Token was issued to a different email address" }),
       },
     },
   );

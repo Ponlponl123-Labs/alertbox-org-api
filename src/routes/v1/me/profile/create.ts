@@ -40,8 +40,8 @@ export const endpoint = new Elysia()
     },
     {
       detail: {
-        tags: ["Creator Profile"],
-        summary: "Publish creator profile",
+        tags: ["Streamers"],
+        summary: "Publish creator profile (active streamer)",
         description:
           "Makes the creator's tipping page and profile publicly visible to everyone. Sets `publishedAt` to current timestamp and flushes the cache.",
       },

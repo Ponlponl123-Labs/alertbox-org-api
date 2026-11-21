@@ -10,7 +10,7 @@ export const endpoint = new Elysia()
   .use(ip({ headersFirst: true }))
   .ws("/:orgId/streamers/:streamerId/transactions/live", {
     detail: {
-      tags: ["Organizations"],
+      tags: ["Streamer Transactions"],
       summary: "Streamer live transactions WebSocket stream",
       description:
         "Subscribes to live incoming streamer donations, test transactions, and status updates via secure WebSocket. Authenticate via ?token=<sessionToken> query parameter or Authorization Bearer header.",

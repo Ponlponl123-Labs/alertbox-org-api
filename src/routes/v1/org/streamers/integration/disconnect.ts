@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { resolveProvider, removeConnection } from "@/classes/streamer";
 import { logOrgAudit } from "@/core/audit";
 import { authorizeIntegrationManage, integrationProviderParamsSchema } from "./common";
+import { okResponseSchema, standardErrors } from "../schemas";
 
 export const disconnectEndpoint = new Elysia()
   .use(auth)
@@ -43,9 +44,13 @@ export const disconnectEndpoint = new Elysia()
     {
       params: integrationProviderParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Remove streamer channel connection",
         description: "Unlinks payment provider credentials from a streamer channel.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
       },
     },
   );

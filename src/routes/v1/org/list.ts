@@ -134,6 +134,7 @@ export const listOrgsEndpoint = new Elysia()
             ),
             joinedAt: t.Date(),
           }),
+          { description: "List of organizations where the user is an active member" },
         ),
       },
     },

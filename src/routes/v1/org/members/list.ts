@@ -4,6 +4,12 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
+import {
+  orgParamsSchema,
+  orgMemberSummarySchema,
+  standardOrgErrors,
+} from "../schemas";
+import { t } from "elysia";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -100,10 +106,15 @@ export const endpoint = new Elysia()
       return result;
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Members"],
         summary: "List organization members",
         description: "Returns all members of an organization with roles and bitmask permissions.",
+      },
+      response: {
+        200: t.Array(orgMemberSummarySchema, { description: "List of active organization members with roles and permissions" }),
+        ...standardOrgErrors,
       },
     },
   );

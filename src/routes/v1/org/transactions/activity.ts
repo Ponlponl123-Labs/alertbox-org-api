@@ -7,6 +7,7 @@ import { resolveOrgId } from "@/core/org";
 import { hasAnyPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import type { OrgActivityResponse, OrgActivityDay } from "@/types";
+import { orgParamsSchema, orgActivityResponseSchema, standardOrgErrors } from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -151,11 +152,16 @@ export const endpoint = new Elysia()
       return response;
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Transactions"],
         summary: "Get organization 365-day transaction activity",
         description:
           "Returns aggregated daily transaction volume for all streamer channels across the organization.",
+      },
+      response: {
+        200: orgActivityResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

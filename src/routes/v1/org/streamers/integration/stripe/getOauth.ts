@@ -2,6 +2,8 @@ import Elysia from "elysia";
 import { auth } from "@/core/auth";
 import { ConnectionProvider, integrationRedirectUri } from "@/consts/integration";
 import { authorizeIntegrationManage, integrationParamsSchema } from "../common";
+import { standardErrors } from "../../schemas";
+import { t } from "elysia";
 
 export const getOauthEndpoint = new Elysia()
   .use(auth)
@@ -35,9 +37,13 @@ export const getOauthEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Generate Stripe OAuth2 authorization URL",
         description: "Builds a pre-authenticated OAuth2 authorization URL for Stripe integration.",
+      },
+      response: {
+        200: t.String({ description: "Pre-authenticated Stripe OAuth2 URL string", examples: ["https://marketplace.stripe.com/oauth/v2/authorize?..."] }),
+        ...standardErrors,
       },
     },
   );

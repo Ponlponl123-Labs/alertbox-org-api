@@ -6,8 +6,9 @@ import {
   getExistingIntegrationSecret,
   logConnectionAudit,
   integrationParamsSchema,
-  integrationSchema,
+  feelFreePayConnectSchema,
 } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 async function handleFfpConnect({ getAuthenticatedUser, params, body, set }: any) {
   const { error, ctx, user } = await authorizeIntegrationManage(
@@ -34,11 +35,15 @@ async function handleFfpConnect({ getAuthenticatedUser, params, body, set }: any
 const validation = {
   params: integrationParamsSchema,
   detail: {
-    tags: ["Organizations"],
+    tags: ["Streamer Integrations"],
     summary: "Set FeelFreePay connection",
     description: "Links or updates FeelFreePay payment provider credentials.",
   },
-  body: integrationSchema,
+  body: feelFreePayConnectSchema,
+  response: {
+    200: okResponseSchema,
+    ...standardErrors,
+  },
 };
 
 export const connectEndpoint = new Elysia()

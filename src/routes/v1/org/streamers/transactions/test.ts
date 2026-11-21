@@ -6,6 +6,11 @@ import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
 import { WebhookDispatcher } from "@/classes/webhook/dispatcher";
 import { recordActivityTransaction } from "@/routes/v1/org/transactions/activity";
+import {
+  streamerParamsSchema,
+  streamerTestTxResponseSchema,
+  standardErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -93,18 +98,23 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Transactions"],
         summary: "Send test streamer transaction",
         description: "Creates and dispatches a test donation transaction for testing overlay and alert widgets.",
       },
       body: t.Object({
-        provider: t.String(),
-        amount: t.Number(),
-        currency: t.Optional(t.String()),
-        senderName: t.Optional(t.String()),
-        message: t.Optional(t.String()),
+        provider: t.String({ description: "Simulated payment provider", examples: ["STRIPE", "BUYMEACOFFEE", "KOFI"] }),
+        amount: t.Number({ description: "Simulated amount in currency units (e.g. 50 for 50 THB)", examples: [50] }),
+        currency: t.Optional(t.String({ description: "Currency code (default: THB)", examples: ["THB", "USD"] })),
+        senderName: t.Optional(t.String({ description: "Simulated sender or donor name", examples: ["Test Fan"] })),
+        message: t.Optional(t.String({ description: "Simulated donation message", examples: ["Keep up the great streams!"] })),
       }),
+      response: {
+        200: streamerTestTxResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { deleteOrgRolePreset } from "@/classes/org/presets";
+import { orgPresetParamsSchema, okResponseSchema, standardOrgErrors } from "../../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -18,10 +19,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: orgPresetParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Permissions"],
         summary: "Delete custom permission preset",
         description: "Removes a custom preset for the organization. Requires MANAGE_ROLES.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

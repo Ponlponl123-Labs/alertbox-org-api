@@ -3,6 +3,11 @@ import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
+import {
+  streamerParamsSchema,
+  streamerTransactionsResponseSchema,
+  standardErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -106,21 +111,26 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Transactions"],
         summary: "Get streamer transactions",
         description: "Returns sanitized, filterable transactions for a streamer channel without exposing internal raw payloads.",
       },
       query: t.Object({
-        provider: t.Optional(t.String()),
-        status: t.Optional(t.String()),
-        type: t.Optional(t.String()),
-        search: t.Optional(t.String()),
-        sortBy: t.Optional(t.String()),
-        sortOrder: t.Optional(t.String()),
-        limit: t.Optional(t.String()),
-        offset: t.Optional(t.String()),
+        provider: t.Optional(t.String({ description: "Filter by payment provider (e.g. STRIPE, BUYMEACOFFEE, KOFI)" })),
+        status: t.Optional(t.String({ description: "Filter by status (e.g. COMPLETED, PENDING, FAILED)" })),
+        type: t.Optional(t.String({ description: "Filter by transaction type (e.g. TIP, MEMBERSHIP)" })),
+        search: t.Optional(t.String({ description: "Search query across senderName or message" })),
+        sortBy: t.Optional(t.String({ description: "Field to sort by: 'createdAt' or 'amount'", examples: ["createdAt"] })),
+        sortOrder: t.Optional(t.String({ description: "Sort direction: 'asc' or 'desc'", examples: ["desc"] })),
+        limit: t.Optional(t.String({ description: "Page limit (default: 25, max: 100)" })),
+        offset: t.Optional(t.String({ description: "Page offset (default: 0)" })),
       }),
+      response: {
+        200: streamerTransactionsResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

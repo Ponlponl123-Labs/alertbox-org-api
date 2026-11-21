@@ -16,6 +16,99 @@ export const integrationProviderParamsSchema = t.Object({
   provider: t.String({ description: "Integration provider name or alias" }),
 });
 
+export const bmacConnectSchema = t.Object({
+  username: t.String({
+    description: "Buy Me a Coffee page username or handle",
+    examples: ["creator"],
+  }),
+  secret: t.String({
+    description: "Buy Me a Coffee webhook secret token",
+  }),
+});
+
+export const kofiConnectSchema = t.Object({
+  username: t.String({
+    description: "Ko-fi page username or handle",
+    examples: ["creator"],
+  }),
+  secret: t.String({
+    description: "Ko-fi verification token from webhook settings",
+  }),
+});
+
+export const streamlabsConnectSchema = t.Union([
+  t.Object({
+    code: t.String({
+      description: "OAuth2 authorization code from Streamlabs callback",
+    }),
+  }),
+  t.String({
+    description: "OAuth2 authorization code as plain text string",
+  }),
+]);
+
+export const stripeConnectSchema = t.Union([
+  t.Object({
+    code: t.String({
+      description: "Stripe Connect OAuth2 authorization code (ac_...)",
+    }),
+  }),
+  t.String({
+    description: "Stripe Connect OAuth2 authorization code as plain text string",
+  }),
+  t.Object(
+    {
+      secret: t.Optional(t.String({ description: "Direct Stripe secret or access token (rk_... or sk_...)" })),
+      token: t.Optional(t.String({ description: "Connected Stripe account ID or token (acct_...)" })),
+      secretType: t.Optional(t.String({ description: "Credential type identifier (e.g. oauth, api_key)" })),
+      state: t.Optional(t.String({ description: "OAuth state payload" })),
+      refreshToken: t.Optional(t.String({ description: "OAuth refresh token" })),
+      payload: t.Optional(t.Any({ description: "Raw provider response or metadata" })),
+    },
+    { additionalProperties: true, description: "Direct Stripe credentials payload" },
+  ),
+]);
+
+export const feelFreePayConnectSchema = t.Union([
+  t.Object({
+    secret: t.String({
+      description: "FeelFreePay API secret or webhook token",
+    }),
+    username: t.Optional(
+      t.Nullable(
+        t.String({
+          description: "FeelFreePay merchant ID or username",
+        }),
+      ),
+    ),
+  }),
+  t.String({
+    description: "FeelFreePay secret as plain text string",
+  }),
+]);
+
+export const xenditConnectSchema = t.Union([
+  t.Object({
+    secret: t.String({
+      description: "Xendit secret API key",
+    }),
+    token: t.Optional(
+      t.Nullable(
+        t.String({
+          description: "Xendit webhook verification token",
+        }),
+      ),
+    ),
+  }),
+  t.String({
+    description: "Xendit secret as plain text string",
+  }),
+]);
+
+export const fallbackConnectSchema = t.Any({
+  description: "Payload for unsupported provider fallback endpoint",
+});
+
 export const integrationSchema = t.Union([
   t.Object(
     {

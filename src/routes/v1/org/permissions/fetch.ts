@@ -1,9 +1,10 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { OrgPerm } from "@/consts/permission";
 import { authorizeOrg } from "@/core/org";
 import { listOrgRolePresets } from "@/classes/org/presets";
 import { PERMISSION_DEFINITIONS, SYSTEM_PRESETS } from "@/consts/permission";
+import { orgParamsSchema, standardOrgErrors } from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -23,10 +24,20 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Permissions"],
         summary: "List all permissions and presets",
         description: "Returns the complete permission definition catalog, system role presets, and custom organization presets.",
       },
+      response: {
+        200: t.Object({
+          definitions: t.Any({ description: "Complete dictionary of organization and streamer RBAC permission bitmasks" }),
+          presets: t.Array(t.Any(), { description: "System predefined roles and custom organization role presets" }),
+        }, { description: "Permission definitions catalog and available role presets" }),
+        ...standardOrgErrors,
+      },
     },
   );
+
+export default endpoint;

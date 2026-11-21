@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { resolveOrgId } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
+import {
+  orgParamsSchema,
+  okResponseSchema,
+  standardOrgErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -63,10 +68,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: orgParamsSchema,
       detail: {
         tags: ["Organizations"],
         summary: "Leave organization",
         description: "Allows an active non-owner member to leave the organization.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

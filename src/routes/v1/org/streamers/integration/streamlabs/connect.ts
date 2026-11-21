@@ -7,8 +7,9 @@ import {
   getExistingIntegrationSecret,
   logConnectionAudit,
   integrationParamsSchema,
-  integrationSchema,
+  streamlabsConnectSchema,
 } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 export const connectEndpoint = new Elysia()
   .use(auth)
@@ -67,11 +68,15 @@ export const connectEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamlabs Relay"],
         summary: "Connect Streamlabs channel integration",
         description: "Exchanges authorization code and links Streamlabs credentials.",
       },
-      body: integrationSchema,
+      body: streamlabsConnectSchema,
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

@@ -7,6 +7,11 @@ import { OrgPerm, RolePresets } from "@/consts/permission";
 import { resolveOrgId, getMemberPermissions, parseBigIntParam } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { updateMemberCache } from "@/utils/cache-sync";
+import {
+  orgMemberParamsSchema,
+  orgMemberUpdateResponseSchema,
+  standardOrgErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -171,23 +176,28 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: orgMemberParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Members"],
         summary: "Update member role and permissions",
         description: "Updates a team member's role, custom bitmask permissions, and streamer assignments. Requires ORG_MEMBERS_MANAGE or ORG_ROLES_MANAGE, capped at caller's own permissions.",
       },
       body: t.Object({
-        role: t.Optional(t.Enum(OrgRole)),
-        permissions: t.Optional(t.String()),
+        role: t.Optional(t.Enum(OrgRole, { description: "Assigned predefined role", examples: ["ADMIN", "MANAGER", "MEMBER"] })),
+        permissions: t.Optional(t.String({ description: "Custom permission bitmask as numeric string", examples: ["1048575"] })),
         streamerAssignments: t.Optional(
           t.Array(
             t.Object({
-              streamerId: t.Union([t.String(), t.Number()]),
-              permissions: t.Array(t.String()),
+              streamerId: t.Union([t.String(), t.Number()], { description: "Assigned streamer channel ID" }),
+              permissions: t.Array(t.String(), { description: "Allowed permission keys for this channel" }),
             }),
           ),
         ),
       }),
+      response: {
+        200: orgMemberUpdateResponseSchema,
+        ...standardOrgErrors,
+      },
     },
   );
 

@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { hasAnyPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
+import {
+  orgInviteParamsSchema,
+  okResponseSchema,
+  standardOrgErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -55,10 +60,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: orgInviteParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "Cancel pending organization invite",
         description: "Deletes an active organization invite.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardOrgErrors,
       },
     },
   );

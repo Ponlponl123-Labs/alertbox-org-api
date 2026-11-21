@@ -6,6 +6,11 @@ import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { broadcastStreamerTransaction } from "./broadcast";
 import { logOrgAudit } from "@/core/audit";
+import {
+  streamerTxParamsSchema,
+  streamerTxToggleResponseSchema,
+  standardErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -103,10 +108,15 @@ export const endpoint = new Elysia()
       };
     },
     {
+      params: streamerTxParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Transactions"],
         summary: "Toggle soft-delete status for a transaction",
         description: "Toggles whether a transaction is soft-deleted (dashed and faded on table). Requires STREAMER_MANAGE.",
+      },
+      response: {
+        200: streamerTxToggleResponseSchema,
+        ...standardErrors,
       },
     },
   );

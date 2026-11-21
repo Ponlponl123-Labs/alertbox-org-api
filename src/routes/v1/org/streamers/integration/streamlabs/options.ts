@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { setConnectionDisabled } from "@/classes/streamer";
 import { authorizeIntegrationManage, integrationParamsSchema } from "../common";
 import { logOrgAudit } from "@/core/audit";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 async function handlePatch({ getAuthenticatedUser, params, body, set }: any) {
   const { error, ctx, user } = await authorizeIntegrationManage(
@@ -75,12 +76,16 @@ const validation = {
   },
   body: t.Union([
     t.Object({
-      options: t.Integer({ minimum: 0, maximum: 255 }),
+      options: t.Integer({ minimum: 0, maximum: 255, description: "Streamlabs relay options bitflag (0-255)", examples: [3] }),
     }),
     t.Object({
-      disabled: t.Boolean(),
+      disabled: t.Boolean({ description: "Toggle Streamlabs relay active status", examples: [true] }),
     }),
   ]),
+  response: {
+    200: okResponseSchema,
+    ...standardErrors,
+  },
 };
 
 export const optionsEndpoint = new Elysia()

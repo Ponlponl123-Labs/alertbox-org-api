@@ -6,8 +6,9 @@ import {
   getExistingIntegrationSecret,
   logConnectionAudit,
   integrationParamsSchema,
-  integrationSchema,
+  xenditConnectSchema,
 } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 export const connectEndpoint = new Elysia()
   .use(auth)
@@ -42,11 +43,15 @@ export const connectEndpoint = new Elysia()
     {
       params: integrationParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamer Integrations"],
         summary: "Set Xendit connection",
         description: "Links or updates Xendit credentials.",
       },
-      body: integrationSchema,
+      body: xenditConnectSchema,
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

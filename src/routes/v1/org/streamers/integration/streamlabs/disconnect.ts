@@ -3,6 +3,7 @@ import { auth } from "@/core/auth";
 import { removeConnection } from "@/classes/streamer";
 import { logOrgAudit } from "@/core/audit";
 import { authorizeIntegrationManage, integrationParamsSchema } from "../common";
+import { okResponseSchema, standardErrors } from "../../schemas";
 
 export const disconnectEndpoint = new Elysia()
   .use(auth)
@@ -40,6 +41,10 @@ export const disconnectEndpoint = new Elysia()
         tags: ["Streamlabs Relay"],
         summary: "Disconnect Streamlabs integration",
         description: "Unlinks Streamlabs tokens from streamer channel.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
       },
     },
   );

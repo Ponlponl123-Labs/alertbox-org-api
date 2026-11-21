@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { redis } from "@/core/redis";
 import { authorizeOrg, parseBigIntParam } from "@/core/org";
 import { OrgPerm } from "@/consts/permission";
+import {
+  streamerParamsSchema,
+  tinyStreamerResponseSchema,
+  standardErrors,
+} from "./schemas";
 
 export interface TinyStreamerResponse {
   id: string;
@@ -117,15 +122,16 @@ export const endpoint = new Elysia()
       return tiny;
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Get tiny streamer channel profile",
         description: "Fetch cached lightweight streamer profile (id, name, displayName, avatar) scoped strictly to the organization.",
       },
-      params: t.Object({
-        orgId: t.String(),
-        streamerId: t.String(),
-      }),
+      response: {
+        200: tinyStreamerResponseSchema,
+        ...standardErrors,
+      },
     },
   );
 

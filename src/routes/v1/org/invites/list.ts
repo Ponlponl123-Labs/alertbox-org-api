@@ -1,9 +1,14 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { hasPermission } from "@/utils/rbac";
 import { OrgPerm } from "@/consts/permission";
 import { resolveOrgId } from "@/core/org";
+import {
+  orgParamsSchema,
+  orgInviteSummarySchema,
+  standardOrgErrors,
+} from "../schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -50,10 +55,15 @@ export const endpoint = new Elysia()
       }));
     },
     {
+      params: orgParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Organization Invites"],
         summary: "List pending organization invites",
         description: "Returns active, unaccepted invitations for the organization.",
+      },
+      response: {
+        200: t.Array(orgInviteSummarySchema, { description: "List of pending unaccepted organization invitations" }),
+        ...standardOrgErrors,
       },
     },
   );

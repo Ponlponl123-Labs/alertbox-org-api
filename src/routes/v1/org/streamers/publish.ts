@@ -1,4 +1,4 @@
-import Elysia from "elysia";
+import Elysia, { t } from "elysia";
 import { auth } from "@/core/auth";
 import { db } from "@/db";
 import { redis } from "@/core/redis";
@@ -6,6 +6,11 @@ import { OrgPerm, StreamerPerm } from "@/consts/permission";
 import { authorizeStreamer } from "@/core/org";
 import { logOrgAudit } from "@/core/audit";
 import { updateStreamerCache } from "@/utils/cache-sync";
+import {
+  streamerParamsSchema,
+  okResponseSchema,
+  standardErrors,
+} from "./schemas";
 
 export const endpoint = new Elysia()
   .use(auth)
@@ -65,10 +70,17 @@ export const endpoint = new Elysia()
       return { publishedAt: publishedAt.toISOString() };
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Publish streamer channel",
         description: "Enables public tipping and profile visibility for the channel.",
+      },
+      response: {
+        200: t.Object({
+          publishedAt: t.String({ description: "ISO 8601 publication timestamp", examples: ["2026-11-21T12:00:00.000Z"] }),
+        }, { description: "Channel publication timestamp" }),
+        ...standardErrors,
       },
     },
   )
@@ -127,10 +139,15 @@ export const endpoint = new Elysia()
       return "OK";
     },
     {
+      params: streamerParamsSchema,
       detail: {
-        tags: ["Organizations"],
+        tags: ["Streamers"],
         summary: "Unpublish streamer channel",
         description: "Disables public tipping and profile visibility for the channel.",
+      },
+      response: {
+        200: okResponseSchema,
+        ...standardErrors,
       },
     },
   );
