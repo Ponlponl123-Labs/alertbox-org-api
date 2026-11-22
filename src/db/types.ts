@@ -319,6 +319,29 @@ export interface StreamlabsRelayLog {
   updatedAt: Generated<Date | string>;
 }
 
+export interface UserFeedback {
+  id: Generated<bigint | number>;
+  userId: bigint | number;
+  rating: number | null;
+  reasons: string | null;
+  message: string;
+  pathname: string;
+  userAgent: string | null;
+  createdAt: Generated<Date | string>;
+}
+
+export interface StreamerReport {
+  id: Generated<bigint | number>;
+  orgId: bigint | number;
+  streamerId: bigint | number;
+  topic: string;
+  message: string;
+  reporterEmail: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Generated<Date | string>;
+}
+
 export interface DB {
   User: User;
   Organization: Organization;
@@ -338,4 +361,6 @@ export interface DB {
   TransactionLog: TransactionLog;
   WidgetTokenLog: WidgetTokenLog;
   StreamlabsRelayLog: StreamlabsRelayLog;
+  UserFeedback: UserFeedback;
+  StreamerReport: StreamerReport;
 }

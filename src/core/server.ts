@@ -335,7 +335,7 @@ class Server {
         (code as string) === "BAD_REQUEST" ||
         (error instanceof Error && (error.name === "BadRequestError" || error instanceof BadRequestError));
 
-      if (isBadRequest) {
+      if (isBadRequest || code === "VALIDATION") {
         set.status = 400;
         return error instanceof Error ? error.message : "Bad Request";
       }

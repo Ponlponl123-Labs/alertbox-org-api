@@ -101,7 +101,11 @@ export const endpoint = new Elysia()
               await deleteProfileImage(streamer.avatar).catch(() => {});
             }
             data.avatar = url;
-          } catch {}
+          } catch (err) {
+            console.error("[org/streamers/update] avatar upload failed:", err);
+            set.status = 500;
+            return "Failed to process or store avatar image";
+          }
         } else if (typeof body.avatar === "string") {
           data.avatar = body.avatar;
         }
@@ -157,7 +161,11 @@ export const endpoint = new Elysia()
                 }
               } catch {}
             }
-          } catch {}
+          } catch (err) {
+            console.error("[org/streamers/update] banner upload failed:", err);
+            set.status = 500;
+            return "Failed to process or store banner image";
+          }
         } else if (typeof body.banner === "string") {
           data.banner = body.banner;
         }

@@ -51,6 +51,7 @@ export function isAllowedOrigin(originStr: string | null | undefined): boolean {
       const devAllowed = process.env.DEV_ALLOWED_HOST;
       if (devAllowed === "*") return true;
       if (devAllowed !== "false" && isPrivateHost(url.hostname)) return true;
+      if (devAllowed !== "false" && url.protocol === "https:" && url.hostname.endsWith(".devtunnels.ms")) return true;
       if (!cachedDevHosts) cachedDevHosts = getDevAllowedHosts();
       if (cachedDevHosts.has(url.hostname)) return true;
     }

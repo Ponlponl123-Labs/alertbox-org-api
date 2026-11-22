@@ -56,7 +56,11 @@ export const endpoint = new Elysia()
               await deleteProfileImage(org.avatar).catch(() => {});
             }
             data.avatar = url;
-          } catch {}
+          } catch (err) {
+            console.error("[org/update] avatar upload failed:", err);
+            set.status = 500;
+            return "Failed to process or store avatar image";
+          }
         } else if (typeof body.avatar === "string") {
           data.avatar = body.avatar;
         }
@@ -83,7 +87,11 @@ export const endpoint = new Elysia()
               await deleteProfileImage(org.banner).catch(() => {});
             }
             data.banner = url;
-          } catch {}
+          } catch (err) {
+            console.error("[org/update] banner upload failed:", err);
+            set.status = 500;
+            return "Failed to process or store banner image";
+          }
         } else if (typeof body.banner === "string") {
           data.banner = body.banner;
         }
