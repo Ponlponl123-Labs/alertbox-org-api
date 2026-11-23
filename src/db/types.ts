@@ -7,6 +7,7 @@ import type {
   AlertEventType,
   TransactionStatus,
   IntegrationType,
+  ViolationTargetType,
 } from "./enums";
 
 export interface User {
@@ -18,6 +19,7 @@ export interface User {
   name: string | null;
   displayName: string | null;
   avatar: string | null;
+  violationLevel: Generated<number>;
   disabledAt: Date | string | null;
   deletedAt: Date | string | null;
   createdAt: Generated<Date | string>;
@@ -33,6 +35,7 @@ export interface Organization {
   banner: string | null;
   ownerId: bigint | number;
   createBy: Generated<bigint | number>;
+  violationLevel: Generated<number>;
   deletedAt: Date | string | null;
   createdAt: Generated<Date | string>;
   updatedAt: Generated<Date | string>;
@@ -112,6 +115,7 @@ export interface Streamer {
   currency: number | null;
   minTipAmount: Generated<bigint | number>;
   maxTipAmount: Generated<bigint | number>;
+  violationLevel: Generated<number>;
   deletedAt: Date | string | null;
   createdAt: Generated<Date | string>;
   updatedAt: Generated<Date | string>;
@@ -342,6 +346,15 @@ export interface StreamerReport {
   createdAt: Generated<Date | string>;
 }
 
+export interface Violation {
+  id: Generated<bigint | number>;
+  targetType: ViolationTargetType;
+  targetId: bigint | number;
+  level: Generated<number>;
+  message: string;
+  createdAt: Generated<Date | string>;
+}
+
 export interface DB {
   User: User;
   Organization: Organization;
@@ -363,4 +376,5 @@ export interface DB {
   StreamlabsRelayLog: StreamlabsRelayLog;
   UserFeedback: UserFeedback;
   StreamerReport: StreamerReport;
+  Violation: Violation;
 }

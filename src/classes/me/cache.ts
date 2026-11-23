@@ -45,6 +45,7 @@ export async function setCachedUser(uid: string | bigint | number, user: any): P
     avatar: user.avatar ?? null,
     createWith: user.createWith,
     createdAt: user.createdAt,
+    violationLevel: Number(user.violationLevel ?? 0),
     disabledAt: user.disabledAt ?? null,
     deletedAt: user.deletedAt ?? null,
   };

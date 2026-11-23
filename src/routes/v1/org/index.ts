@@ -12,6 +12,7 @@ import orgTransactionsEndpoint from "./transactions/index";
 import transferOrgEndpoint from "./transfer";
 import leaveOrgEndpoint from "./leave";
 import tinyUserEndpoint from "./users/tiny";
+import orgViolationsEndpoint from "./violations";
 
 export const OrgRouter = new Elysia({ prefix: "/org" })
   .use(listOrgsEndpoint)
@@ -26,6 +27,7 @@ export const OrgRouter = new Elysia({ prefix: "/org" })
   .use(orgPermissionsEndpoint)
   .use(orgAuditEndpoint)
   .use(orgTransactionsEndpoint)
-  .use(tinyUserEndpoint);
+  .use(tinyUserEndpoint)
+  .use(orgViolationsEndpoint);
 
 export default OrgRouter;

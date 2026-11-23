@@ -5,6 +5,7 @@ import { endpoint as FetchEndpoint } from "./fetch";
 import { endpoint as UpdateEndpoint } from "./update";
 import { endpoint as DeleteAccountEndpoint } from "./delete-account";
 import { endpoint as FeedbackEndpoint } from "./feedback";
+import { endpoint as ViolationsEndpoint } from "./violations";
 
 export const router = new Elysia({ prefix: "me" })
   .use(DeviceEndpoint)
@@ -12,6 +13,7 @@ export const router = new Elysia({ prefix: "me" })
   .use(FetchEndpoint)
   .use(UpdateEndpoint)
   .use(DeleteAccountEndpoint)
-  .use(FeedbackEndpoint);
+  .use(FeedbackEndpoint)
+  .use(ViolationsEndpoint);
 
 export default router;

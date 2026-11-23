@@ -4,6 +4,7 @@ import { extractRequestTokenWithSource } from "@/utils/bearer-token";
 import { isAllowedOrigin } from "@/utils/security";
 import { ip } from "elysia-ip";
 import { basicUserSelect } from "@/consts/session";
+import { VIOLATION_BLOCK_LEVEL } from "@/consts/violation";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -24,6 +25,13 @@ export class BadRequestError extends Error {
   constructor(message = "Bad Request") {
     super(message);
     this.name = "BadRequestError";
+  }
+}
+
+export class ForbiddenError extends Error {
+  constructor(message = "Forbidden") {
+    super(message);
+    this.name = "ForbiddenError";
   }
 }
 
@@ -61,6 +69,12 @@ export const auth = new Elysia({ name: "auth" })
         const user = await new Me().use(token, ip, select ?? basicUserSelect);
         if (!user || !user.data) {
           throw new UnauthorizedError("Unauthorized");
+        }
+        if (
+          MUTATION_METHODS.has(request.method) &&
+          Number(user.data.violationLevel ?? 0) >= VIOLATION_BLOCK_LEVEL
+        ) {
+          throw new ForbiddenError("Account action blocked due to policy violations");
         }
         return user as any;
       },

@@ -3,6 +3,7 @@
  */
 export const basicUserSelect = {
   id: true,
+  violationLevel: true,
 } as const;
 
 /**
@@ -17,6 +18,7 @@ export const pureUserSelect = {
   avatar: true,
   createWith: true,
   createdAt: true,
+  violationLevel: true,
   disabledAt: true,
   deletedAt: true,
 } as const;
@@ -33,6 +35,7 @@ export const sessionUserSelect = {
   avatar: true,
   createWith: true,
   createdAt: true,
+  violationLevel: true,
   disabledAt: true,
   deletedAt: true,
   memberships: {
@@ -71,6 +74,7 @@ export const fullUserSelect = {
   avatar: true,
   createWith: true,
   createdAt: true,
+  violationLevel: true,
   disabledAt: true,
   deletedAt: true,
   memberships: {

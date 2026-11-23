@@ -4,6 +4,7 @@ import { db, OrgRole } from "@/db";
 import { redis } from "./redis";
 import { hasPermission, parseStreamerPermissions, hasStreamerPermission } from "@/utils/rbac";
 import { OrgPerm, StreamerPerm } from "@/consts/permission";
+import { VIOLATION_BLOCK_LEVEL } from "@/consts/violation";
 
 export interface OrgContext {
   orgId: bigint;
@@ -282,12 +283,31 @@ export async function getMemberPermissions(
   return null;
 }
 
+export async function isOrgViolationBlocked(orgId: bigint): Promise<boolean> {
+  const row = await db
+    .selectFrom("Organization")
+    .select("violationLevel")
+    .where("id", "=", Number(orgId))
+    .executeTakeFirst();
+  return Number(row?.violationLevel ?? 0) >= VIOLATION_BLOCK_LEVEL;
+}
+
+export async function isStreamerViolationBlocked(streamerId: bigint): Promise<boolean> {
+  const row = await db
+    .selectFrom("Streamer")
+    .select("violationLevel")
+    .where("id", "=", Number(streamerId))
+    .executeTakeFirst();
+  return Number(row?.violationLevel ?? 0) >= VIOLATION_BLOCK_LEVEL;
+}
+
 export async function authorizeOrg(
   orgParam: string | null | undefined,
   userId: bigint,
   requiredPerm: bigint,
   set: { status?: any },
   actionDescription = "perform this action",
+  options?: { allowOnViolation?: boolean },
 ): Promise<OrgCallerContext | string> {
   const orgId = await resolveOrgId(orgParam);
   if (!orgId) {
@@ -299,6 +319,11 @@ export async function authorizeOrg(
   if (!member || !hasPermission(member.permissions, requiredPerm)) {
     set.status = "Forbidden";
     return `Insufficient permissions to ${actionDescription}`;
+  }
+
+  if (!options?.allowOnViolation && (await isOrgViolationBlocked(orgId))) {
+    set.status = "Forbidden";
+    return "Organization action blocked due to policy violations";
   }
 
   return { orgId, role: member.role, permissions: member.permissions };
@@ -320,6 +345,7 @@ export async function authorizeStreamer(
     requiredOrgPerm?: bigint;
     requiredStreamerPerm?: number;
     actionDescription?: string;
+    allowOnViolation?: boolean;
   },
   set: { status?: any },
 ): Promise<StreamerCallerContext | string> {
@@ -333,6 +359,21 @@ export async function authorizeStreamer(
   if (!streamerId) {
     set.status = "Bad Request";
     return "Invalid organization or streamer ID";
+  }
+
+  if (!options.allowOnViolation) {
+    const [orgBlocked, streamerBlocked] = await Promise.all([
+      isOrgViolationBlocked(orgId),
+      isStreamerViolationBlocked(streamerId),
+    ]);
+    if (orgBlocked) {
+      set.status = "Forbidden";
+      return "Organization action blocked due to policy violations";
+    }
+    if (streamerBlocked) {
+      set.status = "Forbidden";
+      return "Streamer channel action blocked due to policy violations";
+    }
   }
 
   const callerMember = await db

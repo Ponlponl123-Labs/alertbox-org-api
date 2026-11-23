@@ -9,6 +9,7 @@ import { endpoint as TransactionsEndpoint } from "../org/streamers/transactions/
 import { endpoint as TinyEndpoint } from "../org/streamers/tiny";
 import { endpoint as CheckUsernameEndpoint } from "../org/streamers/check-username";
 import { endpoint as PublishEndpoint } from "../org/streamers/publish";
+import { endpoint as ViolationsEndpoint } from "../org/streamers/violations";
 
 export const StreamersRouter = new Elysia({ prefix: "/org" })
   .use(ListEndpoint)
@@ -20,6 +21,7 @@ export const StreamersRouter = new Elysia({ prefix: "/org" })
   .use(TransactionsEndpoint)
   .use(TinyEndpoint)
   .use(CheckUsernameEndpoint)
-  .use(PublishEndpoint);
+  .use(PublishEndpoint)
+  .use(ViolationsEndpoint);
 
 export default StreamersRouter;

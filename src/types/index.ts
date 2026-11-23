@@ -15,5 +15,6 @@ export * from "./moderation.types";
 export * from "./org.types";
 export * from "./audit.types";
 export * from "./streamer.types";
+export * from "./violation.types";
 
 export * from "./ip.types"; // @deprecated

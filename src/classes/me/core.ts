@@ -460,6 +460,7 @@ export class Me<T = any> {
           "avatar",
           "createWith",
           "createdAt",
+          "violationLevel",
           "disabledAt",
           "deletedAt",
         ])

@@ -55,3 +55,10 @@ export const IntegrationType = {
 } as const;
 export type IntegrationType = (typeof IntegrationType)[keyof typeof IntegrationType];
 
+export const ViolationTargetType = {
+  USER: "USER",
+  ORG: "ORG",
+  STREAMER: "STREAMER",
+} as const;
+export type ViolationTargetType = (typeof ViolationTargetType)[keyof typeof ViolationTargetType];
+
