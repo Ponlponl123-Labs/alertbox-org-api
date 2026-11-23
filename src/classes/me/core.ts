@@ -57,13 +57,27 @@ export class Me<T = any> {
 
     const orgIds = Array.from(new Set(rawMembers.map((m) => m.orgId)));
 
-    const streamers = await db
-      .selectFrom("Streamer")
-      .where("orgId", "in", orgIds)
-      .where("deletedAt", "is", null)
-      .selectAll()
-      .orderBy("createdAt", "asc")
-      .execute();
+    const [streamers, memberCounts] = await Promise.all([
+      db
+        .selectFrom("Streamer")
+        .where("orgId", "in", orgIds)
+        .where("deletedAt", "is", null)
+        .selectAll()
+        .orderBy("createdAt", "asc")
+        .execute(),
+      db
+        .selectFrom("OrganizationMember")
+        .select(["orgId", (eb) => eb.fn.count("id").as("count")])
+        .where("orgId", "in", orgIds)
+        .where("isDeleted", "is", null)
+        .groupBy("orgId")
+        .execute(),
+    ]);
+
+    const memberCountMap = new Map<string, number>();
+    for (const c of memberCounts) {
+      memberCountMap.set(String(c.orgId), Number(c.count));
+    }
 
     const streamerIds = streamers.map((s) => s.id);
 
@@ -147,6 +161,7 @@ export class Me<T = any> {
         avatar: m.orgAvatar,
         banner: m.orgBanner,
         ownerId: String(m.orgOwnerId),
+        memberCount: memberCountMap.get(String(m.orgId)) ?? 0,
         createdAt: m.orgCreatedAt,
         streamers: streamerOrgMap.get(String(m.orgId)) || [],
       },
